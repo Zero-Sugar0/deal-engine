@@ -9,12 +9,10 @@ import Codex from '@lobehub/icons/es/Codex/components/Mono.js';
 import Cursor from '@lobehub/icons/es/Cursor/components/Mono.js';
 import './styles.css';
 import './refinements.css';
+import { authClient, dealApiUrl } from './auth-client';
 
 type Route = '/' | '/about' | '/sign-in' | '/sign-up' | '/app';
 
-const dealApiUrl = (
-  import.meta.env.VITE_DEAL_API_URL || 'https://deal-engine.up.railway.app'
-).replace(/\/$/, '');
 const dashboardTokenKey = 'deal_human_token';
 
 type DashboardAgent = {
@@ -41,17 +39,17 @@ type DashboardProfile = {
 };
 
 async function dashboardRequest<T>(
-  token: string,
+  token: string | null,
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
+  const headers = new Headers(init.headers);
+  headers.set('content-type', 'application/json');
+  if (token) headers.set('authorization', `Bearer ${token}`);
   const response = await fetch(`${dealApiUrl}${path}`, {
     ...init,
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-      ...(init.headers ?? {}),
-    },
+    credentials: 'include',
+    headers,
   });
   const body = (await response.json().catch(() => ({}))) as {
     error?: string;
@@ -1151,7 +1149,10 @@ function AboutPage() {
 }
 
 function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
-  const [credential, setCredential] = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [newApiKey, setNewApiKey] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [pending, setPending] = useState(false);
   const signIn = mode === 'sign-in';
@@ -1159,23 +1160,39 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage('');
-    if (!credential.trim()) {
-      setErrorMessage('Enter your human workspace access key.');
+    setNewApiKey('');
+    if (!email.trim() || !password) {
+      setErrorMessage('Enter your email and password.');
       return;
     }
     setPending(true);
     try {
-      await dashboardRequest<DashboardProfile>(
-        credential.trim(),
-        '/v1/profile',
-      );
-      sessionStorage.setItem(dashboardTokenKey, credential.trim());
-      navigate('/app');
+      const response = signIn
+        ? await authClient.signIn.email({ email: email.trim(), password })
+        : await authClient.signUp.email({
+            name: name.trim(),
+            email: email.trim(),
+            password,
+          });
+      if (response.error)
+        throw new Error(response.error.message || 'Authentication failed.');
+      const provisioned = await dashboardRequest<{
+        apiKey?: string;
+        human: DashboardProfile['human'];
+      }>(null, '/v1/auth/provision', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      if (provisioned.apiKey) {
+        setNewApiKey(provisioned.apiKey);
+      } else {
+        navigate('/app');
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'That workspace access key could not be verified.',
+          : 'That account could not be verified.',
       );
     } finally {
       setPending(false);
@@ -1229,27 +1246,77 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
           <p>
             {signIn
               ? 'Sign in to review what your agents understand and manage their access.'
-              : 'Your organization issues a human workspace access key. Use it to create and manage agent keys safely.'}
+              : 'Create your account and DEAL will provision a human workspace with your first agent credential.'}
           </p>
           <form onSubmit={submit}>
+            {!signIn && (
+              <label>
+                Your name
+                <input
+                  type="text"
+                  placeholder="Ada Lovelace"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  autoComplete="name"
+                  required
+                />
+              </label>
+            )}
             <label>
-              Human workspace access key
+              Email address
+              <input
+                type="email"
+                placeholder="you@company.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
+                required
+              />
+            </label>
+            <label>
+              Password
               <input
                 type="password"
-                placeholder="deal_human_…"
-                value={credential}
-                onChange={(event) => setCredential(event.target.value)}
-                autoComplete="off"
+                placeholder="At least 12 characters"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete={signIn ? 'current-password' : 'new-password'}
+                minLength={12}
                 required
               />
             </label>
             <Button type="submit">
-              {pending ? 'Checking access…' : 'Enter workspace'} <Arrow />
+              {pending
+                ? signIn
+                  ? 'Signing in…'
+                  : 'Creating workspace…'
+                : signIn
+                  ? 'Enter workspace'
+                  : 'Create workspace'}{' '}
+              <Arrow />
             </Button>
           </form>
+          {newApiKey && (
+            <div className="auth-key-reveal">
+              <span className="eyebrow">save this once</span>
+              <strong>Your first agent key</strong>
+              <code>{newApiKey}</code>
+              <button
+                className="quiet-link"
+                onClick={() => navigator.clipboard.writeText(newApiKey)}
+                type="button"
+              >
+                Copy key
+              </button>
+              <Button type="button" onClick={() => navigate('/app')}>
+                Open dashboard <Arrow />
+              </Button>
+            </div>
+          )}
           {errorMessage && <div className="auth-error">{errorMessage}</div>}
           <small className="auth-legal">
-            Agent keys are shown once and never stored in the dashboard.
+            Your password is handled by Better Auth. Agent keys are shown once
+            and never listed again.
           </small>
         </div>
       </main>
@@ -1263,27 +1330,32 @@ function DashboardPage() {
     sessionStorage.getItem(dashboardTokenKey),
   );
   const [profile, setProfile] = useState<DashboardProfile['human']>();
+  const { data: session, isPending: sessionPending } = authClient.useSession();
   const navItems = ['Overview', 'Human model', 'Memory', 'Agents', 'Approvals'];
 
   useEffect(() => {
-    if (!token) {
+    if (sessionPending) return;
+    if (!token && !session) {
       navigate('/sign-in');
       return;
     }
     dashboardRequest<DashboardProfile>(token, '/v1/profile')
       .then((response) => setProfile(response.human))
       .catch(() => {
-        sessionStorage.removeItem(dashboardTokenKey);
-        setToken(null);
+        if (token) {
+          sessionStorage.removeItem(dashboardTokenKey);
+          setToken(null);
+        }
         navigate('/sign-in');
       });
-  }, [token]);
+  }, [session, sessionPending, token]);
 
-  if (!token) return null;
+  if (sessionPending || (!token && !session)) return null;
 
-  function signOut() {
+  async function signOut() {
     sessionStorage.removeItem(dashboardTokenKey);
     setToken(null);
+    await authClient.signOut();
     navigate('/sign-in');
   }
 

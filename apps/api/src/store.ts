@@ -275,6 +275,14 @@ export class DealStore {
     return this.externalIdentities.get(`${issuer}\n${subject}`);
   }
 
+  findHumanByExternalIdentity(
+    issuer: string,
+    subject: string,
+  ): Human | undefined {
+    const identity = this.findExternalIdentity(issuer, subject);
+    return identity ? this.humans.get(identity.humanId) : undefined;
+  }
+
   static skillKey(
     organizationId: string,
     name: string,

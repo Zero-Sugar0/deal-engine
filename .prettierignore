@@ -4,3 +4,5 @@ node_modules
 **/*.py
 **/*.sql
 pnpm-lock.yaml
+.agents/
+.env.example

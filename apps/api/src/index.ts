@@ -5,6 +5,7 @@ import { PostgresRateLimiter } from './rate-limit.js';
 import { externalAuthFromEnvironment } from './external-auth.js';
 import { HttpEmbeddingProvider, SupermemoryAdapter } from '@deal/memory';
 import { SkillSigner } from './skill-signing.js';
+import { createDealAuth } from './auth.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 const agentToken = process.env.DEAL_API_KEY ?? 'local-agent-key';
@@ -45,6 +46,9 @@ const store = process.env.DATABASE_URL
       semanticAdapter,
     })
   : new DealStore();
+await store.ready;
+const auth =
+  store instanceof PostgresDealStore ? createDealAuth(store.pool) : undefined;
 const seedDemo =
   process.env.DEAL_SEED_DEMO === 'true' ||
   (!isProduction && process.env.DEAL_SEED_DEMO !== 'false');
@@ -52,6 +56,7 @@ if (seedDemo) await store.seedDemo(agentToken, humanToken);
 const app = buildServer({
   store,
   externalAuth: externalAuthFromEnvironment(),
+  auth,
   rateLimiter:
     store instanceof PostgresDealStore
       ? new PostgresRateLimiter(store.pool)

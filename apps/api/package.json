@@ -13,9 +13,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@better-auth/infra": "0.4.20",
     "@deal/core": "workspace:*",
     "@deal/memory": "workspace:*",
     "@deal/policy": "workspace:*",
+    "better-auth": "1.7.12",
     "fastify": "^5.2.0",
     "jose": "^6.0.0",
     "pg": "^8.13.1",

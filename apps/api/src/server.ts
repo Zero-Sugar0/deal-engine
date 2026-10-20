@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import { fromNodeHeaders } from 'better-auth/node';
 import {
   BehavioralContractSchema,
   BiographySchema,
@@ -41,6 +42,8 @@ import {
 } from './professions.js';
 import type { WorkflowStep } from './store.js';
 import { SkillSigner } from './skill-signing.js';
+import type { DealAuth } from './auth.js';
+import { betterAuthIssuer } from './auth.js';
 
 export interface ServerOptions {
   store?: DealStore;
@@ -52,6 +55,7 @@ export interface ServerOptions {
   rateLimitPerMinute?: number;
   contextRateLimitPerMinute?: number;
   skillSigner?: SkillSigner;
+  auth?: DealAuth;
 }
 
 const contextBody = z.object({
@@ -170,15 +174,18 @@ function bearer(request: FastifyRequest): string {
   return value.slice('Bearer '.length);
 }
 
-async function requireCredential(
+async function requireCredentialWithAuth(
   store: DealStore,
   request: FastifyRequest,
   kind?: Credential['kind'],
   externalAuth?: ExternalAuthProvider,
+  auth?: DealAuth,
 ): Promise<Credential> {
-  const token = bearer(request);
-  let credential = store.authenticate(token);
-  if (!credential && externalAuth) {
+  const token = request.headers.authorization?.startsWith('Bearer ')
+    ? request.headers.authorization.slice('Bearer '.length)
+    : undefined;
+  let credential = token ? store.authenticate(token) : undefined;
+  if (!credential && token && externalAuth) {
     try {
       const principal = await externalAuth.verify(token);
       const identity = store.findExternalIdentity(
@@ -197,7 +204,35 @@ async function requireCredential(
       // Treat provider verification failures like invalid credentials.
     }
   }
-  if (!credential) throw error(401, 'Invalid or revoked credential');
+  if (!credential && !token && auth) {
+    try {
+      const session = await auth.api.getSession({
+        headers: fromNodeHeaders(request.headers),
+      });
+      const user = session?.user;
+      if (user) {
+        const human = store.findHumanByExternalIdentity(
+          betterAuthIssuer,
+          user.id,
+        );
+        if (human) {
+          credential = {
+            id: `better-auth:${user.id}`,
+            tokenHash: '',
+            kind: 'human',
+            humanId: human.id,
+          };
+        }
+      }
+    } catch {
+      // Treat missing or expired Better Auth sessions like invalid credentials.
+    }
+  }
+  if (!credential)
+    throw error(
+      401,
+      token ? 'Invalid or revoked credential' : 'Authentication required',
+    );
   if (kind && credential.kind !== kind)
     throw error(403, `${kind} credential required`);
   if (
@@ -427,6 +462,20 @@ export function buildServer(
     },
   }) as unknown as FastifyInstance & { dealStore: DealStore };
   app.decorate('dealStore', store);
+  async function requireCredential(
+    requestStore: DealStore,
+    request: FastifyRequest,
+    kind?: Credential['kind'],
+    externalAuth?: ExternalAuthProvider,
+  ): Promise<Credential> {
+    return requireCredentialWithAuth(
+      requestStore,
+      request,
+      kind,
+      externalAuth,
+      options.auth,
+    );
+  }
   app.addHook('onRequest', async (request, reply) => {
     await store.ready;
     await store.beginRequest(request.id);
@@ -435,11 +484,17 @@ export function buildServer(
       Date.now();
   });
   app.addHook('onRequest', async (request, reply) => {
-    const origin = process.env.DEAL_DASHBOARD_ORIGIN ?? '*';
+    const configuredOrigin = process.env.DEAL_DASHBOARD_ORIGIN;
+    const requestOrigin = request.headers.origin;
+    const origin =
+      configuredOrigin ??
+      (typeof requestOrigin === 'string' ? requestOrigin : '*');
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
     reply.header('Referrer-Policy', 'no-referrer');
     reply.header('Access-Control-Allow-Origin', origin);
+    reply.header('Vary', 'Origin');
+    reply.header('Access-Control-Allow-Credentials', 'true');
     reply.header(
       'Access-Control-Allow-Headers',
       'Authorization, Content-Type, Idempotency-Key, X-Request-ID',
@@ -532,6 +587,227 @@ export function buildServer(
     }
     reply.type('text/plain; version=0.0.4');
     return metrics.renderPrometheus();
+  });
+
+  if (options.auth) {
+    const auth = options.auth;
+    app.route({
+      method: ['GET', 'POST'],
+      url: '/api/auth/*',
+      handler: async (request, reply) => {
+        const protocol =
+          request.headers['x-forwarded-proto']?.toString().split(',')[0] ??
+          (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+        const host =
+          request.headers['x-forwarded-host']?.toString() ??
+          request.headers.host ??
+          `localhost:${process.env.DEAL_PORT ?? '3000'}`;
+        const url = new URL(request.url, `${protocol}://${host}`);
+        const headers = fromNodeHeaders(request.headers);
+        const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
+        const authRequest = new Request(url, {
+          method: request.method,
+          headers,
+          ...(hasBody
+            ? { body: JSON.stringify(request.body ?? {}) }
+            : undefined),
+        });
+        const response = await auth.handler(authRequest);
+        const headersWithCookies = response.headers as Headers & {
+          getSetCookie?: () => string[];
+        };
+        const setCookies = headersWithCookies.getSetCookie?.();
+        response.headers.forEach((value: string, key: string) => {
+          if (key !== 'set-cookie') reply.header(key, value);
+        });
+        if (setCookies?.length) reply.header('set-cookie', setCookies);
+        const body = await response.text();
+        return reply.code(response.status).send(body || null);
+      },
+    });
+  }
+
+  app.post('/v1/auth/provision', async (request) => {
+    if (!options.auth) throw error(503, 'Better Auth is not configured');
+    let user: { id: string; email: string; name: string } | undefined;
+    try {
+      const session = await options.auth.api.getSession({
+        headers: fromNodeHeaders(request.headers),
+      });
+      if (session?.user)
+        user = {
+          id: session.user.id,
+          email: session.user.email,
+          name: session.user.name,
+        };
+    } catch {
+      // Fall through to the consistent authentication error below.
+    }
+    if (!user) throw error(401, 'A Better Auth session is required');
+
+    const existingIdentity = store.findExternalIdentity(
+      betterAuthIssuer,
+      user.id,
+    );
+    if (existingIdentity) {
+      const human = store.humans.get(existingIdentity.humanId);
+      if (!human)
+        throw error(409, 'Auth identity is linked to a missing human');
+      const agent = [...store.agents.values()].find(
+        (item) => item.ownerHumanId === human.id,
+      );
+      return {
+        provisioned: false,
+        human: {
+          id: human.id,
+          email: human.email,
+          displayName: human.displayName,
+          organizationId: human.organizationId,
+        },
+        agent,
+      };
+    }
+
+    // Reuse the validated demo profile as a complete, neutral starting model
+    // rather than creating a shallow identity with missing context fields.
+    const templateStore = new DealStore();
+    await templateStore.seedDemo('template-agent-key', 'template-human-key');
+    const template = templateStore.humans.get('human_demo');
+    if (!template) throw error(500, 'Could not initialize the human model');
+    const humanId = crypto.randomUUID();
+    const organizationId = crypto.randomUUID();
+    const agentId = crypto.randomUUID();
+    const delegationId = crypto.randomUUID();
+    const displayName = user.name.trim() || user.email.split('@')[0] || 'Owner';
+    const human = structuredClone(template);
+    human.id = humanId;
+    human.email = user.email;
+    human.displayName = displayName;
+    human.organizationId = organizationId;
+    human.role = 'Owner';
+    human.identity = {
+      ...human.identity,
+      preferredName: displayName,
+      organization: `${displayName}'s workspace`,
+      mission: 'Make better decisions with context, continuity, and care.',
+    };
+    human.persona = {
+      ...human.persona,
+      displayName,
+      role: 'Owner',
+      communicationStyle: 'clear, natural, context-aware',
+      values: [],
+      avoidedPhrases: [],
+    };
+    human.selfConcept = {
+      ...human.selfConcept,
+      summary: 'A person building a useful, trustworthy relationship with AI.',
+      identityStatements: [],
+      strengths: [],
+      nonNegotiables: [],
+      valuesHierarchy: [],
+      howTheyDescribeThemselves: [],
+    };
+    human.biography = {
+      ...human.biography,
+      summary: '',
+      currentChapter: '',
+      domainExpertise: [],
+    };
+    human.domain = {
+      ...human.domain,
+      business: '',
+      icp: '',
+      offer: '',
+      exclusions: [],
+      goals: [],
+      terminology: {},
+    };
+    human.decision = {
+      ...human.decision,
+      priorities: [],
+      tradeoffs: [],
+      northStars: [],
+      asksBeforeCommitment: ['consequential actions'],
+      autonomyPreferences: ['draft freely', 'ask before commitment'],
+      redLines: [],
+      heuristics: [],
+      examples: [],
+    };
+    human.behavior = {
+      ...human.behavior,
+      askBefore: ['consequential actions'],
+      neverDo: [],
+      responsePrinciples: [
+        'be honest about uncertainty',
+        'preserve the human voice',
+      ],
+      neverClaim: ['work not performed', 'certainty not supported by evidence'],
+      neverImpersonate: true,
+    };
+    human.currentPriorities = [];
+    human.knownConstraints = [];
+    human.judgment = {
+      ...human.judgment,
+      askIfMissing: ['goal', 'audience', 'tone'],
+      escalateIf: ['legal, financial, or reputational exposure'],
+      refuseIf: ['deception', 'unauthorized data use'],
+      confidenceThreshold: 0.7,
+    };
+    store.humans.set(human.id, human);
+
+    const agent = {
+      id: agentId,
+      name: `${displayName}'s first agent`,
+      runtime: 'api',
+      ownerHumanId: human.id,
+      status: 'active' as const,
+    };
+    store.agents.set(agent.id, agent);
+    store.delegations.set(delegationId, {
+      id: delegationId,
+      humanId: human.id,
+      agentId: agent.id,
+      purpose: 'Provide bounded context and humanized responses',
+      authority: {
+        mayRead: ['context_read', 'memory_read'],
+        mayDraft: ['response_draft'],
+        mayWrite: ['memory_write'],
+        requiresApproval: ['external_commitment'],
+      },
+      policyRules: [],
+    });
+    const apiKey = store.issueCredential({
+      kind: 'agent',
+      humanId: human.id,
+      agentId: agent.id,
+    });
+    store.linkExternalIdentity({
+      organizationId,
+      humanId,
+      issuer: betterAuthIssuer,
+      subject: user.id,
+      email: user.email,
+      claims: { provider: 'email-password' },
+    });
+    store.recordAudit({
+      humanId,
+      organizationId,
+      agentId,
+      eventType: 'auth.account_provisioned',
+      payload: { authProvider: betterAuthIssuer, authUserId: user.id },
+    });
+    return {
+      provisioned: true,
+      human: {
+        id: human.id,
+        email: human.email,
+        displayName: human.displayName,
+        organizationId: human.organizationId,
+      },
+      agent,
+      apiKey,
+    };
   });
 
   app.post('/v1/auth/external/link', async (request) => {

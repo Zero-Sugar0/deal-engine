@@ -112,9 +112,11 @@ export class PostgresDealStore extends DealStore {
     );
     const migrationPaths = configuredPath
       ? [configuredPath]
-      : ['001_initial.sql', '002_skill_registry.sql'].map((file) =>
-          path.join(defaultMigrationDirectory, file),
-        );
+      : [
+          '001_initial.sql',
+          '002_skill_registry.sql',
+          '003_better_auth.sql',
+        ].map((file) => path.join(defaultMigrationDirectory, file));
     for (const migrationPath of migrationPaths) {
       let migration: string;
       try {

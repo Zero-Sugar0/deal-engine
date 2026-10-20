@@ -20,6 +20,9 @@ services:
       DEAL_API_KEY: local-agent-key
       DEAL_HUMAN_API_KEY: local-human-key
       DEAL_DASHBOARD_ORIGIN: http://localhost:5173
+      BETTER_AUTH_SECRET: local-docker-better-auth-secret-change-me-32
+      BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:5173
     ports:
       - '3000:3000'
     depends_on:
