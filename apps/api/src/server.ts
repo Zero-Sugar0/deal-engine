@@ -484,9 +484,13 @@ export function buildServer(
     );
   }
   app.addHook('onRequest', async (request, reply) => {
+    const requestPath = request.url.split('?')[0];
     // CORS preflight must stay available while the durable store is
     // reconnecting. The actual request still waits for store.ready below.
-    if (request.method === 'OPTIONS') {
+    // Better Auth talks directly to the same Postgres pool and does not use
+    // DealStore's in-memory snapshot, so auth requests must not be blocked by
+    // an unrelated snapshot hydration during a brief database reconnect.
+    if (request.method === 'OPTIONS' || requestPath.startsWith('/api/auth/')) {
       reply.header('X-Request-ID', request.id);
       (request as FastifyRequest & { dealStartedAt?: number }).dealStartedAt =
         Date.now();
@@ -630,7 +634,16 @@ export function buildServer(
             ? { body: JSON.stringify(request.body ?? {}) }
             : undefined),
         });
-        const response = await auth.handler(authRequest);
+        let response: Response;
+        try {
+          response = await auth.handler(authRequest);
+        } catch (cause) {
+          request.log.error({ err: cause }, 'Better Auth request failed');
+          return reply.code(503).send({
+            message: 'Authentication is temporarily unavailable. Try again.',
+            code: 'AUTH_SERVICE_UNAVAILABLE',
+          });
+        }
         const headersWithCookies = response.headers as Headers & {
           getSetCookie?: () => string[];
         };
