@@ -2,6 +2,15 @@
 
 Every expert profile needs a scenario suite.
 
+The first executable suite lives in `src/index.ts` and covers missing context, unauthorized
+data use, mass sends, low-confidence drafts, and sensitive-field redaction.
+
+Run it from the repository root with:
+
+```bash
+./node_modules/.bin/vitest run packages/evals/test/index.test.ts
+```
+
 ## Scenario format
 
 ```json

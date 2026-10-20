@@ -1,21 +1,21 @@
 **Use an existing memory engine like Supermemory as the storage and retrieval substrate—but do not let it define DEAL’s intelligence.** Build your own **DEAL memory schema, context compiler, and governance layer** on top of it.
 
-Supermemory already handles the hard, undifferentiated parts: ingestion, embeddings/search, fact extraction, user profiles, contradiction handling, forgetting, and a memory graph.  You should not rebuild that in v1.[1][2][3]
+Supermemory already handles the hard, undifferentiated parts: ingestion, embeddings/search, fact extraction, user profiles, contradiction handling, forgetting, and a memory graph. You should not rebuild that in v1.[1][2][3]
 
 ## The right split
 
-| Layer | Build or use existing? | Why |
-|---|---|---|
-| Vector search, embeddings, RAG | **Use Supermemory** | Commodity infrastructure; fast to integrate |
-| Raw conversation/document ingestion | **Use Supermemory** | It already supports text, URLs, files, and conversations [4][5] |
-| Fact extraction and contradiction resolution | **Use Supermemory initially** | Useful default behavior; replace later if needed |
-| User profile summaries | **Use Supermemory initially** | It provides static plus dynamic profile context [4][6] |
-| DEAL persona schema | **Build** | This is your product’s core IP |
-| Human identity and delegation | **Build** | Memory vendors do not own your trust model |
-| Judgment rules and boundaries | **Build** | This is what makes agents behave like a competent human |
-| Context packet compiler | **Build** | This turns raw memory into agent-ready human context |
-| Consent, audit, revocation | **Build** | Required for real authority and enterprise adoption |
-| Cross-agent continuity | **Build** | The reason an agent should use DEAL rather than its own isolated memory |
+| Layer                                        | Build or use existing?        | Why                                                                     |
+| -------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------- |
+| Vector search, embeddings, RAG               | **Use Supermemory**           | Commodity infrastructure; fast to integrate                             |
+| Raw conversation/document ingestion          | **Use Supermemory**           | It already supports text, URLs, files, and conversations [4][5]         |
+| Fact extraction and contradiction resolution | **Use Supermemory initially** | Useful default behavior; replace later if needed                        |
+| User profile summaries                       | **Use Supermemory initially** | It provides static plus dynamic profile context [4][6]                  |
+| DEAL persona schema                          | **Build**                     | This is your product’s core IP                                          |
+| Human identity and delegation                | **Build**                     | Memory vendors do not own your trust model                              |
+| Judgment rules and boundaries                | **Build**                     | This is what makes agents behave like a competent human                 |
+| Context packet compiler                      | **Build**                     | This turns raw memory into agent-ready human context                    |
+| Consent, audit, revocation                   | **Build**                     | Required for real authority and enterprise adoption                     |
+| Cross-agent continuity                       | **Build**                     | The reason an agent should use DEAL rather than its own isolated memory |
 
 ## Do not build “just memory”
 

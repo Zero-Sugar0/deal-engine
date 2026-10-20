@@ -3,7 +3,22 @@
 ## Core entities
 
 ### Human
-A person represented by DEAL.
+
+A person represented by DEAL. The human model is deliberately layered rather
+than reduced to a single prompt or tone field:
+
+- `identity` — names, pronouns, mission, language, self-description, and user-controlled identity facets.
+- `selfConcept` — how the person describes themselves, strengths, aspirations, growth edges, fears, non-negotiables, and ranked values.
+- `biography` — formative experiences, career chapters, current life/work chapter, places, languages, and expertise.
+- `persona` — observable communication mechanics, examples, phrase preferences, and audience-specific modes.
+- `relationships` — relationship-specific roles, trust level, sensitivities, cadence, and boundaries.
+- `relational` — trust signals, trust breakers, calming factors, frustration triggers, conflict preferences, and repair protocol.
+- `decision` — north stars, heuristics, evidence threshold, time horizon, trade-offs, escalation triggers, red lines, and worked examples.
+- `boundaries` — what the agent must ask, must never assume, must never infer, or must never mention.
+
+Structured facts carry confidence, confirmation state, source, validity, and
+sensitivity. User-confirmed facts are not interchangeable with agent-observed or
+inferred observations.
 
 ```sql
 CREATE TABLE humans (
@@ -15,6 +30,7 @@ CREATE TABLE humans (
 ```
 
 ### Organization
+
 A business, household, clinic, school, or team.
 
 ```sql
@@ -27,6 +43,7 @@ CREATE TABLE organizations (
 ```
 
 ### Membership
+
 Links humans to organizations with roles.
 
 ```sql
@@ -40,6 +57,7 @@ CREATE TABLE memberships (
 ```
 
 ### Agent
+
 A registered agent runtime or integration.
 
 ```sql
@@ -55,6 +73,7 @@ CREATE TABLE agents (
 ```
 
 ### Delegation
+
 Explicit authority from a human to an agent.
 
 ```sql
@@ -73,6 +92,7 @@ CREATE TABLE delegations (
 ```
 
 ### Persona
+
 Versioned human context.
 
 ```sql
@@ -86,7 +106,13 @@ CREATE TABLE personas (
 );
 ```
 
+The runnable implementation stores the active layers as JSONB on `humans` so a
+model revision is persisted atomically with its `model_version`. The signed
+context packet includes the normalized model and derived `responseGuidance` so
+host agents do not have to reconstruct the person from scattered fields.
+
 ### MemoryRecord
+
 A structured, attributable memory.
 
 ```sql
@@ -118,6 +144,7 @@ Memory kinds:
 - `relationship`
 
 ### PolicyRule
+
 Explicit judgment and safety rules.
 
 ```sql
@@ -141,6 +168,7 @@ Policy actions:
 - `deny`
 
 ### ContextPacket
+
 Issued context for an agent task.
 
 ```sql
@@ -158,6 +186,7 @@ CREATE TABLE context_packets (
 ```
 
 ### AuditEvent
+
 Immutable event log.
 
 ```sql

@@ -2,7 +2,9 @@
 
 ## Authentication
 
-Agents authenticate using an agent client credential or delegated token. Humans authenticate through the dashboard using email, OAuth, or passkeys.
+Agents authenticate using an agent client credential or delegated token. Human
+identity is intentionally provider-neutral; this API only needs a verified human
+credential from the deployment’s chosen identity layer.
 
 ## Create context request
 
@@ -12,17 +14,12 @@ Authorization: Bearer <agent-token>
 Content-Type: application/json
 
 {
-  "task": "Improve our outbound campaign",
-  "requested_capabilities": [
-    "read_business_profile",
-    "read_campaign_history",
-    "draft_outreach",
-    "send_email"
-  ],
-  "task_metadata": {
-    "channel": "email",
-    "audience": "HR leaders"
-  }
+  "task": "Help me pressure-test this positioning",
+  "conversationId": "conversation_123",
+  "channel": "chat",
+  "audience": "the founder",
+  "activeTopic": "positioning",
+  "userIntent": "surface the strongest tradeoff"
 }
 ```
 
@@ -32,11 +29,12 @@ Content-Type: application/json
 {
   "packet_id": "ctx_123",
   "packet": {
-    "persona": {},
-    "domain": {},
-    "memory": {},
-    "authority": {},
-    "judgment": {}
+    "schemaVersion": "3",
+    "humanModel": {},
+    "behavior": {},
+    "responseGuidance": {},
+    "interaction": {},
+    "grounding": {}
   },
   "signature": "..."
 }
@@ -50,7 +48,7 @@ Authorization: Bearer <agent-token>
 Content-Type: application/json
 
 {
-  "action": "send_email",
+  "action": "external_commitment",
   "resource": "campaign_123",
   "context_packet_id": "ctx_123",
   "risk_signals": {
@@ -79,8 +77,8 @@ Authorization: Bearer <agent-token>
 
 {
   "context_packet_id": "ctx_123",
-  "action": "send_email",
-  "summary": "Send 38 personalized emails to qualified leads",
+  "action": "external_commitment",
+  "summary": "Commit to an external action on the human’s behalf",
   "payload": {}
 }
 ```
@@ -94,13 +92,22 @@ Authorization: Bearer <agent-token>
 {
   "context_packet_id": "ctx_123",
   "outcome": {
-    "type": "campaign_result",
-    "emails_sent": 38,
-    "replies": 7,
-    "meetings_booked": 2
+    "type": "task_result",
+    "result": "The response was accepted with one correction"
   }
 }
 ```
+
+## Continuity and feedback
+
+Use `/v1/conversations` and `/v1/conversations/{id}/turns` to preserve bounded
+conversation continuity. Request context with `conversationId` to receive the
+summary, active topic, open loops, and recent turns.
+
+Use `POST /v1/context/feedback` after a response. Human corrections become
+user-confirmed, high-priority memories and outrank inferred memories in future
+packets. `GET /v1/context/{packet_id}` returns a packet for inspection and
+verifies its stored signature.
 
 ## MCP tools
 

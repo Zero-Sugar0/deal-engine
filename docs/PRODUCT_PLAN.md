@@ -38,12 +38,14 @@ A user connects their business context and existing stack. DEAL gives their pref
 ## Roadmap
 
 ### Phase 0 — Foundations (Weeks 1–2)
+
 - Define DEAL schema v0
 - Build Postgres data model
 - Implement authentication and namespaces
 - Create Context Packet contract
 
 ### Phase 1 — Memory and Persona (Weeks 3–5)
+
 - Onboarding interview
 - Persona Compiler v0
 - Supermemory adapter
@@ -51,6 +53,7 @@ A user connects their business context and existing stack. DEAL gives their pref
 - User dashboard for viewing/editing memory
 
 ### Phase 2 — Identity and Policy (Weeks 6–8)
+
 - Agent registration
 - Delegated identity and scoped tokens
 - Policy engine: allow, approve, escalate, deny
@@ -58,6 +61,7 @@ A user connects their business context and existing stack. DEAL gives their pref
 - Audit trail
 
 ### Phase 3 — Agent Integration (Weeks 9–11)
+
 - TypeScript SDK
 - Python SDK
 - MCP server
@@ -65,6 +69,7 @@ A user connects their business context and existing stack. DEAL gives their pref
 - Context Packet signing
 
 ### Phase 4 — Expert Profiles (Weeks 12–16)
+
 - Growth Operator profile
 - Playbook templates
 - Evaluation scenarios

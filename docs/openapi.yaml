@@ -1,0 +1,467 @@
+openapi: 3.1.0
+info:
+  title: DEAL Control Plane API
+  version: 0.1.0
+  description: Human identity, memory, behavior, continuity, grounding, and optional boundary decisions for host agents.
+servers:
+  - url: http://localhost:3000
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      security: []
+      responses:
+        '200': { description: Healthy }
+  /v1/context:
+    post:
+      summary: Issue a signed human context packet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContextRequest'
+      responses:
+        '200':
+          description: Signed context packet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContextResponse'
+  /v1/context/{packetId}:
+    get:
+      summary: Inspect a stored signed context packet
+      parameters:
+        - {
+            name: packetId,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      responses:
+        '200': { description: Context packet and signature }
+  /v1/context/feedback:
+    get:
+      summary: List context feedback for the human
+      responses: { '200': { description: Feedback list } }
+    post:
+      summary: Record whether context was helpful and optionally add a correction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContextFeedbackRequest'
+      responses: { '200': { description: Stored feedback } }
+  /v1/conversations:
+    get:
+      summary: List the human's durable conversations
+      responses: { '200': { description: Conversation list } }
+    post:
+      summary: Start a durable human-agent conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConversationCreateRequest'
+      responses: { '200': { description: Conversation } }
+  /v1/conversations/{conversationId}/turns:
+    get:
+      summary: List bounded conversation turns
+      parameters:
+        - {
+            name: conversationId,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      responses: { '200': { description: Conversation turns } }
+    post:
+      summary: Append a human or agent turn
+      parameters:
+        - {
+            name: conversationId,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConversationTurnRequest'
+      responses: { '200': { description: Conversation turn } }
+  /v1/policy/evaluate:
+    post:
+      summary: Evaluate a proposed action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyRequest'
+      responses:
+        '200':
+          description: Deterministic policy decision
+  /v1/approvals:
+    get:
+      summary: List approvals for the human principal
+      responses: { '200': { description: Approval list } }
+    post:
+      summary: Request approval for an exact action payload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRequest'
+      responses: { '200': { description: Approval request } }
+  /v1/approvals/{approvalId}/decision:
+    post:
+      summary: Approve or deny an action
+      parameters:
+        - $ref: '#/components/parameters/ApprovalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecision'
+      responses: { '200': { description: Updated approval } }
+  /v1/approvals/{approvalId}/consume:
+    post:
+      summary: Consume an approved payload once and receive an execution token
+      parameters:
+        - $ref: '#/components/parameters/ApprovalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalConsumeRequest'
+      responses: { '200': { description: One-time execution token } }
+  /v1/actions/verify:
+    post:
+      summary: Verify a short-lived execution token before a side effect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecutionVerificationRequest'
+      responses: { '200': { description: Authorized action } }
+  /v1/agents/{agentId}/credentials/rotate:
+    post:
+      summary: Rotate all active credentials for an agent
+      parameters:
+        - { name: agentId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: New agent credential } }
+  /v1/credentials/{credentialId}/revoke:
+    post:
+      summary: Revoke a human-owned credential
+      parameters:
+        - {
+            name: credentialId,
+            in: path,
+            required: true,
+            schema: { type: string },
+          }
+      responses: { '200': { description: Revoked credential } }
+  /v1/profile:
+    get:
+      summary: Read the principal profile and delegations
+      responses:
+        '200':
+          description: Layered human profile and delegations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+    patch:
+      summary: Update identity, persona, relationships, boundaries, and judgment settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+      responses: { '200': { description: Updated profile } }
+  /v1/onboarding:
+    post:
+      summary: Complete or update layered human-model answers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+      responses: { '200': { description: Updated profile } }
+  /v1/memory:
+    get:
+      summary: Search structured memory
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: kinds, in: query, schema: { type: string } }
+      responses: { '200': { description: Memory records } }
+    post:
+      summary: Create an attributable memory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryCreateRequest'
+      responses: { '200': { description: Memory record } }
+  /v1/workflows:
+    get:
+      summary: List expert workflow runs
+      responses: { '200': { description: Workflow runs } }
+    post:
+      summary: Start a bounded expert workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowCreateRequest'
+      responses: { '200': { description: Workflow run } }
+  /v1/workflows/{workflowId}/transition:
+    post:
+      summary: Advance a workflow through its playbook state machine
+      parameters:
+        - {
+            name: workflowId,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowTransitionRequest'
+      responses: { '200': { description: Updated workflow } }
+  /v1/memory/{memoryId}/correct:
+    post:
+      summary: Supersede a memory with a user-confirmed correction
+      parameters:
+        - { name: memoryId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Replacement memory record } }
+  /v1/memory/{memoryId}:
+    delete:
+      summary: Forget a memory record
+      parameters:
+        - { name: memoryId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Forgotten memory record } }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    ApprovalId:
+      name: approvalId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    ContextRequest:
+      type: object
+      required: [task]
+      properties:
+        task: { type: string }
+        requestedCapabilities: { type: array, items: { type: string } }
+        taskMetadata: { type: object, additionalProperties: true }
+        conversationId: { type: string, format: uuid }
+        channel: { type: string }
+        audience: { type: string }
+        activeTopic: { type: string }
+        userIntent: { type: string }
+    ContextResponse:
+      type: object
+      required: [packetId, packet, signature]
+      properties:
+        packetId: { type: string, format: uuid }
+        packet: { type: object, additionalProperties: true }
+        signature: { type: string }
+    PolicyRequest:
+      type: object
+      required: [contextPacketId, action]
+      properties:
+        contextPacketId: { type: string, format: uuid }
+        action: { type: string }
+        recipientCount: { type: integer, minimum: 0 }
+        spendUsd: { type: number, minimum: 0 }
+        irreversible: { type: boolean }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+    ExecutionVerificationRequest:
+      type: object
+      required: [executionToken, action, payload]
+      properties:
+        executionToken: { type: string }
+        action: { type: string }
+        payload: {}
+    ApprovalRequest:
+      type: object
+      required: [contextPacketId, action, summary, payload]
+      properties:
+        contextPacketId: { type: string }
+        action: { type: string }
+        summary: { type: string }
+        payload: {}
+        resource: { type: string }
+        recipientCount: { type: integer, minimum: 0 }
+        spendUsd: { type: number, minimum: 0 }
+        irreversible: { type: boolean }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        sensitiveFields: { type: array, items: { type: string } }
+    ApprovalDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [approved, denied] }
+    ApprovalConsumeRequest:
+      type: object
+      required: [payload]
+      properties:
+        payload: {}
+    MemoryCreateRequest:
+      type: object
+      required: [kind, content]
+      properties:
+        kind: { type: string }
+        content: {}
+        source: { type: string }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        confirmation:
+          { type: string, enum: [user_confirmed, agent_observed, inferred] }
+        priority: { type: integer, minimum: 0, maximum: 100 }
+        sensitivity: { type: string, enum: [normal, personal, sensitive] }
+    WorkflowCreateRequest:
+      type: object
+      required: [goal]
+      properties:
+        profileId: { type: string }
+        goal: { type: string }
+        contextPacketId: { type: string }
+        data: { type: object, additionalProperties: true }
+    WorkflowTransitionRequest:
+      type: object
+      required: [step]
+      properties:
+        step: { type: string }
+        data: { type: object, additionalProperties: true }
+    ContextFeedbackRequest:
+      type: object
+      required: [contextPacketId, rating]
+      properties:
+        contextPacketId: { type: string, format: uuid }
+        rating: { type: string, enum: [helpful, mixed, unhelpful] }
+        correction: { type: string }
+        whatWorked: { type: string }
+        whatToChange: { type: string }
+    ProfileFact:
+      type: object
+      required: [value]
+      properties:
+        value: { type: string }
+        category: { type: string }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        confirmation:
+          { type: string, enum: [user_confirmed, agent_observed, inferred] }
+        source: { type: string }
+        sensitivity: { type: string, enum: [normal, personal, sensitive] }
+        tags: { type: array, items: { type: string } }
+    ProfileUpdate:
+      type: object
+      properties:
+        displayName: { type: string }
+        role: { type: string }
+        identity:
+          type: object
+          properties:
+            preferredName: { type: string }
+            pronouns: { type: string }
+            mission: { type: string }
+            selfDescription: { type: string }
+            languages:
+              {
+                type: array,
+                items: { $ref: '#/components/schemas/ProfileFact' },
+              }
+            identityMarkers:
+              {
+                type: array,
+                items: { $ref: '#/components/schemas/ProfileFact' },
+              }
+        selfConcept:
+          type: object
+          properties:
+            summary: { type: string }
+            identityStatements:
+              {
+                type: array,
+                items: { $ref: '#/components/schemas/ProfileFact' },
+              }
+            strengths:
+              {
+                type: array,
+                items: { $ref: '#/components/schemas/ProfileFact' },
+              }
+            growthEdges:
+              {
+                type: array,
+                items: { $ref: '#/components/schemas/ProfileFact' },
+              }
+            aspirations:
+              {
+                type: array,
+                items: { $ref: '#/components/schemas/ProfileFact' },
+              }
+            nonNegotiables:
+              {
+                type: array,
+                items: { $ref: '#/components/schemas/ProfileFact' },
+              }
+            valuesHierarchy:
+              {
+                type: array,
+                items: { type: object, additionalProperties: true },
+              }
+        biography: { type: object, additionalProperties: true }
+        persona: { type: object, additionalProperties: true }
+        relationships:
+          { type: array, items: { type: object, additionalProperties: true } }
+        relational: { type: object, additionalProperties: true }
+        boundaries: { type: object, additionalProperties: true }
+        domain: { type: object, additionalProperties: true }
+        decision: { type: object, additionalProperties: true }
+        behavior: { type: object, additionalProperties: true }
+        currentPriorities: { type: array, items: { type: string } }
+        knownConstraints: { type: array, items: { type: string } }
+    ProfileResponse:
+      type: object
+      required: [human, delegations]
+      properties:
+        human: { type: object, additionalProperties: true }
+        delegations:
+          { type: array, items: { type: object, additionalProperties: true } }
+    ConversationCreateRequest:
+      type: object
+      properties:
+        title: { type: string }
+        channel: { type: string }
+        audience: { type: string }
+        summary: { type: string }
+        activeTopic: { type: string }
+        openLoops: { type: array, items: { type: string } }
+    ConversationTurnRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string }
+        metadata: { type: object, additionalProperties: true }

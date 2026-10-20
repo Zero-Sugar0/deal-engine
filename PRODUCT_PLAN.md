@@ -10,7 +10,7 @@ Current agents receive a prompt and tools. They lack durable human context, iden
 
 ## Solution
 
-DEAL exposes a Context API and MCP server. Agents request a scoped Human Context Packet before acting. DEAL compiles persona, memory, authority, and judgment rules into that packet.
+DEAL exposes a Context API and MCP server. Agents request a scoped Human Context Packet before responding or acting. DEAL compiles identity, persona, memory provenance, decision style, behavioral contract, conversation continuity, and response guidance into that packet.
 
 ## Target users
 
@@ -23,7 +23,7 @@ DEAL exposes a Context API and MCP server. Agents request a scoped Human Context
 
 Start with one expert profile: **Growth Operator**.
 
-A user connects their business context and existing stack. DEAL gives their preferred coding/automation agent the context needed to research, qualify, draft, and route outreach for approval.
+A user defines their human model and the existing agent receives the context needed to understand, respond, decide, and maintain continuity. The agent’s own runtime remains responsible for tools and external systems.
 
 ## Product principles
 
@@ -34,37 +34,45 @@ A user connects their business context and existing stack. DEAL gives their pref
 5. Memory must be correctable and forgettable.
 6. DEAL is agent-agnostic.
 7. Judgment is explicit, testable, and versioned.
+8. The host agent owns tools; DEAL owns human understanding.
 
 ## Roadmap
 
 ### Phase 0 — Foundations (Weeks 1–2)
+
 - Define DEAL schema v0
 - Build Postgres data model
 - Implement authentication and namespaces
 - Create Context Packet contract
 
-### Phase 1 — Memory and Persona (Weeks 3–5)
+### Phase 1 — Memory and Human Model (Weeks 3–5)
+
 - Onboarding interview
 - Persona Compiler v0
-- Supermemory adapter
+- Semantic memory adapter
 - Structured preference and correction storage
+- Behavioral contract and response guidance
+- Conversation continuity and context feedback
 - User dashboard for viewing/editing memory
 
 ### Phase 2 — Identity and Policy (Weeks 6–8)
+
 - Agent registration
 - Delegated identity and scoped tokens
 - Policy engine: allow, approve, escalate, deny
 - Approval inbox
 - Audit trail
 
-### Phase 3 — Agent Integration (Weeks 9–11)
+### Phase 3 — Agent Context Integration (Weeks 9–11)
+
 - TypeScript SDK
 - Python SDK
 - MCP server
-- Claude Code / Cursor integration examples
+- Claude Code / Cursor / Codex context examples
 - Context Packet signing
 
 ### Phase 4 — Expert Profiles (Weeks 12–16)
+
 - Growth Operator profile
 - Playbook templates
 - Evaluation scenarios

@@ -3,6 +3,7 @@
 ## Core entities
 
 ### Human
+
 A person represented by DEAL.
 
 ```sql
@@ -14,7 +15,16 @@ CREATE TABLE humans (
 );
 ```
 
+The current runtime stores the active human model on `humans` as structured JSON:
+identity facets, self-concept, biography, persona mechanics, relationship
+contexts, relational/emotional cues, boundaries, domain, decision heuristics,
+behavioral contract, current priorities, and known constraints. Each structured
+fact can carry confidence, confirmation, source, validity, and sensitivity. A
+context packet also contains derived `responseGuidance` so an agent knows how to
+speak truthfully and consistently for the relevant audience.
+
 ### Organization
+
 A business, household, clinic, school, or team.
 
 ```sql
@@ -27,6 +37,7 @@ CREATE TABLE organizations (
 ```
 
 ### Membership
+
 Links humans to organizations with roles.
 
 ```sql
@@ -40,6 +51,7 @@ CREATE TABLE memberships (
 ```
 
 ### Agent
+
 A registered agent runtime or integration.
 
 ```sql
@@ -55,6 +67,7 @@ CREATE TABLE agents (
 ```
 
 ### Delegation
+
 Explicit authority from a human to an agent.
 
 ```sql
@@ -73,6 +86,7 @@ CREATE TABLE delegations (
 ```
 
 ### Persona
+
 Versioned human context.
 
 ```sql
@@ -87,6 +101,7 @@ CREATE TABLE personas (
 ```
 
 ### MemoryRecord
+
 A structured, attributable memory.
 
 ```sql
@@ -98,6 +113,9 @@ CREATE TABLE memory_records (
   content JSONB NOT NULL,
   confidence NUMERIC,
   source TEXT,
+  confirmation TEXT,
+  priority INTEGER DEFAULT 50,
+  sensitivity TEXT DEFAULT 'normal',
   external_ref TEXT,
   valid_from TIMESTAMPTZ,
   valid_until TIMESTAMPTZ,
@@ -105,6 +123,16 @@ CREATE TABLE memory_records (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 ```
+
+Packets are schema-versioned, signed, short-lived, and include grounding
+precedence, uncertainty markers, memory provenance, and bounded interaction
+continuity.
+
+### Conversation and feedback
+
+Conversations retain a bounded summary and recent turns. Context feedback records
+whether a packet was helpful and can create a user-confirmed correction that
+supersedes stale assumptions.
 
 Memory kinds:
 
@@ -118,6 +146,7 @@ Memory kinds:
 - `relationship`
 
 ### PolicyRule
+
 Explicit judgment and safety rules.
 
 ```sql
@@ -141,6 +170,7 @@ Policy actions:
 - `deny`
 
 ### ContextPacket
+
 Issued context for an agent task.
 
 ```sql
@@ -158,6 +188,7 @@ CREATE TABLE context_packets (
 ```
 
 ### AuditEvent
+
 Immutable event log.
 
 ```sql

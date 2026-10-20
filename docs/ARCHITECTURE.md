@@ -29,8 +29,8 @@ Claude Code · Cursor · Codex · GrokBot · Custom Agent
 └────────────────────────────────────────────────┘
                      │
                      ▼
-        User-connected systems and tools
-   Gmail · CRM · Calendar · Files · APIs · Browser
+        Host-agent systems and tools
+   The host agent owns these integrations; DEAL does not
 ```
 
 ## Services
@@ -55,9 +55,14 @@ Registers agents and issues delegated, scoped, short-lived credentials.
 
 Owns the canonical DEAL object model: human, organization, preferences, boundaries, history, outcomes, and corrections.
 
-### Judgment Engine
+### Human Model and Judgment Engine
 
-Determines whether an action should be allowed, approved, escalated, redacted, or denied.
+Compiles identity, self-concept, biography, persona mechanics, relationship
+contexts, relational cues, decision heuristics, boundaries, behavioral contract,
+memory provenance, conversation continuity, and response guidance. Its deterministic
+boundary evaluator can additionally explain whether a host-agent action should
+be allowed, approved, escalated, redacted, or denied; it never executes that
+action.
 
 ### Audit Service
 
@@ -91,15 +96,19 @@ Records every context disclosure, decision, approval, action, and outcome.
     "exclusions": ["agencies", "current customers"]
   },
   "memory": {
-    "preferences": ["LinkedIn-first for senior prospects"],
-    "corrections": ["Never target agencies"],
+    "preferences": ["Prefer concise, evidence-led explanations"],
+    "corrections": ["Do not repeat an approach the human rejected"],
     "recent_outcomes": []
   },
-  "authority": {
-    "may_read": ["crm", "email", "analytics"],
-    "may_draft": ["email", "linkedin_message"],
-    "requires_approval": ["send_email", "spend_money"],
-    "spend_limit_usd": 25
+  "behavior": {
+    "relationship": "collaborator",
+    "when_uncertain": "state_uncertainty",
+    "when_disagreeing": "surface_tradeoff",
+    "when_wrong": "admit_and_correct"
+  },
+  "response_guidance": {
+    "style": ["Lead with the point", "Prefer concise responses"],
+    "avoid": ["Never claim unsupported certainty"]
   },
   "judgment": {
     "ask_if_missing": ["audience", "goal", "tone"],
@@ -117,25 +126,26 @@ Records every context disclosure, decision, approval, action, and outcome.
 4. DEAL retrieves relevant structured and semantic memory.
 5. DEAL compiles and signs a Human Context Packet.
 6. Agent performs work using its own model/tools.
-7. Before a consequential action, agent calls DEAL’s policy endpoint.
-8. DEAL returns allow, approval-required, escalate, or deny.
-9. Agent reports outcome; DEAL updates memory and evaluation data.
+7. Agent uses the response guidance to formulate a truthful response or plan.
+8. For deployments that use DEAL’s optional boundary checks, the agent can ask
+   DEAL to evaluate a proposed consequential action.
+9. Agent reports outcome or human feedback; DEAL updates memory and evaluations.
 
 ## Memory strategy
 
 Use existing memory infrastructure for retrieval and extraction. Use DEAL for canonical structure and governance.
 
-| Concern | Owner |
-|---|---|
-| Embeddings and semantic search | Supermemory |
-| Document/file ingestion | Supermemory |
-| Fact extraction | Supermemory initially |
-| User profile summary | Supermemory initially |
-| Canonical persona schema | DEAL |
-| Identity and authority | DEAL |
-| Judgment and boundaries | DEAL |
-| Consent and audit | DEAL |
-| Cross-agent context contract | DEAL |
+| Concern                        | Owner                 |
+| ------------------------------ | --------------------- |
+| Embeddings and semantic search | Supermemory           |
+| Document/file ingestion        | Supermemory           |
+| Fact extraction                | Supermemory initially |
+| User profile summary           | Supermemory initially |
+| Canonical persona schema       | DEAL                  |
+| Identity and authority         | DEAL                  |
+| Judgment and boundaries        | DEAL                  |
+| Consent and audit              | DEAL                  |
+| Cross-agent context contract   | DEAL                  |
 
 ## Security model
 

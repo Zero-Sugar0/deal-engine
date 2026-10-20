@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16
@@ -8,9 +6,24 @@ services:
       POSTGRES_PASSWORD: deal
       POSTGRES_DB: deal
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - deal_pgdata:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+    environment:
+      DATABASE_URL: postgres://deal:deal@postgres:5432/deal
+      DEAL_JWT_SECRET: local-development-secret-change-me
+      DEAL_API_KEY: local-agent-key
+      DEAL_HUMAN_API_KEY: local-human-key
+      DEAL_DASHBOARD_ORIGIN: http://localhost:5173
+    ports:
+      - '3000:3000'
+    depends_on:
+      - postgres
 
 volumes:
   deal_pgdata:

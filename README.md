@@ -7,6 +7,10 @@ DEAL is a human-context engine for AI agents. It gives any connected agent—Cla
 ## What DEAL provides
 
 - Persistent human/organization persona
+- Layered self-concept, biography, identity facets, and values hierarchy
+- Audience-specific communication modes and response examples
+- Relationship trust context, emotional cues, repair protocol, and consent boundaries
+- Decision heuristics, tradeoffs, escalation triggers, and red lines
 - Delegated agent identity and scoped authority
 - Long-term structured memory
 - Preferences, values, constraints, and boundaries
@@ -14,6 +18,25 @@ DEAL is a human-context engine for AI agents. It gives any connected agent—Cla
 - A signed Human Context Packet for any agent runtime
 - Consent, audit trail, and revocation
 - Cross-agent continuity
+- Explicit response guidance: how to speak, disagree, admit uncertainty, and correct mistakes
+
+## Product boundary
+
+DEAL is the humanization layer. It does not try to become a CRM, mail client,
+calendar, browser, or general-purpose tool router. The host agent already owns
+those capabilities.
+
+DEAL owns the human model that the host agent should carry into those tasks:
+identity, persona, values, preferences, boundaries, decision style, behavioral
+contracts, memory provenance, conversation continuity, feedback, and truthful
+response guidance.
+
+The separation is intentional:
+
+```text
+Host agent = model, tools, execution, external systems
+DEAL       = human identity, context, memory, behavior, continuity, grounding
+```
 
 ## What DEAL does not do
 
@@ -37,16 +60,14 @@ User request
 apps/
   api/                 DEAL control-plane API
   dashboard/           User-facing consent, memory, identity, audit UI
-  docs-site/           Public documentation
 packages/
   core/                Domain models, schemas, context compiler
   memory/              Memory adapter interface + Supermemory adapter
-  identity/            Agent identity, delegation, scopes, tokens
-  policy/              Judgment, boundaries, approvals, risk rules
-  connectors/          MCP, Composio, browser, custom adapters
+  policy/              Deterministic judgment and boundary rules
   sdk-ts/              TypeScript SDK for agent developers
   sdk-python/          Python SDK for agent developers
   evals/               Evaluation scenarios and golden datasets
+apps/mcp/               MCP adapter for the context engine
 infra/
   docker/              Local development services
   railway/             Deployment configuration
@@ -63,6 +84,50 @@ infra/
 7. Approval and audit log
 8. TypeScript SDK + MCP server
 9. Evaluation suite for one expert profile
+
+## Current implementation
+
+The first runnable vertical slice is now available:
+
+- Fastify control-plane API under `apps/api`
+- Versioned schemas and context compiler under `packages/core`
+- Deterministic policy engine under `packages/policy`
+- Memory adapter contract, local adapter, and Supermemory adapter under `packages/memory`
+- TypeScript client under `packages/sdk-ts` and a dependency-free Python client under `packages/sdk-python`
+- Postgres migration with tenant isolation under `infra/db/migrations`
+- Vite trust dashboard under `apps/dashboard`
+- MCP stdio adapter under `apps/mcp`
+- Growth Operator workflow state machine and evaluation suite under `packages/evals`
+- OpenAPI contract under `docs/openapi.yaml`
+- Integration tests for context, policy, approvals, execution verification, memory correction, workflows, and audit
+
+Run it locally:
+
+```bash
+pnpm install
+./node_modules/.bin/tsc -p packages/core/tsconfig.json
+./node_modules/.bin/tsc -p packages/policy/tsconfig.json
+./node_modules/.bin/tsc -p packages/memory/tsconfig.json
+./node_modules/.bin/tsc -p packages/sdk-ts/tsconfig.json
+./node_modules/.bin/tsc -p apps/api/tsconfig.json
+node apps/api/dist/index.js
+```
+
+For local Postgres development:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml up -d postgres
+DATABASE_URL=postgres://deal:deal@localhost:5432/deal pnpm --filter @deal/api dev
+```
+
+The API applies the migration, hydrates the control plane, and persists human
+profiles, memory provenance, context packets, conversations, feedback, workflow,
+approval, and audit state. The human model is layered and versioned rather than
+being a single persona prompt. Remaining production hardening includes durable
+semantic retrieval, background processing, observability, rate limits, quality
+evaluations, and additional behavioral profiles. External systems and tool
+credentials remain owned by the host agent and are intentionally outside this
+repository’s core scope.
 
 ## Planning docs
 

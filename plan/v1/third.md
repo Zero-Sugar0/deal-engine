@@ -4,23 +4,23 @@ Launch with **15 Expert Profiles**, each with roughly **3–7 core tools**, not 
 
 ## Expert Profile catalog
 
-| # | Expert Profile | Core job | Limited toolset | Primary outcome |
-|---|---|---|---|---|
-| 1 | **Growth Operator** | Find, qualify, and nurture pipeline | Lead data, CRM, email sequencer, calendar, web research | Qualified meetings booked |
-| 2 | **Founder’s Chief of Staff** | Run founder operations | Email, calendar, task manager, docs, browser | Clear priorities and completed follow-ups |
-| 3 | **Household Operations Manager** | Manage a home’s schedules, bills, and logistics | Calendar, email, documents, shopping, reminders | Household runs smoothly |
-| 4 | **Personal Finance Organizer** | Organize spending, bills, and savings preparation | Bank read-only, bills, spreadsheets, calendar | Financial clarity; no unauthorized payments |
-| 5 | **Recruiting Coordinator** | Source, screen, schedule, and follow up | ATS/CRM, email, calendar, job boards, resume parser | Qualified candidates scheduled |
-| 6 | **Customer Success Manager** | Onboard, monitor, and retain customers | CRM, support desk, product analytics, email | Retention, adoption, renewals |
-| 7 | **Support Triage Specialist** | Classify, resolve, and escalate tickets | Help desk, knowledge base, CRM, order system | Faster resolution; correct escalations |
-| 8 | **Sales Call Prep Analyst** | Prepare reps before meetings | CRM, call transcripts, enrichment, web research | Meeting briefs and next-best actions |
-| 9 | **Content Marketing Strategist** | Plan and draft content from real positioning | Docs, CMS, analytics, web research, social scheduler | Content calendar and drafts |
-| 10 | **Teacher’s Assistant** | Lesson prep, feedback, and student progress | LMS, docs, grading tools, calendar | Prepared lessons and actionable feedback |
-| 11 | **Clinical Intake Coordinator** | Collect intake details and prepare visits | Scheduling, forms, EHR read-only, messaging | Complete intake without clinical decisions |
-| 12 | **Legal Intake Assistant** | Collect facts and organize documents | Forms, document storage, calendar, CRM | Organized matter file; no legal advice |
-| 13 | **Engineering Release Assistant** | Prepare releases, changelogs, and QA checklists | GitHub/GitLab, issue tracker, CI, docs | Clean release readiness |
-| 14 | **Invoice & Payments Clerk** | Prepare, reconcile, and chase invoices | Accounting, invoicing, email, spreadsheet | Fewer late payments; clean records |
-| 15 | **Research Analyst** | Research, synthesize, and cite sources | Web search, documents, notes, spreadsheet | Decision-ready research brief |
+| #   | Expert Profile                    | Core job                                          | Limited toolset                                         | Primary outcome                             |
+| --- | --------------------------------- | ------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------- |
+| 1   | **Growth Operator**               | Find, qualify, and nurture pipeline               | Lead data, CRM, email sequencer, calendar, web research | Qualified meetings booked                   |
+| 2   | **Founder’s Chief of Staff**      | Run founder operations                            | Email, calendar, task manager, docs, browser            | Clear priorities and completed follow-ups   |
+| 3   | **Household Operations Manager**  | Manage a home’s schedules, bills, and logistics   | Calendar, email, documents, shopping, reminders         | Household runs smoothly                     |
+| 4   | **Personal Finance Organizer**    | Organize spending, bills, and savings preparation | Bank read-only, bills, spreadsheets, calendar           | Financial clarity; no unauthorized payments |
+| 5   | **Recruiting Coordinator**        | Source, screen, schedule, and follow up           | ATS/CRM, email, calendar, job boards, resume parser     | Qualified candidates scheduled              |
+| 6   | **Customer Success Manager**      | Onboard, monitor, and retain customers            | CRM, support desk, product analytics, email             | Retention, adoption, renewals               |
+| 7   | **Support Triage Specialist**     | Classify, resolve, and escalate tickets           | Help desk, knowledge base, CRM, order system            | Faster resolution; correct escalations      |
+| 8   | **Sales Call Prep Analyst**       | Prepare reps before meetings                      | CRM, call transcripts, enrichment, web research         | Meeting briefs and next-best actions        |
+| 9   | **Content Marketing Strategist**  | Plan and draft content from real positioning      | Docs, CMS, analytics, web research, social scheduler    | Content calendar and drafts                 |
+| 10  | **Teacher’s Assistant**           | Lesson prep, feedback, and student progress       | LMS, docs, grading tools, calendar                      | Prepared lessons and actionable feedback    |
+| 11  | **Clinical Intake Coordinator**   | Collect intake details and prepare visits         | Scheduling, forms, EHR read-only, messaging             | Complete intake without clinical decisions  |
+| 12  | **Legal Intake Assistant**        | Collect facts and organize documents              | Forms, document storage, calendar, CRM                  | Organized matter file; no legal advice      |
+| 13  | **Engineering Release Assistant** | Prepare releases, changelogs, and QA checklists   | GitHub/GitLab, issue tracker, CI, docs                  | Clean release readiness                     |
+| 14  | **Invoice & Payments Clerk**      | Prepare, reconcile, and chase invoices            | Accounting, invoicing, email, spreadsheet               | Fewer late payments; clean records          |
+| 15  | **Research Analyst**              | Research, synthesize, and cite sources            | Web search, documents, notes, spreadsheet               | Decision-ready research brief               |
 
 These map to proven vertical-agent categories: sales, support, recruiting, HR, finance, legal, healthcare, engineering, and operations.[1][2][3][4]
 
@@ -60,13 +60,7 @@ Each profile should be defined as:
     "legal_advice",
     "mass_send_without_approval"
   ],
-  "required_context": [
-    "business",
-    "icp",
-    "offer",
-    "exclusions",
-    "brand_voice"
-  ],
+  "required_context": ["business", "icp", "offer", "exclusions", "brand_voice"],
   "workflow": [
     "intake",
     "research",
@@ -87,12 +81,12 @@ Each profile should be defined as:
 
 Use four permission tiers inside every profile:
 
-| Tier | Meaning | Examples |
-|---|---|---|
-| **Read** | Can view data | CRM, calendar, documents, analytics |
-| **Draft** | Can prepare work | Email draft, document draft, message draft |
-| **Act** | Can execute low-risk actions | Create task, update CRM field, schedule hold |
-| **Consequential** | Requires approval | Send campaign, spend money, delete data, deploy code |
+| Tier              | Meaning                      | Examples                                             |
+| ----------------- | ---------------------------- | ---------------------------------------------------- |
+| **Read**          | Can view data                | CRM, calendar, documents, analytics                  |
+| **Draft**         | Can prepare work             | Email draft, document draft, message draft           |
+| **Act**           | Can execute low-risk actions | Create task, update CRM field, schedule hold         |
+| **Consequential** | Requires approval            | Send campaign, spend money, delete data, deploy code |
 
 This prevents the common failure where an agent has broad access but no professional judgment.
 
@@ -101,25 +95,28 @@ This prevents the common failure where an agent has broad access but no professi
 Do **not** launch all 15 at once. Launch in three waves:
 
 ### Wave 1 — Highest demand, easiest trust
-1. Growth Operator  
-2. Founder’s Chief of Staff  
-3. Household Operations Manager  
-4. Personal Finance Organizer  
-5. Research Analyst  
+
+1. Growth Operator
+2. Founder’s Chief of Staff
+3. Household Operations Manager
+4. Personal Finance Organizer
+5. Research Analyst
 
 ### Wave 2 — Business workflows
-6. Recruiting Coordinator  
-7. Customer Success Manager  
-8. Support Triage Specialist  
-9. Sales Call Prep Analyst  
-10. Content Marketing Strategist  
+
+6. Recruiting Coordinator
+7. Customer Success Manager
+8. Support Triage Specialist
+9. Sales Call Prep Analyst
+10. Content Marketing Strategist
 
 ### Wave 3 — Regulated and high-trust domains
-11. Teacher’s Assistant  
-12. Clinical Intake Coordinator  
-13. Legal Intake Assistant  
-14. Engineering Release Assistant  
-15. Invoice & Payments Clerk  
+
+11. Teacher’s Assistant
+12. Clinical Intake Coordinator
+13. Legal Intake Assistant
+14. Engineering Release Assistant
+15. Invoice & Payments Clerk
 
 Regulated profiles should launch last because they require stricter approvals, audit trails, and domain-specific evaluation. Legal and healthcare agents are commonly used for research, drafting, intake, documentation, and workflow support—not final professional judgment.[2][6][7]
 

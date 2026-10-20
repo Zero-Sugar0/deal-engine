@@ -21,4 +21,7 @@ node_modules/
 !.env.example
 dist/
 build/
+coverage/
 *.log
+__pycache__/
+*.py[cod]

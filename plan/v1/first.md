@@ -31,15 +31,15 @@ Your current architecture already gives you the **hands**. What you need to add 
 
 ## Architecture: professional intelligence
 
-| Layer | What it does | Example: financial advisor agent |
-|---|---|---|
-| Domain ontology | Represents entities, relationships, constraints, and terminology | Client, goal, risk tolerance, account type, tax status, suitability |
-| Playbooks | Encodes expert workflows as state machines, not vague prompts | Discovery → risk profile → constraints → proposal → compliance review |
-| Case memory | Stores client context, past decisions, exceptions, and outcomes | “This client rejected equity-heavy allocations in 2024 because of liquidity needs” |
-| Evidence layer | Forces claims to cite source data, documents, or tools | Uses account data, filings, market data, policy documents |
-| Judgment engine | Scores uncertainty, conflict, risk, and confidence | Flags unsuitable recommendations or missing disclosures |
-| Human checkpoints | Routes ambiguous or high-stakes decisions to an expert | Advisor approves recommendation before client delivery |
-| Evaluation suite | Tests the agent against real expert-labeled cases | Does it catch suitability issues, incomplete data, and edge cases? |
+| Layer             | What it does                                                     | Example: financial advisor agent                                                   |
+| ----------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Domain ontology   | Represents entities, relationships, constraints, and terminology | Client, goal, risk tolerance, account type, tax status, suitability                |
+| Playbooks         | Encodes expert workflows as state machines, not vague prompts    | Discovery → risk profile → constraints → proposal → compliance review              |
+| Case memory       | Stores client context, past decisions, exceptions, and outcomes  | “This client rejected equity-heavy allocations in 2024 because of liquidity needs” |
+| Evidence layer    | Forces claims to cite source data, documents, or tools           | Uses account data, filings, market data, policy documents                          |
+| Judgment engine   | Scores uncertainty, conflict, risk, and confidence               | Flags unsuitable recommendations or missing disclosures                            |
+| Human checkpoints | Routes ambiguous or high-stakes decisions to an expert           | Advisor approves recommendation before client delivery                             |
+| Evaluation suite  | Tests the agent against real expert-labeled cases                | Does it catch suitability issues, incomplete data, and edge cases?                 |
 
 This matches emerging best practice: separate domain knowledge from procedures, maintain a structured knowledge system, use expert review checkpoints calibrated to risk, and continuously evaluate agent behavior.[4]
 
