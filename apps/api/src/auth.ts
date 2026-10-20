@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { dash } from '@better-auth/infra';
+import { bearer } from 'better-auth/plugins';
 import type { Auth, BetterAuthOptions } from 'better-auth';
 import type { Pool } from 'pg';
 
@@ -53,6 +54,7 @@ export function createDealAuth(pool: Pool): Auth<DealAuthOptions> {
     secret: authSecret,
     trustedOrigins: configuredOrigins(),
     plugins: [
+      bearer(),
       dash({
         apiUrl: process.env.BETTER_AUTH_API_URL,
         kvUrl: process.env.BETTER_AUTH_KV_URL,

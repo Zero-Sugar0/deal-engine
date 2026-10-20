@@ -9,7 +9,12 @@ import Codex from '@lobehub/icons/es/Codex/components/Mono.js';
 import Cursor from '@lobehub/icons/es/Cursor/components/Mono.js';
 import './styles.css';
 import './refinements.css';
-import { authClient, dealApiUrl } from './auth-client';
+import {
+  authClient,
+  dealApiUrl,
+  getDealSessionToken,
+  setDealSessionToken,
+} from './auth-client';
 
 type Route = '/' | '/about' | '/sign-in' | '/sign-up' | '/app';
 
@@ -58,7 +63,8 @@ async function dashboardRequest<T>(
 ): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set('content-type', 'application/json');
-  if (token) headers.set('authorization', `Bearer ${token}`);
+  const effectiveToken = token ?? getDealSessionToken();
+  if (effectiveToken) headers.set('authorization', `Bearer ${effectiveToken}`);
   const response = await fetch(`${dealApiUrl}${path}`, {
     ...init,
     credentials: 'include',
@@ -1178,6 +1184,35 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   const [pending, setPending] = useState(false);
   const signIn = mode === 'sign-in';
 
+  function readableAuthError(error: unknown): string {
+    const message = error instanceof Error ? error.message : '';
+    const normalized = message.toLowerCase();
+    if (
+      normalized.includes('user already exists') ||
+      normalized.includes('already exists') ||
+      normalized.includes('use another email')
+    )
+      return 'An account with this email already exists. Sign in instead.';
+    if (
+      normalized.includes('invalid email or password') ||
+      normalized.includes('invalid credentials') ||
+      normalized.includes('incorrect password')
+    )
+      return 'Your email or password is incorrect.';
+    if (normalized.includes('invalid email'))
+      return 'Enter a valid email address.';
+    if (normalized.includes('password') && normalized.includes('12'))
+      return 'Use a password with at least 12 characters.';
+    if (
+      normalized.includes('failed to fetch') ||
+      normalized.includes('network')
+    )
+      return 'We could not reach deal. Check your connection and try again.';
+    if (normalized.includes('session is required'))
+      return 'Your sign-in could not be completed. Please try again.';
+    return message || 'That account could not be verified.';
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage('');
@@ -1197,6 +1232,13 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
           });
       if (response.error)
         throw new Error(response.error.message || 'Authentication failed.');
+      const sessionToken =
+        response.data &&
+        'token' in response.data &&
+        typeof response.data.token === 'string'
+          ? response.data.token
+          : null;
+      if (sessionToken) setDealSessionToken(sessionToken);
       const provisioned = await dashboardRequest<{
         apiKey?: string;
         human: DashboardProfile['human'];
@@ -1210,11 +1252,7 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         navigate('/app');
       }
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'That account could not be verified.',
-      );
+      setErrorMessage(readableAuthError(error));
     } finally {
       setPending(false);
     }
@@ -1350,26 +1388,32 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
 function DashboardPage() {
   const [active, setActive] = useState('Overview');
   const [profile, setProfile] = useState<DashboardProfile['human']>();
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const navItems = ['Overview', 'Human model', 'Memory', 'Agents', 'Approvals'];
 
   useEffect(() => {
     if (sessionPending) return;
-    if (!session) {
+    if (!session && !getDealSessionToken()) {
       navigate('/sign-in');
       return;
     }
     dashboardRequest<DashboardProfile>(null, '/v1/profile')
-      .then((response) => setProfile(response.human))
+      .then((response) => {
+        setProfile(response.human);
+        setProfileLoaded(true);
+      })
       .catch(() => {
+        setDealSessionToken(null);
         navigate('/sign-in');
       });
   }, [session, sessionPending]);
 
-  if (sessionPending || !session) return null;
+  if (sessionPending || (!session && !profileLoaded)) return null;
 
   async function signOut() {
     await authClient.signOut();
+    setDealSessionToken(null);
     navigate('/sign-in');
   }
 

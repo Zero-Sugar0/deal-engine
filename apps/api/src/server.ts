@@ -211,7 +211,7 @@ async function requireCredentialWithAuth(
       // Treat provider verification failures like invalid credentials.
     }
   }
-  if (!credential && !token && auth) {
+  if (!credential && auth) {
     try {
       const session = await auth.api.getSession({
         headers: fromNodeHeaders(request.headers),
@@ -484,6 +484,14 @@ export function buildServer(
     );
   }
   app.addHook('onRequest', async (request, reply) => {
+    // CORS preflight must stay available while the durable store is
+    // reconnecting. The actual request still waits for store.ready below.
+    if (request.method === 'OPTIONS') {
+      reply.header('X-Request-ID', request.id);
+      (request as FastifyRequest & { dealStartedAt?: number }).dealStartedAt =
+        Date.now();
+      return;
+    }
     await store.ready;
     await store.beginRequest(request.id);
     reply.header('X-Request-ID', request.id);
