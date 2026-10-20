@@ -16,6 +16,7 @@ import type {
   SelfConcept,
 } from '@deal/core';
 import { InMemoryAdapter } from '@deal/memory';
+import type { MemoryAdapter } from '@deal/memory';
 import type { PolicyResult, PolicyRule } from '@deal/policy';
 
 export interface Human {
@@ -168,6 +169,18 @@ export interface ContextFeedback {
   createdAt: string;
 }
 
+export interface ExternalIdentity {
+  id: string;
+  organizationId: string;
+  humanId: string;
+  issuer: string;
+  subject: string;
+  email?: string;
+  claims: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
@@ -192,7 +205,7 @@ function canonicalize(value: unknown): unknown {
 
 export class DealStore {
   readonly ready: Promise<void>;
-  readonly memories = new InMemoryAdapter();
+  readonly memories: MemoryAdapter;
   readonly humans = new Map<string, Human>();
   readonly agents = new Map<string, Agent>();
   readonly delegations = new Map<string, Delegation>();
@@ -204,13 +217,25 @@ export class DealStore {
   readonly conversations = new Map<string, Conversation>();
   readonly conversationTurns = new Map<string, ConversationTurn[]>();
   readonly feedback = new Map<string, ContextFeedback>();
+  readonly externalIdentities = new Map<string, ExternalIdentity>();
   readonly forgottenMemoryIds = new Set<string>();
 
-  constructor() {
+  constructor(memoryAdapter: MemoryAdapter = new InMemoryAdapter()) {
+    this.memories = memoryAdapter;
     this.ready = Promise.resolve();
   }
 
   async persist(): Promise<void> {}
+
+  async beginRequest(_requestId: string): Promise<void> {}
+
+  async endRequest(_requestId: string): Promise<void> {
+    await this.persist();
+  }
+
+  async health(): Promise<{ ok: boolean; durable: boolean; provider: string }> {
+    return { ok: true, durable: false, provider: 'memory' };
+  }
 
   async close(): Promise<void> {}
 
@@ -237,6 +262,31 @@ export class DealStore {
     if (credential?.expiresAt && new Date(credential.expiresAt) <= new Date())
       return undefined;
     return credential;
+  }
+
+  findExternalIdentity(
+    issuer: string,
+    subject: string,
+  ): ExternalIdentity | undefined {
+    return this.externalIdentities.get(`${issuer}\n${subject}`);
+  }
+
+  linkExternalIdentity(
+    input: Omit<ExternalIdentity, 'id' | 'createdAt' | 'updatedAt'>,
+  ): ExternalIdentity {
+    const key = `${input.issuer}\n${input.subject}`;
+    const existing = this.externalIdentities.get(key);
+    if (existing && existing.humanId !== input.humanId)
+      throw new Error('External identity is already linked to another human');
+    const now = new Date().toISOString();
+    const identity: ExternalIdentity = {
+      ...input,
+      id: existing?.id ?? crypto.randomUUID(),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.externalIdentities.set(key, identity);
+    return identity;
   }
 
   recordAudit(input: Omit<AuditEvent, 'id' | 'occurredAt'>): AuditEvent {

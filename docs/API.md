@@ -11,6 +11,27 @@ Human credentials can rotate an agent credential with
 `POST /v1/credentials/{credential_id}/revoke`. Revoked, expired, or suspended agent
 credentials are rejected before any domain operation runs.
 
+### External human authentication
+
+When `DEAL_AUTH_ISSUER`, `DEAL_AUTH_AUDIENCE`, and `DEAL_AUTH_JWKS_URL` are
+configured, DEAL verifies external JWTs against the issuer's JWKS. A human must
+explicitly link the provider subject first:
+
+```http
+POST /v1/auth/external/link
+Authorization: Bearer <local-human-token>
+Content-Type: application/json
+
+{ "token": "<provider-jwt>" }
+```
+
+The linked provider JWT can then authenticate human-scoped endpoints. DEAL does
+not auto-link identities by email.
+
+`GET /healthz` is a liveness check. `GET /readyz` checks the canonical store.
+`GET /metrics` exposes Prometheus metrics and can be protected with
+`DEAL_METRICS_TOKEN`.
+
 ## Create context request
 
 ```http

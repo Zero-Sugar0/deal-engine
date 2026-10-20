@@ -4,7 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
 import type { MemoryRecord } from '@deal/core';
 import {
+  InMemoryAdapter,
+  PostgresMemoryAdapter,
+  type MemoryEmbeddingProvider,
+} from '@deal/memory';
+import {
   DealStore,
+  hashPayload,
   type Agent,
   type Approval,
   type AuditEvent,
@@ -16,6 +22,7 @@ import {
   type Delegation,
   type Human,
   type WorkflowRun,
+  type ExternalIdentity,
 } from './store.js';
 
 function iso(value: Date | string | null | undefined): string | undefined {
@@ -27,13 +34,42 @@ function json(value: unknown): string {
   return JSON.stringify(value ?? {});
 }
 
+interface RequestSnapshot {
+  maps: Record<string, Record<string, string>>;
+  auditLength: number;
+}
+
+function snapshotMap<T>(items: Map<string, T>): Record<string, string> {
+  return Object.fromEntries(
+    [...items.entries()].map(([id, value]) => [id, hashPayload(value)]),
+  );
+}
+
+function changed<T>(
+  snapshot: RequestSnapshot | undefined,
+  collection: string,
+  id: string,
+  value: T,
+): boolean {
+  if (!snapshot) return true;
+  return snapshot.maps[collection]?.[id] !== hashPayload(value);
+}
+
 export class PostgresDealStore extends DealStore {
   readonly pool: Pool;
+  readonly durable = true;
   override ready: Promise<void>;
+  private readonly requestSnapshots = new Map<string, RequestSnapshot>();
+  private lockTail: Promise<void> = Promise.resolve();
+  private readonly lockReleases = new Map<string, () => void>();
 
-  constructor(connectionString: string) {
-    super();
-    this.pool = new Pool({ connectionString, max: 10 });
+  constructor(
+    connectionString: string,
+    options: { embeddingProvider?: MemoryEmbeddingProvider } = {},
+  ) {
+    const pool = new Pool({ connectionString, max: 10 });
+    super(new PostgresMemoryAdapter(pool, options.embeddingProvider));
+    this.pool = pool;
     this.ready = this.initialize();
   }
 
@@ -60,6 +96,18 @@ export class PostgresDealStore extends DealStore {
   }
 
   private async hydrate(): Promise<void> {
+    this.humans.clear();
+    this.agents.clear();
+    this.delegations.clear();
+    this.credentials.clear();
+    this.contexts.clear();
+    this.approvals.clear();
+    this.audits.length = 0;
+    this.workflows.clear();
+    this.conversations.clear();
+    this.conversationTurns.clear();
+    this.feedback.clear();
+    this.externalIdentities.clear();
     const [
       humans,
       agents,
@@ -234,7 +282,7 @@ export class PostgresDealStore extends DealStore {
         supersededBy: row.superseded_by ?? undefined,
         createdAt: iso(row.created_at)!,
       };
-      this.memories.load(memory);
+      if (this.memories instanceof InMemoryAdapter) this.memories.load(memory);
     }
     for (const row of workflows.rows) {
       const workflow: WorkflowRun = {
@@ -294,14 +342,98 @@ export class PostgresDealStore extends DealStore {
       };
       this.feedback.set(item.id, item);
     }
+    const identities = await this.pool.query(
+      'SELECT id, organization_id, human_id, issuer, subject, email, claims, created_at, updated_at FROM external_identities',
+    );
+    for (const row of identities.rows) {
+      const identity: ExternalIdentity = {
+        id: row.id,
+        organizationId: row.organization_id,
+        humanId: row.human_id,
+        issuer: row.issuer,
+        subject: row.subject,
+        email: row.email ?? undefined,
+        claims: row.claims ?? {},
+        createdAt: iso(row.created_at)!,
+        updatedAt: iso(row.updated_at)!,
+      };
+      this.externalIdentities.set(
+        `${identity.issuer}\n${identity.subject}`,
+        identity,
+      );
+    }
+  }
+
+  private captureSnapshot(): RequestSnapshot {
+    return {
+      maps: {
+        humans: snapshotMap(this.humans),
+        agents: snapshotMap(this.agents),
+        delegations: snapshotMap(this.delegations),
+        credentials: snapshotMap(this.credentials),
+        contexts: snapshotMap(this.contexts),
+        approvals: snapshotMap(this.approvals),
+        workflows: snapshotMap(this.workflows),
+        conversations: snapshotMap(this.conversations),
+        conversationTurns: snapshotMap(this.conversationTurns),
+        feedback: snapshotMap(this.feedback),
+        externalIdentities: snapshotMap(this.externalIdentities),
+      },
+      auditLength: this.audits.length,
+    };
+  }
+
+  override async beginRequest(requestId: string): Promise<void> {
+    await this.ready;
+    const previous = this.lockTail;
+    let release!: () => void;
+    this.lockTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    this.lockReleases.set(requestId, release);
+    try {
+      await this.hydrate();
+      this.requestSnapshots.set(requestId, this.captureSnapshot());
+    } catch (cause) {
+      release();
+      this.lockReleases.delete(requestId);
+      throw cause;
+    }
+  }
+
+  override async endRequest(requestId: string): Promise<void> {
+    const snapshot = this.requestSnapshots.get(requestId);
+    this.requestSnapshots.delete(requestId);
+    try {
+      if (snapshot) await this.persistInternal(snapshot);
+    } finally {
+      this.lockReleases.get(requestId)?.();
+      this.lockReleases.delete(requestId);
+    }
+  }
+
+  override async health(): Promise<{
+    ok: boolean;
+    durable: boolean;
+    provider: string;
+  }> {
+    await this.ready;
+    await this.pool.query('SELECT 1');
+    return { ok: true, durable: true, provider: 'postgres' };
   }
 
   override async persist(): Promise<void> {
+    await this.persistInternal();
+  }
+
+  private async persistInternal(snapshot?: RequestSnapshot): Promise<void> {
     await this.ready;
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
       for (const human of this.humans.values()) {
+        if (!changed(snapshot, 'humans', human.id, human)) continue;
         await client.query(
           'INSERT INTO organizations(id, name) VALUES($1, $2) ON CONFLICT (id) DO NOTHING',
           [
@@ -311,8 +443,8 @@ export class PostgresDealStore extends DealStore {
               : human.displayName,
           ],
         );
-        await client.query(
-          `INSERT INTO humans(id, email, display_name, organization_id, role, identity, persona, self_concept, biography, relationships, relational, boundaries, domain, decision, behavior, current_priorities, known_constraints, model_version, judgment) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17::jsonb,$18,$19::jsonb) ON CONFLICT(id) DO UPDATE SET email=EXCLUDED.email, display_name=EXCLUDED.display_name, role=EXCLUDED.role, identity=EXCLUDED.identity, persona=EXCLUDED.persona, self_concept=EXCLUDED.self_concept, biography=EXCLUDED.biography, relationships=EXCLUDED.relationships, relational=EXCLUDED.relational, boundaries=EXCLUDED.boundaries, domain=EXCLUDED.domain, decision=EXCLUDED.decision, behavior=EXCLUDED.behavior, current_priorities=EXCLUDED.current_priorities, known_constraints=EXCLUDED.known_constraints, model_version=EXCLUDED.model_version, judgment=EXCLUDED.judgment`,
+        const humanWrite = await client.query(
+          `INSERT INTO humans(id, email, display_name, organization_id, role, identity, persona, self_concept, biography, relationships, relational, boundaries, domain, decision, behavior, current_priorities, known_constraints, model_version, judgment) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17::jsonb,$18,$19::jsonb) ON CONFLICT(id) DO UPDATE SET email=EXCLUDED.email, display_name=EXCLUDED.display_name, role=EXCLUDED.role, identity=EXCLUDED.identity, persona=EXCLUDED.persona, self_concept=EXCLUDED.self_concept, biography=EXCLUDED.biography, relationships=EXCLUDED.relationships, relational=EXCLUDED.relational, boundaries=EXCLUDED.boundaries, domain=EXCLUDED.domain, decision=EXCLUDED.decision, behavior=EXCLUDED.behavior, current_priorities=EXCLUDED.current_priorities, known_constraints=EXCLUDED.known_constraints, model_version=EXCLUDED.model_version, judgment=EXCLUDED.judgment WHERE humans.model_version = EXCLUDED.model_version - 1`,
           [
             human.id,
             human.email,
@@ -335,8 +467,13 @@ export class PostgresDealStore extends DealStore {
             json(human.judgment),
           ],
         );
+        if (snapshot && humanWrite.rowCount === 0)
+          throw new Error(
+            'Concurrent profile update detected; retry the request',
+          );
       }
       for (const agent of this.agents.values()) {
+        if (!changed(snapshot, 'agents', agent.id, agent)) continue;
         const human = this.humans.get(agent.ownerHumanId)!;
         await client.query(
           `INSERT INTO agents(id, organization_id, owner_human_id, name, runtime, status) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name, runtime=EXCLUDED.runtime, status=EXCLUDED.status`,
@@ -351,6 +488,8 @@ export class PostgresDealStore extends DealStore {
         );
       }
       for (const delegation of this.delegations.values()) {
+        if (!changed(snapshot, 'delegations', delegation.id, delegation))
+          continue;
         const human = this.humans.get(delegation.humanId)!;
         await client.query(
           `INSERT INTO delegations(id, organization_id, human_id, agent_id, purpose, authority, policy_rules, profile_id, expires_at, revoked_at) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10) ON CONFLICT(id) DO UPDATE SET purpose=EXCLUDED.purpose, authority=EXCLUDED.authority, policy_rules=EXCLUDED.policy_rules, profile_id=EXCLUDED.profile_id, expires_at=EXCLUDED.expires_at, revoked_at=EXCLUDED.revoked_at`,
@@ -369,6 +508,8 @@ export class PostgresDealStore extends DealStore {
         );
       }
       for (const credential of this.credentials.values()) {
+        if (!changed(snapshot, 'credentials', credential.id, credential))
+          continue;
         const human = this.humans.get(credential.humanId)!;
         await client.query(
           `INSERT INTO credentials(id, organization_id, token_hash, kind, human_id, agent_id, expires_at, revoked_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO UPDATE SET expires_at=EXCLUDED.expires_at, revoked_at=EXCLUDED.revoked_at`,
@@ -384,7 +525,9 @@ export class PostgresDealStore extends DealStore {
           ],
         );
       }
-      for (const memory of this.memories.all) {
+      const localMemories =
+        this.memories instanceof InMemoryAdapter ? this.memories.all : [];
+      for (const memory of localMemories) {
         const human = this.humans.get(memory.humanId)!;
         await client.query(
           `INSERT INTO memory_records(id, organization_id, human_id, kind, content, confidence, source, confirmation, priority, sensitivity, external_ref, valid_from, valid_until, superseded_by) VALUES($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT(id) DO UPDATE SET kind=EXCLUDED.kind, content=EXCLUDED.content, confidence=EXCLUDED.confidence, source=EXCLUDED.source, confirmation=EXCLUDED.confirmation, priority=EXCLUDED.priority, sensitivity=EXCLUDED.sensitivity, external_ref=EXCLUDED.external_ref, valid_from=EXCLUDED.valid_from, valid_until=EXCLUDED.valid_until, superseded_by=EXCLUDED.superseded_by`,
@@ -406,7 +549,7 @@ export class PostgresDealStore extends DealStore {
           ],
         );
       }
-      for (const memory of this.memories.all) {
+      for (const memory of localMemories) {
         if (
           memory.supersededBy &&
           !this.forgottenMemoryIds.has(memory.id) &&
@@ -417,14 +560,18 @@ export class PostgresDealStore extends DealStore {
             [memory.supersededBy, memory.id],
           );
       }
-      for (const id of this.forgottenMemoryIds) {
-        await client.query(
-          'UPDATE memory_records SET superseded_by = NULL WHERE superseded_by = $1',
-          [id],
-        );
-        await client.query('DELETE FROM memory_records WHERE id = $1', [id]);
+      if (this.memories instanceof InMemoryAdapter) {
+        for (const id of this.forgottenMemoryIds) {
+          await client.query(
+            'UPDATE memory_records SET superseded_by = NULL WHERE superseded_by = $1',
+            [id],
+          );
+          await client.query('DELETE FROM memory_records WHERE id = $1', [id]);
+        }
       }
       for (const context of this.contexts.values()) {
+        if (!changed(snapshot, 'contexts', context.packet.packetId, context))
+          continue;
         const human = this.humans.get(context.humanId)!;
         const delegation = this.getDelegationForAgent(
           context.agentId,
@@ -447,9 +594,10 @@ export class PostgresDealStore extends DealStore {
         );
       }
       for (const approval of this.approvals.values()) {
+        if (!changed(snapshot, 'approvals', approval.id, approval)) continue;
         const human = this.humans.get(approval.humanId)!;
-        await client.query(
-          `INSERT INTO approvals(id, organization_id, human_id, agent_id, context_packet_id, action, summary, payload, payload_hash, status, decided_by, decided_at, consumed_at, policy_result) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14::jsonb) ON CONFLICT(id) DO UPDATE SET status=EXCLUDED.status, decided_by=EXCLUDED.decided_by, decided_at=EXCLUDED.decided_at, consumed_at=EXCLUDED.consumed_at, policy_result=EXCLUDED.policy_result`,
+        const approvalWrite = await client.query(
+          `INSERT INTO approvals(id, organization_id, human_id, agent_id, context_packet_id, action, summary, payload, payload_hash, status, decided_by, decided_at, consumed_at, policy_result) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14::jsonb) ON CONFLICT(id) DO UPDATE SET status=EXCLUDED.status, decided_by=EXCLUDED.decided_by, decided_at=EXCLUDED.decided_at, consumed_at=EXCLUDED.consumed_at, policy_result=EXCLUDED.policy_result WHERE approvals.consumed_at IS NULL OR EXCLUDED.consumed_at IS NULL`,
           [
             approval.id,
             human.organizationId,
@@ -467,8 +615,13 @@ export class PostgresDealStore extends DealStore {
             approval.policyResult ? json(approval.policyResult) : null,
           ],
         );
+        if (snapshot && approvalWrite.rowCount === 0)
+          throw new Error(
+            'Concurrent approval update detected; retry the request',
+          );
       }
       for (const workflow of this.workflows.values()) {
+        if (!changed(snapshot, 'workflows', workflow.id, workflow)) continue;
         const human = this.humans.get(workflow.humanId)!;
         await client.query(
           `INSERT INTO workflow_runs(id, organization_id, human_id, agent_id, profile_id, goal, current_step, context_packet_id, data)
@@ -488,6 +641,8 @@ export class PostgresDealStore extends DealStore {
         );
       }
       for (const conversation of this.conversations.values()) {
+        if (!changed(snapshot, 'conversations', conversation.id, conversation))
+          continue;
         const human = this.humans.get(conversation.humanId)!;
         await client.query(
           `INSERT INTO conversations(id, organization_id, human_id, agent_id, title, channel, audience, summary, active_topic, open_loops) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title, channel=EXCLUDED.channel, audience=EXCLUDED.audience, summary=EXCLUDED.summary, active_topic=EXCLUDED.active_topic, open_loops=EXCLUDED.open_loops, updated_at=now()`,
@@ -505,7 +660,9 @@ export class PostgresDealStore extends DealStore {
           ],
         );
       }
-      for (const turns of this.conversationTurns.values()) {
+      for (const [conversationId, turns] of this.conversationTurns.entries()) {
+        if (!changed(snapshot, 'conversationTurns', conversationId, turns))
+          continue;
         for (const turn of turns) {
           const conversation = this.conversations.get(turn.conversationId);
           if (!conversation) continue;
@@ -525,6 +682,7 @@ export class PostgresDealStore extends DealStore {
         }
       }
       for (const item of this.feedback.values()) {
+        if (!changed(snapshot, 'feedback', item.id, item)) continue;
         const human = this.humans.get(item.humanId)!;
         await client.query(
           `INSERT INTO context_feedback(id, organization_id, human_id, agent_id, context_packet_id, rating, correction, what_worked, what_to_change, created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(id) DO UPDATE SET rating=EXCLUDED.rating, correction=EXCLUDED.correction, what_worked=EXCLUDED.what_worked, what_to_change=EXCLUDED.what_to_change`,
@@ -542,7 +700,9 @@ export class PostgresDealStore extends DealStore {
           ],
         );
       }
-      for (const audit of this.audits) {
+      for (const audit of snapshot
+        ? this.audits.slice(snapshot.auditLength)
+        : this.audits) {
         await client.query(
           `INSERT INTO audit_events(id, organization_id, human_id, agent_id, event_type, payload) VALUES($1,$2,$3,$4,$5,$6::jsonb) ON CONFLICT(id) DO NOTHING`,
           [
@@ -552,6 +712,31 @@ export class PostgresDealStore extends DealStore {
             audit.agentId ?? null,
             audit.eventType,
             json(audit.payload),
+          ],
+        );
+      }
+      for (const identity of this.externalIdentities.values()) {
+        if (
+          !changed(
+            snapshot,
+            'externalIdentities',
+            `${identity.issuer}\n${identity.subject}`,
+            identity,
+          )
+        )
+          continue;
+        await client.query(
+          `INSERT INTO external_identities(id, organization_id, human_id, issuer, subject, email, claims)
+           VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)
+           ON CONFLICT(issuer, subject) DO UPDATE SET human_id=EXCLUDED.human_id, email=EXCLUDED.email, claims=EXCLUDED.claims, updated_at=now()`,
+          [
+            identity.id,
+            identity.organizationId,
+            identity.humanId,
+            identity.issuer,
+            identity.subject,
+            identity.email ?? null,
+            json(identity.claims),
           ],
         );
       }

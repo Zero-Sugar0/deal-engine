@@ -13,6 +13,35 @@ paths:
       security: []
       responses:
         '200': { description: Healthy }
+  /readyz:
+    get:
+      security: []
+      summary: Check canonical store readiness
+      responses:
+        '200': { description: Ready }
+        '503': { description: Canonical store unavailable }
+  /metrics:
+    get:
+      security: []
+      summary: Prometheus metrics
+      responses:
+        '200': { description: Prometheus text exposition }
+        '401': { description: Metrics token required when configured }
+  /v1/auth/external/link:
+    post:
+      summary: Link a verified external identity to the authenticated human
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '200': { description: Linked external identity }
+        '401': { description: Invalid external token }
   /v1/context:
     post:
       summary: Issue a signed human context packet

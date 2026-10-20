@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildServer } from '../src/server.js';
 import { DealStore } from '../src/store.js';
+import { InMemoryRateLimiter } from '../src/rate-limit.js';
 
 const agentToken = 'test-agent-token';
 const humanToken = 'test-human-token';
@@ -11,12 +12,80 @@ const app = buildServer({
   jwtSecret: 'test-secret-that-is-long-enough',
   contextTtlMinutes: 15,
 });
+const limitedApp = buildServer({
+  store,
+  jwtSecret: 'test-secret-that-is-long-enough',
+  rateLimiter: new InMemoryRateLimiter(),
+  rateLimitPerMinute: 1,
+});
+const externalStore = new DealStore();
+await externalStore.seedDemo('external-agent', 'external-human');
+const externalApp = buildServer({
+  store: externalStore,
+  jwtSecret: 'test-secret-that-is-long-enough',
+  externalAuth: {
+    async verify(token) {
+      if (token !== 'idp-token') throw new Error('invalid token');
+      return {
+        issuer: 'https://issuer.example.test',
+        subject: 'subject-123',
+        email: 'founder@example.com',
+        claims: { sub: 'subject-123' },
+      };
+    },
+  },
+});
 
 afterAll(async () => {
   await app.close();
+  await limitedApp.close();
+  await externalApp.close();
 });
 
 describe('DEAL control plane', () => {
+  it('exposes readiness and correlated Prometheus metrics', async () => {
+    const ready = await app.inject({ method: 'GET', url: '/readyz' });
+    expect(ready.statusCode).toBe(200);
+    expect(ready.json().status).toBe('ready');
+    const metrics = await app.inject({ method: 'GET', url: '/metrics' });
+    expect(metrics.statusCode).toBe(200);
+    expect(metrics.body).toContain('deal_http_requests_total');
+    expect(metrics.headers['x-request-id']).toBeTypeOf('string');
+  });
+
+  it('enforces a shared rate-limit contract at the API boundary', async () => {
+    const first = await limitedApp.inject({
+      method: 'GET',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    const second = await limitedApp.inject({
+      method: 'GET',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(429);
+    expect(second.headers['retry-after']).toBeTypeOf('string');
+  });
+
+  it('links and then accepts an explicitly verified external human identity', async () => {
+    const link = await externalApp.inject({
+      method: 'POST',
+      url: '/v1/auth/external/link',
+      headers: { authorization: 'Bearer external-human' },
+      payload: { token: 'idp-token' },
+    });
+    expect(link.statusCode).toBe(200);
+    const profile = await externalApp.inject({
+      method: 'GET',
+      url: '/v1/profile',
+      headers: { authorization: 'Bearer idp-token' },
+    });
+    expect(profile.statusCode).toBe(200);
+    expect(profile.json().human.id).toBe('human_demo');
+  });
+
   it('issues a signed context packet and gates external commitments', async () => {
     const contextResponse = await app.inject({
       method: 'POST',

@@ -55,6 +55,10 @@ export class SupermemoryAdapter implements MemoryAdapter {
     }
   }
 
+  async list(humanId: string): Promise<MemoryRecord[]> {
+    return this.search({ humanId, limit: 100 });
+  }
+
   async search(query: MemoryQuery): Promise<MemoryHit[]> {
     const result = await this.request<{ results?: MemoryHit[] }>('/v3/search', {
       method: 'POST',

@@ -120,14 +120,27 @@ docker compose -f infra/docker/docker-compose.yml up -d postgres
 DATABASE_URL=postgres://deal:deal@localhost:5432/deal pnpm --filter @deal/api dev
 ```
 
-The API applies the migration, hydrates the control plane, and persists human
-profiles, memory provenance, context packets, conversations, feedback, workflow,
-approval, and audit state. The human model is layered and versioned rather than
-being a single persona prompt. Remaining production hardening includes durable
-semantic retrieval, background processing, observability, rate limits, quality
-evaluations, and additional behavioral profiles. External systems and tool
-credentials remain owned by the host agent and are intentionally outside this
-repository’s core scope.
+The API applies the migration and uses Postgres as the authoritative multi-instance
+store. Requests refresh a current snapshot, persist only their changed entities in
+a transaction, and serialize process-local access so concurrent instances do not
+overwrite unrelated state. The human model is layered and versioned rather than
+being a single persona prompt.
+
+Production controls now include:
+
+- `/readyz` database readiness and `/metrics` Prometheus output, with request IDs
+  and structured request logs.
+- Atomic Postgres rate limits for authenticated credentials and IP fallbacks.
+- Optional external OIDC/JWT verification through a configured JWKS endpoint;
+  verified identities must be explicitly linked by a human at
+  `POST /v1/auth/external/link`.
+- Durable Postgres memory retrieval using full-text ranking, provenance filters,
+  correction lineage, and optional embedding vectors from an OpenAI-compatible
+  endpoint. Full-text retrieval remains the deterministic fallback when no
+  embedding provider is configured.
+
+External systems and tool credentials remain owned by the host agent and are
+intentionally outside this repository’s core scope.
 
 ## Planning docs
 

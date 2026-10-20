@@ -19,7 +19,10 @@ import type { HumanModel, ProfileFact } from '@deal/core';
 import { evaluatePolicy } from '@deal/policy';
 import { jwtVerify, SignJWT } from 'jose';
 import { z } from 'zod';
-import { DealStore, hashPayload, type Credential } from './store.js';
+import { DealStore, hashPayload, hashToken, type Credential } from './store.js';
+import type { ExternalAuthProvider } from './external-auth.js';
+import { MetricsRegistry } from './observability.js';
+import { InMemoryRateLimiter, type RateLimiter } from './rate-limit.js';
 import {
   getExpertProfile,
   profileRegistry,
@@ -31,6 +34,11 @@ export interface ServerOptions {
   store?: DealStore;
   jwtSecret?: string;
   contextTtlMinutes?: number;
+  externalAuth?: ExternalAuthProvider;
+  rateLimiter?: RateLimiter;
+  metrics?: MetricsRegistry;
+  rateLimitPerMinute?: number;
+  contextRateLimitPerMinute?: number;
 }
 
 const contextBody = z.object({
@@ -68,12 +76,33 @@ function bearer(request: FastifyRequest): string {
   return value.slice('Bearer '.length);
 }
 
-function requireCredential(
+async function requireCredential(
   store: DealStore,
   request: FastifyRequest,
   kind?: Credential['kind'],
-): Credential {
-  const credential = store.authenticate(bearer(request));
+  externalAuth?: ExternalAuthProvider,
+): Promise<Credential> {
+  const token = bearer(request);
+  let credential = store.authenticate(token);
+  if (!credential && externalAuth) {
+    try {
+      const principal = await externalAuth.verify(token);
+      const identity = store.findExternalIdentity(
+        principal.issuer,
+        principal.subject,
+      );
+      if (identity) {
+        credential = {
+          id: `external:${identity.issuer}:${identity.subject}`,
+          tokenHash: '',
+          kind: 'human',
+          humanId: identity.humanId,
+        };
+      }
+    } catch {
+      // Treat provider verification failures like invalid credentials.
+    }
+  }
   if (!credential) throw error(401, 'Invalid or revoked credential');
   if (kind && credential.kind !== kind)
     throw error(403, `${kind} credential required`);
@@ -101,6 +130,15 @@ function keyFromSecret(secret: string): Uint8Array {
 
 function memoryText(content: string | Record<string, unknown>): string {
   return typeof content === 'string' ? content : JSON.stringify(content);
+}
+
+function metricRoute(request: FastifyRequest): string {
+  return (
+    request.routeOptions.url ??
+    request.url
+      .split('?')[0]!
+      .replace(/\/[0-9a-f]{8}-[0-9a-f-]{27,}|\/\d+(?=\/|$)/gi, '/:id')
+  );
 }
 
 function visibleFacts(
@@ -268,13 +306,32 @@ export function buildServer(
   const contextTtlMinutes =
     options.contextTtlMinutes ??
     Number(process.env.DEAL_CONTEXT_TTL_MINUTES ?? 15);
+  const metrics = options.metrics ?? new MetricsRegistry();
+  const rateLimiter = options.rateLimiter ?? new InMemoryRateLimiter();
+  const globalRateLimit =
+    options.rateLimitPerMinute ??
+    Number(process.env.DEAL_RATE_LIMIT_PER_MINUTE ?? 120);
+  const contextRateLimit =
+    options.contextRateLimitPerMinute ??
+    Number(process.env.DEAL_CONTEXT_RATE_LIMIT_PER_MINUTE ?? 30);
   const app = Fastify({
     logger: process.env.NODE_ENV === 'test' ? false : true,
     bodyLimit: 1_048_576,
+    genReqId: (request) => {
+      const incoming = request.headers['x-request-id'];
+      return typeof incoming === 'string' &&
+        /^[A-Za-z0-9._:-]{1,128}$/.test(incoming)
+        ? incoming
+        : crypto.randomUUID();
+    },
   }) as unknown as FastifyInstance & { dealStore: DealStore };
   app.decorate('dealStore', store);
-  app.addHook('onRequest', async () => {
+  app.addHook('onRequest', async (request, reply) => {
     await store.ready;
+    await store.beginRequest(request.id);
+    reply.header('X-Request-ID', request.id);
+    (request as FastifyRequest & { dealStartedAt?: number }).dealStartedAt =
+      Date.now();
   });
   app.addHook('onRequest', async (request, reply) => {
     const origin = process.env.DEAL_DASHBOARD_ORIGIN ?? '*';
@@ -282,21 +339,147 @@ export function buildServer(
     reply.header('X-Frame-Options', 'DENY');
     reply.header('Referrer-Policy', 'no-referrer');
     reply.header('Access-Control-Allow-Origin', origin);
-    reply.header('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    reply.header(
+      'Access-Control-Allow-Headers',
+      'Authorization, Content-Type, Idempotency-Key, X-Request-ID',
+    );
     reply.header(
       'Access-Control-Allow-Methods',
       'GET, POST, PATCH, DELETE, OPTIONS',
     );
     if (request.method === 'OPTIONS') return reply.code(204).send();
   });
-  app.addHook('onResponse', async () => {
-    await store.persist();
+  app.addHook('onRequest', async (request, reply) => {
+    if (
+      request.method === 'OPTIONS' ||
+      ['/healthz', '/readyz', '/metrics'].includes(request.url.split('?')[0])
+    )
+      return;
+    const token = request.headers.authorization?.startsWith('Bearer ')
+      ? request.headers.authorization.slice('Bearer '.length)
+      : undefined;
+    const identity = token
+      ? `credential:${hashToken(token)}`
+      : `ip:${request.ip}`;
+    const isContext = request.url.split('?')[0] === '/v1/context';
+    const result = await rateLimiter.consume(
+      `${identity}:${isContext ? 'context' : 'global'}`,
+      isContext ? contextRateLimit : globalRateLimit,
+      60,
+    );
+    reply.header('RateLimit-Limit', String(result.limit));
+    reply.header('RateLimit-Remaining', String(result.remaining));
+    reply.header('RateLimit-Reset', String(result.retryAfterSeconds));
+    if (!result.allowed) {
+      metrics.increment('deal_rate_limit_rejections_total', {
+        scope: isContext ? 'context' : 'global',
+      });
+      reply.header('Retry-After', String(result.retryAfterSeconds));
+      return reply
+        .code(429)
+        .send({ error: 'Rate limit exceeded', requestId: request.id });
+    }
+  });
+  app.addHook('onSend', async (request) => {
+    await store.endRequest(request.id);
+  });
+  app.addHook('onResponse', async (request, reply) => {
+    const startedAt =
+      (request as FastifyRequest & { dealStartedAt?: number }).dealStartedAt ??
+      Date.now();
+    const route = metricRoute(request);
+    metrics.increment('deal_http_requests_total', {
+      method: request.method,
+      route,
+      status: String(reply.statusCode),
+    });
+    metrics.observe(
+      'deal_http_request_duration_seconds',
+      (Date.now() - startedAt) / 1000,
+      { route },
+    );
+    request.log.info(
+      {
+        requestId: request.id,
+        method: request.method,
+        route,
+        statusCode: reply.statusCode,
+      },
+      'request completed',
+    );
   });
 
   app.get('/healthz', async () => ({ status: 'ok', service: 'deal-api' }));
+  app.get('/readyz', async (_request, reply) => {
+    try {
+      const health = await store.health();
+      return { status: health.ok ? 'ready' : 'not_ready', ...health };
+    } catch {
+      return reply.code(503).send({ status: 'not_ready', durable: true });
+    }
+  });
+  app.get('/metrics', async (request, reply) => {
+    const configuredToken = process.env.DEAL_METRICS_TOKEN;
+    if (configuredToken) {
+      const token = request.headers.authorization?.startsWith('Bearer ')
+        ? request.headers.authorization.slice('Bearer '.length)
+        : '';
+      if (token !== configuredToken)
+        return reply
+          .code(401)
+          .send({ error: 'Metrics authentication required' });
+    }
+    reply.type('text/plain; version=0.0.4');
+    return metrics.renderPrometheus();
+  });
+
+  app.post('/v1/auth/external/link', async (request) => {
+    if (!options.externalAuth)
+      throw error(503, 'External authentication is not configured');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      undefined,
+    );
+    const body = parse(z.object({ token: z.string().min(1) }), request.body);
+    let principal;
+    try {
+      principal = await options.externalAuth.verify(body.token);
+    } catch {
+      throw error(401, 'External identity token could not be verified');
+    }
+    const human = store.humans.get(credential.humanId);
+    if (!human) throw error(404, 'Human not found');
+    const identity = store.linkExternalIdentity({
+      organizationId: human.organizationId,
+      humanId: human.id,
+      issuer: principal.issuer,
+      subject: principal.subject,
+      email: principal.email,
+      claims: principal.claims,
+    });
+    store.recordAudit({
+      humanId: human.id,
+      organizationId: human.organizationId,
+      eventType: 'external_identity.linked',
+      payload: { issuer: identity.issuer, subject: identity.subject },
+    });
+    return {
+      id: identity.id,
+      issuer: identity.issuer,
+      subject: identity.subject,
+      email: identity.email,
+    };
+  });
 
   app.post('/v1/agents', async (request) => {
-    const credential = requireCredential(store, request, 'human');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
     const body = parse(
       z.object({
         name: z.string().min(1),
@@ -331,7 +514,12 @@ export function buildServer(
   });
 
   app.post('/v1/agents/:agentId/credentials/rotate', async (request) => {
-    const credential = requireCredential(store, request, 'human');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
     const params = request.params as { agentId: string };
     const body = parse(
       z.object({ credentialExpiresAt: z.string().datetime().optional() }),
@@ -362,7 +550,12 @@ export function buildServer(
   });
 
   app.post('/v1/credentials/:credentialId/revoke', async (request) => {
-    const credential = requireCredential(store, request, 'human');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
     const params = request.params as { credentialId: string };
     const target = store.credentials.get(params.credentialId);
     if (!target || target.humanId !== credential.humanId)
@@ -380,7 +573,12 @@ export function buildServer(
   });
 
   app.post('/v1/delegations', async (request) => {
-    const credential = requireCredential(store, request, 'human');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
     const body = parse(
       z.object({
         agentId: z.string(),
@@ -436,7 +634,12 @@ export function buildServer(
   app.get('/v1/profile', async (request) => {
     // Raw profile inspection is human-owned. Agents receive the scoped,
     // audience-aware and signed model through /v1/context instead.
-    const credential = requireCredential(store, request, 'human');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
     const human = store.humans.get(credential.humanId);
     if (!human) throw error(404, 'Human not found');
     return {
@@ -448,12 +651,17 @@ export function buildServer(
   });
 
   app.get('/v1/profiles', async (request) => {
-    requireCredential(store, request);
+    await requireCredential(store, request, undefined, options.externalAuth);
     return profileRegistry;
   });
 
   app.patch('/v1/profile', async (request) => {
-    const credential = requireCredential(store, request, 'human');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
     const body = parse(
       z.object({
         displayName: z.string().min(1).optional(),
@@ -542,7 +750,12 @@ export function buildServer(
   });
 
   app.post('/v1/onboarding', async (request) => {
-    const credential = requireCredential(store, request, 'human');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
     const body = parse(
       z.object({
         displayName: z.string().min(1).optional(),
@@ -718,7 +931,12 @@ export function buildServer(
   });
 
   app.post('/v1/conversations', async (request) => {
-    const credential = requireCredential(store, request, 'agent');
+    const credential = await requireCredential(
+      store,
+      request,
+      'agent',
+      options.externalAuth,
+    );
     const body = parse(
       z.object({
         title: z.string().optional(),
@@ -761,14 +979,24 @@ export function buildServer(
   });
 
   app.get('/v1/conversations', async (request) => {
-    const credential = requireCredential(store, request);
+    const credential = await requireCredential(
+      store,
+      request,
+      undefined,
+      options.externalAuth,
+    );
     return [...store.conversations.values()]
       .filter((conversation) => conversation.humanId === credential.humanId)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   });
 
   app.get('/v1/conversations/:conversationId/turns', async (request) => {
-    const credential = requireCredential(store, request);
+    const credential = await requireCredential(
+      store,
+      request,
+      undefined,
+      options.externalAuth,
+    );
     const params = request.params as { conversationId: string };
     const conversation = store.conversations.get(params.conversationId);
     if (!conversation || conversation.humanId !== credential.humanId)
@@ -782,7 +1010,12 @@ export function buildServer(
   });
 
   app.post('/v1/conversations/:conversationId/turns', async (request) => {
-    const credential = requireCredential(store, request);
+    const credential = await requireCredential(
+      store,
+      request,
+      undefined,
+      options.externalAuth,
+    );
     const params = request.params as { conversationId: string };
     const body = parse(
       z.object({
@@ -824,7 +1057,12 @@ export function buildServer(
   });
 
   app.post('/v1/context/feedback', async (request) => {
-    const credential = requireCredential(store, request);
+    const credential = await requireCredential(
+      store,
+      request,
+      undefined,
+      options.externalAuth,
+    );
     const body = parse(
       z.object({
         contextPacketId: z.string(),
@@ -883,7 +1121,12 @@ export function buildServer(
   });
 
   app.get('/v1/context/feedback', async (request) => {
-    const credential = requireCredential(store, request);
+    const credential = await requireCredential(
+      store,
+      request,
+      undefined,
+      options.externalAuth,
+    );
     return [...store.feedback.values()]
       .filter(
         (item) =>
@@ -894,7 +1137,12 @@ export function buildServer(
   });
 
   app.post('/v1/workflows', async (request) => {
-    const credential = requireCredential(store, request, 'agent');
+    const credential = await requireCredential(
+      store,
+      request,
+      'agent',
+      options.externalAuth,
+    );
     const body = parse(
       z.object({
         profileId: z.string().default('growth_operator_v1'),
@@ -961,14 +1209,24 @@ export function buildServer(
   });
 
   app.get('/v1/workflows', async (request) => {
-    const credential = requireCredential(store, request);
+    const credential = await requireCredential(
+      store,
+      request,
+      undefined,
+      options.externalAuth,
+    );
     return [...store.workflows.values()]
       .filter((workflow) => workflow.humanId === credential.humanId)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   });
 
   app.get('/v1/workflows/:workflowId', async (request) => {
-    const credential = requireCredential(store, request);
+    const credential = await requireCredential(
+      store,
+      request,
+      undefined,
+      options.externalAuth,
+    );
     const params = request.params as { workflowId: string };
     const workflow = store.workflows.get(params.workflowId);
     if (!workflow || workflow.humanId !== credential.humanId)
@@ -979,7 +1237,12 @@ export function buildServer(
   });
 
   app.post('/v1/workflows/:workflowId/transition', async (request) => {
-    const credential = requireCredential(store, request);
+    const credential = await requireCredential(
+      store,
+      request,
+      undefined,
+      options.externalAuth,
+    );
     const params = request.params as { workflowId: string };
     const body = parse(
       z.object({ step: z.string(), data: z.record(z.unknown()).default({}) }),
@@ -1012,14 +1275,24 @@ export function buildServer(
   });
 
   app.get('/v1/approvals', async (request) => {
-    const credential = requireCredential(store, request, 'human');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
     return [...store.approvals.values()]
       .filter((approval) => approval.humanId === credential.humanId)
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   });
 
   app.post('/v1/delegations/:delegationId/revoke', async (request) => {
-    const credential = requireCredential(store, request, 'human');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
     const params = request.params as { delegationId: string };
     const delegation = store.delegations.get(params.delegationId);
     if (!delegation || delegation.humanId !== credential.humanId)
@@ -1037,7 +1310,12 @@ export function buildServer(
   });
 
   app.post('/v1/context', async (request) => {
-    const credential = requireCredential(store, request, 'agent');
+    const credential = await requireCredential(
+      store,
+      request,
+      'agent',
+      options.externalAuth,
+    );
     const body = parse(contextBody, request.body);
     const agent = credential.agentId
       ? store.agents.get(credential.agentId)
@@ -1315,7 +1593,12 @@ export function buildServer(
   });
 
   app.get('/v1/context/:packetId', async (request) => {
-    const credential = requireCredential(store, request);
+    const credential = await requireCredential(
+      store,
+      request,
+      undefined,
+      options.externalAuth,
+    );
     const params = request.params as { packetId: string };
     const context = store.contexts.get(params.packetId);
     if (!context || context.humanId !== credential.humanId)
@@ -1339,7 +1622,12 @@ export function buildServer(
   });
 
   app.post('/v1/policy/evaluate', async (request) => {
-    const credential = requireCredential(store, request, 'agent');
+    const credential = await requireCredential(
+      store,
+      request,
+      'agent',
+      options.externalAuth,
+    );
     const body = parse(policyBody, request.body);
     const context = store.contexts.get(body.contextPacketId);
     if (
@@ -1376,7 +1664,12 @@ export function buildServer(
   });
 
   app.post('/v1/approvals', async (request) => {
-    const credential = requireCredential(store, request, 'agent');
+    const credential = await requireCredential(
+      store,
+      request,
+      'agent',
+      options.externalAuth,
+    );
     const body = parse(
       z.object({
         contextPacketId: z.string(),
@@ -1459,7 +1752,12 @@ export function buildServer(
   });
 
   app.post('/v1/approvals/:approvalId/decision', async (request) => {
-    const credential = requireCredential(store, request, 'human');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
     const params = request.params as { approvalId: string };
     const body = parse(
       z.object({ decision: z.enum(['approved', 'denied']) }),
@@ -1490,7 +1788,12 @@ export function buildServer(
   });
 
   app.post('/v1/approvals/:approvalId/consume', async (request) => {
-    const credential = requireCredential(store, request, 'agent');
+    const credential = await requireCredential(
+      store,
+      request,
+      'agent',
+      options.externalAuth,
+    );
     const params = request.params as { approvalId: string };
     const body = parse(z.object({ payload: z.unknown() }), request.body);
     const approval = store.approvals.get(params.approvalId);
@@ -1542,7 +1845,12 @@ export function buildServer(
   });
 
   app.post('/v1/actions/verify', async (request) => {
-    const credential = requireCredential(store, request, 'agent');
+    const credential = await requireCredential(
+      store,
+      request,
+      'agent',
+      options.externalAuth,
+    );
     const body = parse(
       z.object({
         executionToken: z.string().min(1),
@@ -1589,7 +1897,12 @@ export function buildServer(
   });
 
   app.post('/v1/memory', async (request) => {
-    const credential = requireCredential(store, request, 'agent');
+    const credential = await requireCredential(
+      store,
+      request,
+      'agent',
+      options.externalAuth,
+    );
     const body = parse(
       z.object({
         kind: z.enum([
@@ -1650,7 +1963,12 @@ export function buildServer(
   });
 
   app.get('/v1/memory', async (request) => {
-    const credential = requireCredential(store, request, 'human');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
     const query = request.query as {
       q?: string;
       kinds?: string;
@@ -1667,7 +1985,12 @@ export function buildServer(
   });
 
   app.post('/v1/memory/outcomes', async (request) => {
-    const credential = requireCredential(store, request, 'agent');
+    const credential = await requireCredential(
+      store,
+      request,
+      'agent',
+      options.externalAuth,
+    );
     const body = parse(
       z.object({ contextPacketId: z.string(), outcome: z.record(z.unknown()) }),
       request.body,
@@ -1708,7 +2031,12 @@ export function buildServer(
   });
 
   app.post('/v1/memory/:memoryId/correct', async (request) => {
-    const credential = requireCredential(store, request, 'human');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
     const params = request.params as { memoryId: string };
     const body = parse(
       z.object({ replacement: z.union([z.string(), z.record(z.unknown())]) }),
@@ -1741,7 +2069,12 @@ export function buildServer(
   });
 
   app.delete('/v1/memory/:memoryId', async (request) => {
-    const credential = requireCredential(store, request, 'human');
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
     const params = request.params as { memoryId: string };
     const existing = await store.memories.get(params.memoryId);
     if (
@@ -1755,7 +2088,10 @@ export function buildServer(
     let expanded = true;
     while (expanded) {
       expanded = false;
-      for (const memory of store.memories.all) {
+      for (const memory of await store.memories.list(
+        credential.humanId,
+        store.humans.get(credential.humanId)?.organizationId,
+      )) {
         if (memory.supersededBy && lineage.has(memory.supersededBy)) {
           if (!lineage.has(memory.id)) {
             lineage.add(memory.id);
@@ -1779,7 +2115,12 @@ export function buildServer(
   });
 
   app.get('/v1/audit', async (request) => {
-    const credential = requireCredential(store, request);
+    const credential = await requireCredential(
+      store,
+      request,
+      undefined,
+      options.externalAuth,
+    );
     return store.audits.filter((event) => event.humanId === credential.humanId);
   });
 
@@ -1787,8 +2128,12 @@ export function buildServer(
     const caught = cause as Error & { statusCode?: number };
     request.log.error({ err: cause }, 'request failed');
     const statusCode = caught.statusCode ?? 500;
+    metrics.increment('deal_http_errors_total', { status: String(statusCode) });
+    if (statusCode === 401) metrics.increment('deal_auth_failures_total');
+    reply.header('X-Request-ID', request.id);
     reply.status(statusCode).send({
       error: statusCode >= 500 ? 'Internal server error' : caught.message,
+      requestId: request.id,
     });
   });
   return app;

@@ -95,6 +95,9 @@ importers:
       '@deal/core':
         specifier: workspace:*
         version: link:../core
+      pg:
+        specifier: ^8.13.1
+        version: 8.23.1
 
   packages/policy:
     dependencies:

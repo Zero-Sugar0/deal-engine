@@ -6,6 +6,7 @@ export interface MemoryQuery {
   query?: string;
   kinds?: MemoryRecord['kind'][];
   limit?: number;
+  embedding?: number[];
 }
 
 export interface MemoryHit extends MemoryRecord {
@@ -15,6 +16,7 @@ export interface MemoryHit extends MemoryRecord {
 export interface MemoryAdapter {
   add(input: Omit<MemoryRecord, 'id' | 'createdAt'>): Promise<{ id: string }>;
   get(memoryId: string): Promise<MemoryRecord | undefined>;
+  list(humanId: string, organizationId?: string): Promise<MemoryRecord[]>;
   search(query: MemoryQuery): Promise<MemoryHit[]>;
   forget(memoryId: string): Promise<void>;
   correct(
@@ -63,6 +65,17 @@ export class InMemoryAdapter implements MemoryAdapter {
 
   async get(memoryId: string): Promise<MemoryRecord | undefined> {
     return this.records.get(memoryId);
+  }
+
+  async list(
+    humanId: string,
+    organizationId?: string,
+  ): Promise<MemoryRecord[]> {
+    return [...this.records.values()].filter(
+      (record) =>
+        record.humanId === humanId &&
+        (!organizationId || record.organizationId === organizationId),
+    );
   }
 
   async add(

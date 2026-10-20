@@ -85,6 +85,8 @@ CREATE TABLE IF NOT EXISTS memory_records (
   human_id uuid NOT NULL REFERENCES humans(id),
   kind text NOT NULL,
   content jsonb NOT NULL,
+  content_text text NOT NULL DEFAULT '',
+  embedding jsonb,
   confidence numeric CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1)),
   source text,
   confirmation text CHECK (confirmation IS NULL OR confirmation IN ('user_confirmed', 'agent_observed', 'inferred')),
@@ -101,6 +103,9 @@ CREATE TABLE IF NOT EXISTS memory_records (
 ALTER TABLE memory_records ADD COLUMN IF NOT EXISTS confirmation text;
 ALTER TABLE memory_records ADD COLUMN IF NOT EXISTS priority integer NOT NULL DEFAULT 50;
 ALTER TABLE memory_records ADD COLUMN IF NOT EXISTS sensitivity text NOT NULL DEFAULT 'normal';
+ALTER TABLE memory_records ADD COLUMN IF NOT EXISTS content_text text NOT NULL DEFAULT '';
+ALTER TABLE memory_records ADD COLUMN IF NOT EXISTS embedding jsonb;
+UPDATE memory_records SET content_text = COALESCE(content->>'text', content::text) WHERE content_text = '';
 UPDATE memory_records SET confirmation = 'user_confirmed' WHERE confirmation IS NULL AND source = 'user_confirmed';
 UPDATE memory_records SET priority = 100 WHERE kind = 'correction' AND priority = 50 AND confirmation = 'user_confirmed';
 
@@ -200,8 +205,31 @@ CREATE TABLE IF NOT EXISTS context_feedback (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS external_identities (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  human_id uuid NOT NULL REFERENCES humans(id) ON DELETE CASCADE,
+  issuer text NOT NULL,
+  subject text NOT NULL,
+  email text,
+  claims jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (issuer, subject)
+);
+
+CREATE TABLE IF NOT EXISTS rate_limit_windows (
+  key text PRIMARY KEY,
+  window_started_at timestamptz NOT NULL,
+  request_count integer NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS memory_records_human_kind_idx ON memory_records (human_id, kind, created_at DESC);
 CREATE INDEX IF NOT EXISTS memory_records_human_priority_idx ON memory_records (human_id, priority DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS memory_records_content_search_idx ON memory_records USING GIN (to_tsvector('simple', content_text));
+CREATE INDEX IF NOT EXISTS external_identities_human_idx ON external_identities (human_id);
+CREATE INDEX IF NOT EXISTS rate_limit_windows_updated_idx ON rate_limit_windows (updated_at);
 CREATE INDEX IF NOT EXISTS context_packets_agent_expiry_idx ON context_packets (agent_id, expires_at DESC);
 CREATE INDEX IF NOT EXISTS approvals_human_status_idx ON approvals (human_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS audit_events_human_time_idx ON audit_events (human_id, occurred_at DESC);
@@ -223,6 +251,7 @@ ALTER TABLE workflow_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversation_turns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE context_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE external_identities ENABLE ROW LEVEL SECURITY;
 
 CREATE OR REPLACE FUNCTION deal_current_organization() RETURNS uuid AS $$
   SELECT NULLIF(current_setting('app.organization_id', true), '')::uuid;
@@ -241,6 +270,7 @@ DROP POLICY IF EXISTS workflow_isolation ON workflow_runs;
 DROP POLICY IF EXISTS conversation_isolation ON conversations;
 DROP POLICY IF EXISTS conversation_turn_isolation ON conversation_turns;
 DROP POLICY IF EXISTS context_feedback_isolation ON context_feedback;
+DROP POLICY IF EXISTS external_identity_isolation ON external_identities;
 
 CREATE POLICY organization_isolation ON organizations USING (id = deal_current_organization());
 CREATE POLICY human_isolation ON humans USING (organization_id = deal_current_organization());
@@ -255,3 +285,4 @@ CREATE POLICY workflow_isolation ON workflow_runs USING (organization_id = deal_
 CREATE POLICY conversation_isolation ON conversations USING (organization_id = deal_current_organization());
 CREATE POLICY conversation_turn_isolation ON conversation_turns USING (organization_id = deal_current_organization());
 CREATE POLICY context_feedback_isolation ON context_feedback USING (organization_id = deal_current_organization());
+CREATE POLICY external_identity_isolation ON external_identities USING (organization_id = deal_current_organization());
