@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
+import './refinements.css';
 
 type Route = '/' | '/sign-in' | '/sign-up' | '/app';
 
@@ -221,18 +222,20 @@ function Logo({ light = false }: { light?: boolean }) {
       className={`logo ${light ? 'logo-light' : ''}`}
       onClick={() => navigate('/')}
     >
-      <span className="logo-mark" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-      </span>
+      <img
+        className="brand-symbol"
+        src="/deal-mark.svg"
+        alt=""
+        width="25"
+        height="25"
+      />
       <span>deal</span>
     </button>
   );
 }
 
 function Arrow() {
-  return <span aria-hidden="true">↗</span>;
+  return <span aria-hidden="true">↗︎</span>;
 }
 
 function Button({
@@ -353,12 +356,7 @@ function HomePage() {
               ))}
             </div>
           </div>
-          <div className="hero-landscape" aria-hidden="true">
-            <div className="sun-glow" />
-            <div className="mountain mountain-back" />
-            <div className="mountain mountain-mid" />
-            <div className="mountain mountain-front" />
-          </div>
+          <div className="hero-landscape" aria-hidden="true" />
         </section>
       </Atmosphere>
       <section className="workflow-section" id="how-it-works">
@@ -402,7 +400,7 @@ function HomePage() {
         <div className="feature-grid">
           {features.map(([tone, tag, title, body, variant]) => (
             <article className="feature-card" key={title}>
-              <div className={`mockup-panel ${tone}`}>
+              <div className={`mockup-panel ${tone} preview-${variant}`}>
                 <Notch variant={variant} />
                 <div className="mockup-window">
                   <div className="window-bar">
@@ -411,11 +409,38 @@ function HomePage() {
                     <span />
                     <small>{tag}</small>
                   </div>
-                  <div className="window-lines">
-                    <b />
-                    <b />
-                    <b />
-                    <i />
+                  <div className="preview-content">
+                    <span className="preview-eyebrow">
+                      {variant === 'boundary'
+                        ? 'human checkpoint'
+                        : variant === 'memory'
+                          ? 'verified evidence'
+                          : 'human context'}
+                    </span>
+                    <strong>{title}</strong>
+                    <p>
+                      {variant === 'voice'
+                        ? '“Lead with the point. Keep the warmth.”'
+                        : variant === 'correction'
+                          ? 'Explicit correction → confirmed preference'
+                          : variant === 'profession'
+                            ? 'Financial analyst · evidence required'
+                            : variant === 'boundary'
+                              ? 'Ask before making an external commitment.'
+                              : variant === 'privacy'
+                                ? 'Sensitive details redacted · packet signed'
+                                : 'Your priorities. Your voice. In every turn.'}
+                    </p>
+                    <div className="preview-chips">
+                      <span>
+                        {variant === 'memory'
+                          ? 'user confirmed'
+                          : 'context ready'}
+                      </span>
+                      <span>
+                        {variant === 'authority' ? 'read + draft' : 'scoped'}
+                      </span>
+                    </div>
                   </div>
                   <div className="window-footer">
                     <span className="mini-check">✓</span>
@@ -567,8 +592,9 @@ function HomePage() {
           changes.
         </p>
         <blockquote>
-          “It is the first time my agents feel like they are working from the
-          same understanding of me.”
+          One understanding of you.
+          <br />
+          Every agent you work with.
         </blockquote>
         <div className="resource-grid">
           <a href="#features">

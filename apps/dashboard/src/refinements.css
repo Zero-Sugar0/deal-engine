@@ -1,0 +1,476 @@
+/* Compact controls and an atmospheric, image-led visual rhythm. */
+:root {
+  scrollbar-width: thin;
+  scrollbar-color: #b4aac8 #f5f2f8;
+}
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #f5f2f8;
+}
+::-webkit-scrollbar-thumb {
+  background: #b4aac8;
+  border-radius: 9px;
+}
+.brand-symbol {
+  display: block;
+  border-radius: 7px;
+}
+.logo {
+  gap: 7px;
+  font-size: 22px;
+}
+.button {
+  min-height: 34px;
+  padding: 0 12px;
+  gap: 7px;
+  font-size: 11px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+.button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 9px #21182b12;
+}
+.container {
+  width: min(1100px, calc(100% - 64px));
+}
+.site > .atmosphere:first-child {
+  background: #9991c3 url('/images/deal-landscape.webp') center center / cover
+    no-repeat;
+}
+.site > .atmosphere:first-child::before,
+.site > .atmosphere:first-child::after {
+  display: none;
+}
+.nav {
+  padding-top: 24px;
+}
+.nav .logo {
+  color: #fffaf7;
+}
+.nav > .button {
+  min-height: 34px;
+  padding: 0 12px;
+  color: #fff;
+  background: #44394e;
+  border-color: #ffffff12;
+}
+.demo-notch {
+  top: 0;
+  min-width: 340px;
+  justify-content: space-between;
+  padding: 9px 13px;
+  border-radius: 0 0 19px 19px;
+}
+.demo-notch button {
+  color: #e8e3ff;
+  background: transparent;
+}
+.hero {
+  padding-top: 110px;
+  min-height: 675px;
+}
+.hero .eyebrow {
+  color: #faf7ffcf;
+  font-weight: 500;
+}
+.hero h1 {
+  margin-top: 32px;
+  font-size: clamp(70px, 8.6vw, 108px);
+  font-weight: 400;
+  letter-spacing: -0.065em;
+  color: #fffaf6;
+  line-height: 0.86;
+}
+.hero h1 em {
+  font-size: 1.18em;
+  margin-top: 12px;
+}
+.hero-lede {
+  color: #30293e;
+  max-width: 440px;
+  margin-top: 32px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.hero-actions {
+  margin-top: 24px;
+  gap: 8px;
+}
+.hero .button {
+  background: #44394e;
+  border-color: #44394e;
+}
+.hero .button-secondary {
+  background: #faf6ee;
+  color: #393042;
+  border-color: #faf6ee;
+}
+.hero-compatibility {
+  margin-top: 35px;
+  padding-bottom: 38px;
+  color: #40364e;
+}
+.hero-compatibility .pill-row {
+  width: fit-content;
+  max-width: 100%;
+  margin: 11px auto 0;
+  padding: 7px;
+  gap: 5px;
+  background: #ffffff24;
+  border: 1px solid #ffffff70;
+  border-radius: 15px;
+  backdrop-filter: blur(9px);
+}
+.hero-compatibility .integration-pill {
+  background: #f6f2ffcc;
+  border: 0;
+  border-radius: 9px;
+  padding: 10px 11px;
+  font-size: 10px;
+  color: #514465;
+}
+.hero-landscape {
+  display: none;
+}
+.site > .atmosphere:first-child {
+  background-image:
+    linear-gradient(180deg, #6b61975c, #8e76a91c 70%, #e8e3ff26),
+    url('/images/deal-landscape.webp');
+}
+.hero h1 {
+  text-shadow: 0 2px 22px #4b355127;
+}
+.workflow-section {
+  padding: 100px 0 105px;
+  background: #ece7fd;
+}
+.section-center h2,
+.section-heading h2,
+.faq-section h2 {
+  font-size: clamp(34px, 4vw, 49px);
+  letter-spacing: -0.05em;
+  line-height: 1.02;
+}
+.section-lede {
+  margin-top: 19px;
+  max-width: 460px;
+  font-size: 13px;
+}
+.session-grid {
+  margin-top: 55px;
+}
+.session-card {
+  min-height: 135px;
+}
+.session-card h3 {
+  margin-top: 20px;
+}
+.features-section {
+  padding: 95px 0 60px;
+}
+.section-heading {
+  margin-bottom: 36px;
+}
+.feature-grid {
+  gap: 36px 20px;
+}
+.feature-card h3 {
+  font-size: 16px;
+  line-height: 1.2;
+  margin-top: 8px;
+  letter-spacing: -0.03em;
+}
+.feature-card > p {
+  font-size: 12px;
+  line-height: 1.65;
+  max-width: 310px;
+}
+.feature-tag {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  margin-top: 15px;
+}
+.mockup-panel {
+  height: 208px;
+  border-radius: 12px;
+}
+.mockup-window {
+  left: 8%;
+  right: 8%;
+  bottom: 22px;
+  height: 142px;
+  border: 1px solid #ffffff12;
+  border-radius: 10px;
+  padding: 13px;
+  box-shadow: 0 14px 25px #30213935;
+}
+.mockup-panel .notch {
+  top: 14px;
+  transform: translateX(-50%) scale(0.72);
+}
+.preview-content {
+  margin-top: 14px;
+}
+.preview-eyebrow {
+  color: #9e96ad;
+  font-size: 7px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.preview-content strong {
+  display: block;
+  margin-top: 6px;
+  color: #eee9f5;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.preview-content p {
+  font-size: 8px;
+  color: #a9a1b8;
+  margin-top: 5px;
+  line-height: 1.4;
+}
+.preview-chips {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+}
+.preview-chips span {
+  padding: 3px 6px;
+  font-size: 7px;
+  background: #393045;
+  border-radius: 4px;
+  color: #d2c4ed;
+}
+.window-footer {
+  display: none;
+}
+.preview-boundary .preview-chips span:first-child {
+  background: #e8c48a;
+  color: #332615;
+}
+.preview-memory .preview-chips span:first-child,
+.preview-correction .preview-chips span:first-child {
+  background: #b5d7c3;
+  color: #244833;
+}
+.preview-continuity .mockup-window,
+.preview-outcomes .mockup-window {
+  transform: rotate(-3deg);
+  bottom: 20px;
+}
+.preview-profession .mockup-window {
+  transform: rotate(3deg);
+}
+.preview-authority .mockup-window,
+.preview-privacy .mockup-window {
+  left: 13%;
+  right: 13%;
+}
+.preview-voice .preview-content p {
+  color: #dfd1ef;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 16px;
+}
+.benefits-section {
+  padding-bottom: 90px;
+}
+.benefit {
+  min-height: 105px;
+}
+.integrations-section {
+  padding: 100px 0;
+  background: #ece7fd;
+}
+.integration-cards {
+  margin-top: 42px;
+  gap: 12px;
+}
+.integration-card {
+  padding: 24px;
+  border-radius: 12px;
+}
+.integration-card h3 {
+  font-size: 28px;
+}
+.pricing-section {
+  padding: 95px 0;
+}
+.pricing-heading {
+  margin-bottom: 40px;
+}
+.pricing-card {
+  max-width: 760px;
+}
+.pricing-offer,
+.pricing-benefits {
+  padding: 30px;
+}
+.pricing-offer h3 {
+  margin-top: 25px;
+  font-size: 29px;
+}
+.price {
+  margin: 18px 0;
+}
+.price strong {
+  font-size: 44px;
+}
+.pricing-section blockquote {
+  font-size: 32px;
+  font-style: italic;
+  margin: 50px auto;
+}
+.faq-section {
+  padding: 95px 0;
+  background: #ece7fd;
+}
+.faq-section h2 {
+  margin-bottom: 43px;
+}
+.faq-list {
+  max-width: none;
+}
+.faq-row button {
+  padding: 18px 0;
+  font-size: 12px;
+  font-weight: 500;
+}
+.faq-row button b {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  font-size: 15px;
+}
+.closing-cta {
+  padding: 100px 0 110px;
+}
+.closing-cta h2 {
+  font-size: clamp(43px, 6vw, 70px);
+}
+.atmosphere-dark {
+  background: #b6a5c8 url('/images/deal-landscape.webp') center 38% / cover;
+}
+.atmosphere-dark::before {
+  inset: 0;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: #3f314a59;
+  filter: none;
+  transform: none;
+}
+.atmosphere-dark::after {
+  display: none;
+}
+.closing-cta .section-lede {
+  color: #fff9f2;
+}
+.auth-visual {
+  background: #a298c4 url('/images/deal-landscape.webp') center / cover;
+}
+.auth-visual::after {
+  inset: 0;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: #3930472b;
+  filter: none;
+}
+.auth-content h1 {
+  font-size: clamp(40px, 4.3vw, 63px);
+}
+.auth-content .logo {
+  top: -90px;
+}
+.auth-form h2 {
+  font-size: 38px;
+}
+.auth-form input {
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.dashboard-hero {
+  padding: 30px;
+}
+.dashboard-hero h2 {
+  font-size: 51px;
+}
+.dashboard-panel {
+  padding: 22px;
+}
+.stat-card {
+  padding: 17px;
+}
+.sidebar nav button,
+.sidebar-bottom button {
+  padding: 9px;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #75628e;
+  outline-offset: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+@media (max-width: 680px) {
+  .container {
+    width: calc(100% - 32px);
+  }
+  .hero {
+    min-height: 640px;
+    padding-top: 100px;
+  }
+  .hero h1 {
+    font-size: clamp(63px, 17vw, 94px);
+  }
+  .hero-lede {
+    max-width: 310px;
+    font-size: 13px;
+  }
+  .hero-compatibility {
+    margin-top: 32px;
+  }
+  .hero-compatibility .pill-row {
+    max-width: 320px;
+  }
+  .hero-compatibility .integration-pill {
+    padding: 7px 8px;
+    font-size: 9px;
+  }
+  .workflow-section,
+  .features-section,
+  .integrations-section,
+  .pricing-section,
+  .faq-section {
+    padding-top: 65px;
+    padding-bottom: 65px;
+  }
+  .feature-grid {
+    gap: 32px;
+  }
+  .mockup-panel {
+    height: 220px;
+  }
+  .closing-cta {
+    padding-top: 75px;
+    padding-bottom: 85px;
+  }
+  .dashboard-hero h2 {
+    font-size: 43px;
+  }
+}
