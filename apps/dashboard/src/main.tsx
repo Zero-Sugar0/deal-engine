@@ -28,6 +28,21 @@ type DashboardAgent = {
 
 type CreatedAgent = Omit<DashboardAgent, 'credentials'>;
 
+function agentTypeLabel(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  const labels: Record<string, string> = {
+    'vercel-ai-sdk': 'Vercel AI',
+    'vercel-ai': 'Vercel AI',
+    openai: 'OpenAI',
+    'openai-agents': 'OpenAI agents',
+    claude: 'Claude',
+    'claude-agent-sdk': 'Claude',
+    langchain: 'LangChain',
+    openrouter: 'OpenRouter',
+  };
+  return labels[normalized] ?? value;
+}
+
 type DashboardProfile = {
   human: {
     displayName: string;
@@ -99,7 +114,7 @@ const sessions = [
     status: 'Learning',
     color: 'amber',
     title: 'Review the new context',
-    body: 'A new preference was detected. You decide whether it becomes part of the human model.',
+    body: 'We noticed something new about how you like things done. You decide whether it belongs in your model.',
   },
   {
     status: 'Protected',
@@ -134,8 +149,8 @@ const features = [
   [
     'blue',
     'memory',
-    'Memory with provenance',
-    'Every remembered detail carries confidence, source, correction history, and a clear place in your model.',
+    'Memory you can trust',
+    'Every remembered detail shows where it came from, how certain it is, and what you changed.',
     'memory',
   ],
   [
@@ -149,7 +164,7 @@ const features = [
     'blush',
     'continuity',
     'The thread stays intact',
-    'Carry open loops, active priorities, and relationship context between tools and providers.',
+    'Carry open loops, active priorities, and relationship context between agents and AI tools.',
     'continuity',
   ],
   [
@@ -168,15 +183,15 @@ const features = [
   ],
   [
     'lilac',
-    'authority',
-    'Scoped by design',
-    'Each connected agent receives only the authority, context, and sensitivity it has earned.',
-    'authority',
+    'limits',
+    'Only what matters',
+    'Each agent gets only the information and freedom it needs.',
+    'limits',
   ],
   [
     'blue',
     'outcomes',
-    'Memory that learns from outcomes',
+    'Learns from what happens',
     'Close the loop after a decision so future context reflects what actually worked.',
     'outcomes',
   ],
@@ -191,7 +206,7 @@ const features = [
     'blush',
     'privacy',
     'Grounded, not exposed',
-    'Sensitive context is scoped, redacted, signed, and kept under the human’s control.',
+    'Private details stay protected and remain under your control.',
     'privacy',
   ],
 ];
@@ -202,11 +217,15 @@ const benefits = [
     'One human model',
     'Keep identity and judgment consistent across every agent.',
   ],
-  ['02', 'Provider neutral', 'Use the models and runtimes you already trust.'],
+  [
+    '02',
+    'Works with what you use',
+    'Keep the AI tools and agents you already trust.',
+  ],
   [
     '03',
     'Evidence over guesses',
-    'Separate confirmed facts from inference and memory.',
+    'Keep facts separate from guesses and old memories.',
   ],
   [
     '04',
@@ -220,10 +239,14 @@ const benefits = [
   ],
   [
     '06',
-    'Portable by design',
-    'Your context belongs to you, not to a single provider.',
+    'Yours wherever you go',
+    'Your way of thinking belongs to you, not to one AI company.',
   ],
-  ['07', 'Signed context', 'Every packet is scoped, expiring, and verifiable.'],
+  [
+    '07',
+    'Private by design',
+    'Only the right details arrive, for only as long as they matter.',
+  ],
   [
     '08',
     'Quietly present',
@@ -239,19 +262,19 @@ const benefits = [
 const faqs = [
   [
     'What is deal?',
-    'deal is the human context layer for AI agents. It gives an agent a grounded understanding of who it represents, how that person thinks, what matters to them, and where the boundaries are.',
+    'deal gives AI agents a grounded understanding of who they are helping, how that person thinks, what matters to them, and where the boundaries are.',
   ],
   [
     'Does deal replace my model or agent framework?',
-    'No. Your existing agent keeps its model, tools, execution loop, and provider credentials. deal gives that agent the human context to use them well.',
+    'No. Your existing agent keeps its AI, tools, and way of working. deal gives it the understanding to use them well.',
   ],
   [
     'Which agents can use deal?',
-    'Any agent that can call an API or use an SDK. The first adapters cover OpenAI, Claude, LangChain, Vercel AI, OpenRouter, Codex, Cursor, and custom runtimes.',
+    'Any agent that can connect to a service or AI tool. deal already works with OpenAI, Claude, LangChain, Vercel AI, OpenRouter, Codex, Cursor, and more.',
   ],
   [
     'Can I correct what the agent remembers?',
-    'Yes. Corrections are first-class context. They supersede conflicting inferred or stale memory and are retained with provenance.',
+    'Yes. Your correction wins over an old memory or a guess, and deal keeps track of what you changed.',
   ],
   [
     'Does deal make decisions for me?',
@@ -259,15 +282,15 @@ const faqs = [
   ],
   [
     'Where does my context live?',
-    'deal keeps canonical identity, authority, memory provenance, and governance in its own protected data layer. Semantic retrieval is optional and remains subordinate to your canonical model.',
+    'deal keeps your identity, memories, boundaries, and choices protected. Smart search is optional and never overrides what you have confirmed.',
   ],
   [
     'Can teams use one human model?',
-    'Yes. Organizations can maintain shared context while preserving individual identity, authority, and sensitive boundaries.',
+    'Yes. Teams can share useful knowledge while each person keeps their own voice, choices, and private details.',
   ],
   [
     'How does this work for finance or healthcare?',
-    'Professional context is scoped by role, domain, jurisdiction, and evidence. deal provides operating guidance and boundaries; it does not invent licensing or replace qualified professionals.',
+    'deal can adapt to the person’s role, field, location, and evidence. It helps an agent stay careful; it never invents qualifications or replaces a qualified professional.',
   ],
 ];
 
@@ -340,7 +363,7 @@ function Button({
 
 function Notch({ variant = 'chat' }: { variant?: string }) {
   const rows: Record<string, string[]> = {
-    chat: ['context ready', 'voice: direct · warm'],
+    chat: ['ready to help', 'voice: direct · warm'],
     identity: ['human model', 'confidence 98%'],
     context: ['task context', '3 memories selected'],
     judgment: ['decision style', 'ask before commitment'],
@@ -349,10 +372,10 @@ function Notch({ variant = 'chat' }: { variant?: string }) {
     continuity: ['open loop', 'partner follow-up'],
     correction: ['correction saved', 'supersedes inference'],
     profession: ['professional mode', 'financial analyst'],
-    authority: ['delegation scope', 'read · draft · ask'],
+    authority: ['what it may do', 'read · suggest · ask'],
     outcomes: ['outcome recorded', 'reply quality improved'],
     voice: ['response guidance', 'concise · evidence-led'],
-    privacy: ['packet signed', 'expires in 14 min'],
+    privacy: ['private and temporary', 'for this moment'],
   };
   const [first, second] = rows[variant] ?? rows.chat;
   return (
@@ -425,7 +448,7 @@ function PublicFooter() {
           <a href="https://github.com/zester4/deal-engine">Github</a>
         </div>
         <span className="footer-note">
-          Human context for the agents you already use.
+          Human understanding for the agents you already use.
         </span>
       </div>
       <div className="footer-bottom">
@@ -451,7 +474,7 @@ function HomePage() {
             <span className="tiny-dot green-dot" />
             <span>your context is ready</span>
             <button onClick={() => navigate('/app')}>
-              try the workspace <Arrow />
+              try it now <Arrow />
             </button>
           </div>
           <div className="nav-actions">
@@ -459,13 +482,13 @@ function HomePage() {
               About
             </button>
             <Button secondary onClick={() => navigate('/sign-in')}>
-              Enter workspace <Arrow />
+              Meet your model <Arrow />
             </Button>
           </div>
         </header>
         <section className="hero container">
           <div className="hero-copy">
-            <span className="eyebrow">the human context engine for agents</span>
+            <span className="eyebrow">the human side of ai agents</span>
             <h1>
               Your agent,<em>humanized.</em>
             </h1>
@@ -512,8 +535,8 @@ function HomePage() {
             <em>to every agent.</em>
           </h2>
           <p className="section-lede">
-            One human model follows you from conversation to conversation,
-            provider to provider, and decision to decision.
+            One human model follows you from conversation to conversation, from
+            one AI tool to another, and decision to decision.
           </p>
           <div className="session-grid">
             {sessions.map((session) => (
@@ -559,7 +582,7 @@ function HomePage() {
                         ? 'human checkpoint'
                         : variant === 'memory'
                           ? 'verified evidence'
-                          : 'human context'}
+                          : 'your understanding'}
                     </span>
                     <strong>{title}</strong>
                     <p>
@@ -572,23 +595,23 @@ function HomePage() {
                             : variant === 'boundary'
                               ? 'Ask before making an external commitment.'
                               : variant === 'privacy'
-                                ? 'Sensitive details redacted · packet signed'
+                                ? 'Private details hidden · protected'
                                 : 'Your priorities. Your voice. In every turn.'}
                     </p>
                     <div className="preview-chips">
                       <span>
                         {variant === 'memory'
-                          ? 'user confirmed'
-                          : 'context ready'}
+                          ? 'you confirmed it'
+                          : 'ready to help'}
                       </span>
                       <span>
-                        {variant === 'authority' ? 'read + draft' : 'scoped'}
+                        {variant === 'authority' ? 'read + suggest' : 'limited'}
                       </span>
                     </div>
                   </div>
                   <div className="window-footer">
                     <span className="mini-check">✓</span>
-                    <span>grounded context</span>
+                    <span>based on what you told us</span>
                     <span className="mini-progress" />
                   </div>
                 </div>
@@ -633,18 +656,18 @@ function HomePage() {
                 <Claude size={32} />
                 <OpenRouter size={32} />
               </div>
-              <span className="card-kicker">native sdk</span>
+              <span className="card-kicker">works with your tools</span>
               <h3>
                 One small layer.
                 <br />
-                Every provider.
+                Every model.
               </h3>
               <p>
-                Connect once and carry identity, memory, judgment, and
-                boundaries into every model call.
+                Connect once and carry your identity, memories, choices, and
+                boundaries into every conversation.
               </p>
               <button onClick={() => navigate('/sign-up')}>
-                Explore the sdk <Arrow />
+                See how it connects <Arrow />
               </button>
             </article>
             <article className="integration-card integration-card-dark">
@@ -653,31 +676,31 @@ function HomePage() {
                 <Vercel size={32} />
                 <Cursor size={32} />
               </div>
-              <span className="card-kicker">agent runtime</span>
+              <span className="card-kicker">your agent, your way</span>
               <h3>
                 Your agent stays
                 <br />
                 in the driver’s seat.
               </h3>
               <p>
-                deal does not own your tools or execution loop. It helps your
-                agent understand when and how to use them.
+                deal does not take over your tools or way of working. It helps
+                your agent understand when and how to use them.
               </p>
               <button onClick={() => navigate('/sign-up')}>
-                See the architecture <Arrow />
+                See how it connects <Arrow />
               </button>
             </article>
           </div>
           <div className="pill-row pill-row-wide">
             {[
               'OpenAI Agents',
-              'Claude Agent SDK',
+              'Claude agent',
               'LangChain v1',
-              'Vercel AI SDK',
+              'Vercel AI',
               'OpenRouter',
-              'Responses API',
-              'Chat Completions',
-              'Custom runtime',
+              'OpenAI chat',
+              'Claude chat',
+              'Other agents',
             ].map((item) => (
               <span className="integration-pill" key={item}>
                 <BrandIcon name={item} size={16} />
@@ -687,9 +710,9 @@ function HomePage() {
           </div>
           <div className="terminal-row">
             <span className="terminal-mark">›_</span>
-            <span>Works anywhere your agent can make an API call.</span>
+            <span>Works anywhere your agent works.</span>
             <a href="#features">
-              Read the integration guide <Arrow />
+              See how it works <Arrow />
             </a>
           </div>
         </div>
@@ -707,7 +730,7 @@ function HomePage() {
           <div className="pricing-offer">
             <span className="offer-badge">founding access</span>
             <h3>
-              Human context
+              Human understanding
               <br />
               for your agents.
             </h3>
@@ -729,11 +752,11 @@ function HomePage() {
             <span className="card-kicker">included from day one</span>
             {[
               'A portable human model',
-              'Provider-neutral sdk and adapters',
-              'Memory with provenance and corrections',
-              'Scoped context packets',
-              'Boundaries and approval logic',
-              'A workspace to review what your agent learns',
+              'Works with the AI tools you already use',
+              'Memory with sources and corrections',
+              'Only the right details reach your agent',
+              'Clear limits and moments to ask you',
+              'A place to see what your agent learns',
             ].map((item) => (
               <div className="benefit-line" key={item}>
                 <span>✓</span>
@@ -754,14 +777,14 @@ function HomePage() {
         <div className="resource-grid">
           <a href="#features">
             <span>01</span>
-            <strong>Human context, explained</strong>
+            <strong>Human understanding, explained</strong>
             <small>Why intelligence needs identity.</small>
             <Arrow />
           </a>
           <a href="#how-it-works">
             <span>02</span>
-            <strong>Inside the context packet</strong>
-            <small>What reaches your agent each turn.</small>
+            <strong>What your agent sees</strong>
+            <small>The right understanding for each moment.</small>
             <Arrow />
           </a>
           <a href="#faq">
@@ -821,7 +844,7 @@ function HomePage() {
               Give your agent a human <Arrow />
             </Button>
             <Button secondary onClick={() => navigate('/sign-in')}>
-              Enter the workspace
+              Open your model
             </Button>
           </div>
           <small>
@@ -872,7 +895,7 @@ function AboutPage() {
     [
       '06',
       'Portable by design',
-      'The human model belongs to the person, not to a particular model provider or chat window.',
+      'The human model belongs to the person, not to one AI company or chat window.',
     ],
   ];
   const contextSteps = [
@@ -889,7 +912,7 @@ function AboutPage() {
     [
       '03',
       'Compile what matters',
-      'A small, scoped packet with provenance, boundaries, and judgment guidance.',
+      'A focused guide with clear sources, boundaries, and judgment guidance.',
     ],
     [
       '04',
@@ -906,7 +929,7 @@ function AboutPage() {
           <div className="nav-actions">
             <span className="about-nav-label">about deal</span>
             <Button secondary onClick={() => navigate('/sign-in')}>
-              Enter workspace <Arrow />
+              Meet your model <Arrow />
             </Button>
           </div>
         </header>
@@ -934,15 +957,15 @@ function AboutPage() {
           </div>
           <div
             className="about-hero-art"
-            aria-label="A scoped deal context packet"
+            aria-label="A view of what your agent needs to know"
           >
             <div className="about-art-image" />
             <div className="about-packet">
               <div className="about-packet-top">
                 <span className="packet-status">
-                  <i /> context packet
+                  <i /> what your agent knows
                 </span>
-                <span>expires in 14m</span>
+                <span>for this moment</span>
               </div>
               <div className="about-packet-heading">
                 <span className="preview-eyebrow">
@@ -967,7 +990,7 @@ function AboutPage() {
               </div>
               <div className="about-packet-footer">
                 <span>identity · judgment · memory</span>
-                <span className="packet-scope">scoped</span>
+                <span className="packet-scope">just enough</span>
               </div>
             </div>
           </div>
@@ -1040,7 +1063,7 @@ function AboutPage() {
         <section className="about-loop">
           <div className="container">
             <div className="about-loop-heading">
-              <span className="eyebrow">the context loop</span>
+              <span className="eyebrow">how deal learns</span>
               <h2>
                 A quiet layer
                 <br />
@@ -1048,8 +1071,8 @@ function AboutPage() {
               </h2>
               <p>
                 deal is designed to sit underneath the agents you already use.
-                It does not replace their tools or execution loop. It makes the
-                person inside that loop legible.
+                It does not replace their tools or way of working. It helps the
+                person behind the work stay understood.
               </p>
             </div>
             <div className="context-timeline">
@@ -1092,8 +1115,8 @@ function AboutPage() {
           <div className="origin-card">
             <div className="origin-card-top">
               <span className="tiny-dot green-dot" />
-              <span>deal runtime</span>
-              <span>v1 · stable context</span>
+              <span>deal at work</span>
+              <span>always learning</span>
             </div>
             <div className="origin-card-body">
               <span className="preview-eyebrow">agent receives</span>
@@ -1114,8 +1137,8 @@ function AboutPage() {
               </div>
             </div>
             <div className="origin-card-footer">
-              <span>signed context</span>
-              <span>human stays in control</span>
+              <span>private by design</span>
+              <span>you stay in control</span>
             </div>
           </div>
         </section>
@@ -1203,7 +1226,7 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         <div className="auth-orb orb-two" />
         <div className="auth-content">
           <Logo light />
-          <span className="eyebrow">the human context engine</span>
+          <span className="eyebrow">the human side of your ai</span>
           <h1>
             {signIn
               ? 'Welcome back to your human model.'
@@ -1212,7 +1235,7 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
           <p>
             {signIn
               ? 'Your context, your boundaries, and the work already in motion.'
-              : 'Start with the person behind the prompt. Build a context layer that travels.'}
+              : 'Start with the person behind the prompt. Build understanding that travels.'}
           </p>
           <div className="auth-preview">
             <Notch variant="chat" />
@@ -1240,11 +1263,13 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
           <span className="eyebrow">
             {signIn ? 'welcome back' : 'early access'}
           </span>
-          <h2>{signIn ? 'Enter your workspace.' : 'Start with the human.'}</h2>
+          <h2>
+            {signIn ? 'Come back to your model.' : 'Start with the human.'}
+          </h2>
           <p>
             {signIn
-              ? 'Sign in to review what your agents understand and manage their access.'
-              : 'Create your account and DEAL will provision a human workspace with your first agent credential.'}
+              ? 'Sign in to see what your agents understand and guide how they work.'
+              : 'Create your account and DEAL will build your human model and connect your first agent.'}
           </p>
           <form onSubmit={submit}>
             {!signIn && (
@@ -1287,17 +1312,17 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
               {pending
                 ? signIn
                   ? 'Signing in…'
-                  : 'Creating workspace…'
+                  : 'Creating your model…'
                 : signIn
-                  ? 'Enter workspace'
-                  : 'Create workspace'}{' '}
+                  ? 'Sign in'
+                  : 'Create your model'}{' '}
               <Arrow />
             </Button>
           </form>
           {newApiKey && (
             <div className="auth-key-reveal">
               <span className="eyebrow">save this once</span>
-              <strong>Your first agent key</strong>
+              <strong>Your first connection key</strong>
               <code>{newApiKey}</code>
               <button
                 className="quiet-link"
@@ -1307,7 +1332,7 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
                 Copy key
               </button>
               <Button type="button" onClick={() => navigate('/app')}>
-                Open dashboard <Arrow />
+                See your model <Arrow />
               </Button>
             </div>
           )}
@@ -1355,8 +1380,8 @@ function DashboardPage() {
         <div className="workspace-switch">
           <span className="workspace-avatar">DF</span>
           <span>
-            <strong>{profile?.displayName ?? 'Your workspace'}</strong>
-            <small>{profile?.email ?? 'human context workspace'}</small>
+            <strong>{profile?.displayName ?? 'Your human model'}</strong>
+            <small>{profile?.email ?? 'your context, your way'}</small>
           </span>
           <span>⌄</span>
         </div>
@@ -1388,7 +1413,7 @@ function DashboardPage() {
         <header className="app-header">
           <div>
             <span className="eyebrow">
-              {active === 'Overview' ? 'tuesday, october 20' : 'human context'}
+              {active === 'Overview' ? 'tuesday, october 20' : 'your model'}
             </span>
             <h1>{active === 'Overview' ? 'Good morning, founder.' : active}</h1>
           </div>
@@ -1517,24 +1542,23 @@ function AgentsView() {
     <div className="agent-manager">
       <section className="dashboard-hero agent-manager-hero">
         <div>
-          <span className="eyebrow">agent access</span>
+          <span className="eyebrow">your agents</span>
           <h2>
-            Give each agent
+            Give every agent
             <br />
             <em>its own key.</em>
           </h2>
           <p>
-            Keys belong to agents, not people. Create one here, add it to the
-            agent’s server environment, and revoke it without touching your
-            human workspace.
+            Each agent gets its own private connection. Add the key where that
+            agent runs, and replace it any time without changing your model.
           </p>
         </div>
         <div className="dashboard-model agent-manager-signal">
           <Notch variant="authority" />
           <div className="model-surface">
-            <span className="surface-label">credential policy</span>
-            <strong>One key. One runtime. Full control.</strong>
-            <p>Raw keys are returned once and never listed again.</p>
+            <span className="surface-label">how access works</span>
+            <strong>One key. One agent. You stay in control.</strong>
+            <p>Private keys appear once and are never listed again.</p>
           </div>
         </div>
       </section>
@@ -1542,10 +1566,10 @@ function AgentsView() {
         <section className="key-reveal">
           <div>
             <span className="eyebrow">copy this now</span>
-            <h3>Your new agent key</h3>
+            <h3>Your new connection key</h3>
             <p>
-              DEAL will not show the raw value again. Store it in the agent’s
-              server-side environment, never in browser code.
+              DEAL will not show it again. Keep it where your agent runs, never
+              in a public website.
             </p>
           </div>
           <div className="key-value">
@@ -1561,7 +1585,7 @@ function AgentsView() {
         <div className="panel-heading">
           <div>
             <span className="eyebrow">new connection</span>
-            <h3>Create an agent credential</h3>
+            <h3>Connect an agent</h3>
           </div>
         </div>
         <form className="agent-create-form" onSubmit={createAgent}>
@@ -1575,11 +1599,11 @@ function AgentsView() {
             />
           </label>
           <label>
-            Runtime
+            AI tool
             <input
               value={runtime}
               onChange={(event) => setRuntime(event.target.value)}
-              placeholder="vercel-ai-sdk"
+              placeholder="Vercel AI"
               required
             />
           </label>
@@ -1591,7 +1615,7 @@ function AgentsView() {
         <div className="panel-heading">
           <div>
             <span className="eyebrow">your agents</span>
-            <h3>Credentials under your control</h3>
+            <h3>Agents connected to you</h3>
           </div>
           <span className="panel-count">{agents.length}</span>
         </div>
@@ -1607,10 +1631,10 @@ function AgentsView() {
                 />
                 <div>
                   <strong>{agent.name}</strong>
-                  <p>{agent.runtime}</p>
+                  <p>{agentTypeLabel(agent.runtime)}</p>
                 </div>
                 <span className="agent-status">
-                  {activeCredential ? 'key active' : 'no active key'}
+                  {activeCredential ? 'connected' : 'not connected'}
                 </span>
                 <div className="agent-actions">
                   <button onClick={() => rotateAgent(agent)} disabled={busy}>
@@ -1714,14 +1738,14 @@ function Overview() {
             />
             <Activity
               dot="blue"
-              name="Claude workspace"
+              name="Claude agent"
               task="Reviewing the new brief"
               time="18 min ago"
               status="Learning"
             />
             <Activity
               dot="amber"
-              name="Custom runtime"
+              name="Another agent"
               task="Paused before commitment"
               time="1 hr ago"
               status="Needs you"
@@ -1823,10 +1847,7 @@ function PlaceholderView({ title }: { title: string }) {
         <br />
         <em>understand the work.</em>
       </h2>
-      <p>
-        This section is ready for the next layer of your human context
-        workspace.
-      </p>
+      <p>This section is ready for the next layer of your human model.</p>
       <Button secondary onClick={() => navigate('/app')}>
         Back to overview
       </Button>
