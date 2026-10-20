@@ -32,7 +32,11 @@ function required(name: string): string {
 
 export function taskFromArgs(): string {
   const task =
-    process.argv.slice(2).join(' ').trim() || process.env.COMPARE_TASK;
+    process.argv
+      .slice(2)
+      .filter((argument) => argument !== '--json')
+      .join(' ')
+      .trim() || process.env.COMPARE_TASK;
   if (!task) {
     throw new Error(
       'Provide a task argument, for example: pnpm compare:ai -- "Help me decide what to prioritize."',

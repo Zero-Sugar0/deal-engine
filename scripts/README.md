@@ -6,8 +6,12 @@ Vercel AI Gateway model with the same task twice:
 - `raw` sends only the task to the AI SDK.
 - `humanized` asks DEAL for a signed, scoped context packet and uses the
   packet's rendered human context as the model system instruction.
-- `compare` prints both responses side by side, along with usage and packet
-  metadata.
+- `compare` presents both responses in a readable terminal report, along with
+  usage and packet metadata.
+
+Interactive runs include compact status spinners, color, rendered Markdown,
+context metadata, and a short comparison checklist. Add `--json` when the
+output needs to be consumed by CI or another script.
 
 The scripts use the local `@deal/sdk` workspace package. Publishing the SDK to
 npm is not required for this experiment.
@@ -43,6 +47,9 @@ COMPARE_AUDIENCE=the human using this agent
 pnpm ai:raw -- "Help me decide what to prioritize this week."
 pnpm ai:humanized -- "Help me decide what to prioritize this week."
 pnpm compare:ai -- "Help me decide what to prioritize this week."
+
+# Machine-readable output
+pnpm compare:ai --json -- "Help me decide what to prioritize this week."
 ```
 
 The comparison is a useful first signal, not a scientific benchmark. Even at

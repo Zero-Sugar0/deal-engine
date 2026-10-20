@@ -1,28 +1,33 @@
 import {
   modelId,
-  printSection,
   runHumanized,
   runRaw,
   taskFromArgs,
 } from './lib/experiment.js';
+import { jsonMode, printComparison, withStatus } from './lib/terminal.js';
 
 const task = taskFromArgs();
-const raw = await runRaw(task);
-const humanized = await runHumanized(task);
+const raw = await withStatus('Generating raw response', () => runRaw(task));
+const humanized = await withStatus(
+  'Preparing DEAL context and generating response',
+  () => runHumanized(task),
+);
 
-printSection('comparison', {
-  task,
-  model: modelId(),
-  sameModelAndTask: true,
-  raw: {
-    usage: raw.usage,
-    finishReason: raw.finishReason,
-  },
-  humanized: {
-    context: humanized.context,
-    usage: humanized.usage,
-    finishReason: humanized.finishReason,
-  },
-});
-printSection('raw response', raw.text);
-printSection('humanized response', humanized.text);
+if (jsonMode()) {
+  console.log(
+    JSON.stringify(
+      {
+        task,
+        model: modelId(),
+        mode: 'comparison',
+        sameModelAndTask: true,
+        raw,
+        humanized,
+      },
+      null,
+      2,
+    ),
+  );
+} else {
+  printComparison(task, modelId(), raw, humanized);
+}
