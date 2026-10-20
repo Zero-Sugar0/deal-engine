@@ -180,6 +180,10 @@ The full integration guide, including LangChain middleware, Claude system
 prompts, AI SDK/AI Gateway middleware, OpenRouter, outcomes, and security rules
 is in [`docs/AGENT_INTEGRATIONS.md`](docs/AGENT_INTEGRATIONS.md).
 
+Professional roles, domain enrollment, verified facts, behavioral patterns, and
+regulated-domain boundaries are documented in
+[`docs/PROFESSIONAL_CONTEXT.md`](docs/PROFESSIONAL_CONTEXT.md).
+
 ## Planning docs
 
 Detailed design notes live under [`plan/v1/`](plan/v1/):

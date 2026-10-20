@@ -1,4 +1,8 @@
-import type { HumanContextPacket, HumanModel } from '@deal/core';
+import type {
+  HumanContextPacket,
+  HumanModel,
+  ProfessionProfile,
+} from '@deal/core';
 
 export * from './agent.js';
 export * from './integrations.js';
@@ -179,6 +183,27 @@ export class DEAL {
     delegations: Array<Record<string, unknown>>;
   }> {
     return this.request('/v1/profile', { method: 'GET' });
+  }
+
+  async listProfessions(
+    input: {
+      search?: string;
+      category?: string;
+    } = {},
+  ): Promise<ProfessionProfile[]> {
+    const params = new URLSearchParams();
+    if (input.search) params.set('search', input.search);
+    if (input.category) params.set('category', input.category);
+    const query = params.toString();
+    return this.request(`/v1/professions${query ? `?${query}` : ''}`, {
+      method: 'GET',
+    });
+  }
+
+  async getProfession(professionId: string): Promise<ProfessionProfile> {
+    return this.request(`/v1/professions/${encodeURIComponent(professionId)}`, {
+      method: 'GET',
+    });
   }
 
   async updateProfile(input: HumanProfileUpdate): Promise<HumanProfile> {

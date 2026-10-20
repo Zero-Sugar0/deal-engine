@@ -337,11 +337,108 @@ export const DomainContextSchema = z.object({
   business: z.string().optional(),
   icp: z.string().optional(),
   offer: z.string().optional(),
+  industry: z.string().optional(),
+  specialization: z.string().optional(),
+  seniority: z.string().optional(),
+  jurisdictions: z.array(z.string()).default([]),
+  profession: z.string().optional(),
   exclusions: z.array(z.string()).default([]),
   goals: z.array(z.string()).default([]),
   terminology: z.record(z.string()).default({}),
 });
 export type DomainContext = z.infer<typeof DomainContextSchema>;
+
+export const ProfessionCategorySchema = z.enum([
+  'business',
+  'finance',
+  'healthcare',
+  'legal',
+  'technology',
+  'science',
+  'education',
+  'people_operations',
+  'sales_marketing',
+  'creative_media',
+  'public_service',
+  'social_services',
+  'construction_trades',
+  'manufacturing_logistics',
+  'hospitality_retail',
+  'agriculture_environment',
+  'general',
+]);
+export type ProfessionCategory = z.infer<typeof ProfessionCategorySchema>;
+
+export const ProfessionalPatternSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  description: z.string(),
+  useWhen: z.array(z.string()).default([]),
+  avoidWhen: z.array(z.string()).default([]),
+});
+export type ProfessionalPattern = z.infer<typeof ProfessionalPatternSchema>;
+
+/**
+ * A reusable operating model for a profession. This describes work patterns
+ * and safety boundaries; it is not a license, credential, or factual source.
+ */
+export const ProfessionProfileSchema = z.object({
+  id: z.string(),
+  version: z.string(),
+  title: z.string(),
+  category: ProfessionCategorySchema,
+  aliases: z.array(z.string()).default([]),
+  summary: z.string(),
+  objective: z.string(),
+  responsibilities: z.array(z.string()).default([]),
+  knowledgeAreas: z.array(z.string()).default([]),
+  operatingPatterns: z.array(ProfessionalPatternSchema).default([]),
+  communicationPatterns: z.array(ProfessionalPatternSchema).default([]),
+  decisionPatterns: z.array(ProfessionalPatternSchema).default([]),
+  failureModes: z.array(z.string()).default([]),
+  requiredContext: z.array(z.string()).default([]),
+  escalationTriggers: z.array(z.string()).default([]),
+  safetyBoundaries: z.array(z.string()).default([]),
+  sensitiveDataClasses: z.array(z.string()).default([]),
+  regulated: z.boolean().default(false),
+  licenseRequiredFor: z.array(z.string()).default([]),
+  restrictedActions: z.array(z.string()).default([]),
+  approvalActions: z.array(z.string()).default([]),
+  source: z.enum(['system', 'organization', 'human']).default('system'),
+});
+export type ProfessionProfile = z.infer<typeof ProfessionProfileSchema>;
+
+/** The selected profession plus person-specific, attributable overrides. */
+export const ProfessionalContextSchema = z.object({
+  profileId: z.string().optional(),
+  profileVersion: z.string().optional(),
+  title: z.string().optional(),
+  category: ProfessionCategorySchema.optional(),
+  role: z.string().optional(),
+  industry: z.string().optional(),
+  specialization: z.string().optional(),
+  seniority: z.string().optional(),
+  jurisdictions: z.array(z.string()).default([]),
+  objective: z.string().optional(),
+  responsibilities: z.array(z.string()).default([]),
+  knowledgeAreas: z.array(z.string()).default([]),
+  operatingPatterns: z.array(ProfessionalPatternSchema).default([]),
+  communicationPatterns: z.array(ProfessionalPatternSchema).default([]),
+  decisionPatterns: z.array(ProfessionalPatternSchema).default([]),
+  failureModes: z.array(z.string()).default([]),
+  escalationTriggers: z.array(z.string()).default([]),
+  safetyBoundaries: z.array(z.string()).default([]),
+  sensitiveDataClasses: z.array(z.string()).default([]),
+  regulated: z.boolean().default(false),
+  licenseRequiredFor: z.array(z.string()).default([]),
+  restrictedActions: z.array(z.string()).default([]),
+  approvalActions: z.array(z.string()).default([]),
+  requiredContext: z.array(z.string()).default([]),
+  missingContext: z.array(z.string()).default([]),
+  humanFacts: z.array(ProfileFactSchema).default([]),
+  source: z.enum(['system', 'organization', 'human']).default('system'),
+});
+export type ProfessionalContext = z.infer<typeof ProfessionalContextSchema>;
 
 export const MemoryReferenceSchema = z.object({
   id: z.string(),
@@ -440,7 +537,7 @@ export const HumanIdentitySchema = z.object({
 export type HumanIdentity = z.infer<typeof HumanIdentitySchema>;
 
 export const HumanContextPacketSchema = z.object({
-  schemaVersion: z.enum(['1', '2', '3']),
+  schemaVersion: z.enum(['1', '2', '3', '4']),
   packetId: z.string(),
   issuedAt: z.string(),
   expiresAt: z.string(),
@@ -454,6 +551,7 @@ export const HumanContextPacketSchema = z.object({
   }),
   persona: PersonaSchema,
   domain: DomainContextSchema,
+  professional: z.lazy(() => ProfessionalContextSchema).default({}),
   memory: MemoryContextSchema,
   authority: AuthoritySchema,
   judgment: JudgmentRulesSchema,

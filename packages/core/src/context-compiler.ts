@@ -5,6 +5,7 @@ import {
   HumanModelSchema,
   InteractionContextSchema,
   ResponseGuidanceSchema,
+  ProfessionalContextSchema,
 } from './schema.js';
 import type {
   Authority,
@@ -17,6 +18,7 @@ import type {
   MemoryContext,
   MemoryReference,
   Persona,
+  ProfessionalContext,
   ResponseGuidance,
 } from './schema.js';
 
@@ -46,6 +48,7 @@ export interface CompileContextInput {
   humanModel?: HumanModel;
   interaction?: InteractionContext;
   grounding?: Grounding;
+  professional?: ProfessionalContext;
 }
 
 export function hashTask(task: string): string {
@@ -371,7 +374,7 @@ export function compileHumanContextPacket(
   });
 
   return {
-    schemaVersion: '3',
+    schemaVersion: '4',
     packetId: crypto.randomUUID(),
     issuedAt: issuedAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
@@ -396,6 +399,7 @@ export function compileHumanContextPacket(
     },
     persona: finalHumanModel.persona,
     domain: finalHumanModel.domain,
+    professional: ProfessionalContextSchema.parse(input.professional ?? {}),
     memory: {
       preferences: input.memory.preferences ?? [],
       corrections: input.memory.corrections ?? [],

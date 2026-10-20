@@ -55,7 +55,7 @@ Content-Type: application/json
 {
   "packetId": "ctx_123",
   "packet": {
-    "schemaVersion": "3",
+    "schemaVersion": "4",
     "humanModel": {},
     "behavior": {},
     "responseGuidance": {
@@ -78,6 +78,22 @@ The host agent supplies the task and uses its own tools. `requestedCapabilities`
 is retained only as an optional delegated-scope assertion for deployments that
 want DEAL to verify an agent’s declared authority; DEAL does not provide or
 authenticate those external tools.
+
+## Professional profiles
+
+Use the professional catalog to select an operating model for a delegation and
+to discover its safety boundaries:
+
+```http
+GET /v1/professions?search=finance
+GET /v1/professions/personal_finance_organizer_v1
+```
+
+The selected profile is compiled into the context packet under `professional`.
+It includes role patterns, knowledge areas, failure modes, escalation triggers,
+regulated-domain markers, and missing required context. It does not claim that
+the human is licensed or that the agent can perform regulated work. See
+[`PROFESSIONAL_CONTEXT.md`](PROFESSIONAL_CONTEXT.md).
 
 ## Update the human model
 

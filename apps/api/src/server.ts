@@ -16,7 +16,7 @@ import {
 } from '@deal/core';
 import type { Grounding, InteractionContext, MemoryContext } from '@deal/core';
 import type { HumanModel, ProfileFact } from '@deal/core';
-import { evaluatePolicy } from '@deal/policy';
+import { evaluatePolicy, type PolicyRule } from '@deal/policy';
 import { jwtVerify, SignJWT } from 'jose';
 import { z } from 'zod';
 import { DealStore, hashPayload, hashToken, type Credential } from './store.js';
@@ -28,6 +28,11 @@ import {
   profileRegistry,
   missingProfileContext,
 } from './profiles.js';
+import {
+  getProfessionProfile,
+  professionCatalog,
+  searchProfessionProfiles,
+} from './professions.js';
 import type { WorkflowStep } from './store.js';
 
 export interface ServerOptions {
@@ -68,6 +73,43 @@ function error(
   message: string,
 ): Error & { statusCode: number } {
   return Object.assign(new Error(message), { statusCode });
+}
+
+function missingProfessionalContext(
+  requiredContext: string[],
+  context: Record<string, unknown>,
+): string[] {
+  return requiredContext.filter((field) => {
+    const value = context[field];
+    return (
+      value === undefined ||
+      value === null ||
+      value === '' ||
+      (Array.isArray(value) && value.length === 0)
+    );
+  });
+}
+
+function professionalPolicyRules(professional: {
+  profileId?: string;
+  restrictedActions?: string[];
+  approvalActions?: string[];
+}): PolicyRule[] {
+  const profileId = professional.profileId ?? 'professional';
+  return [
+    ...(professional.restrictedActions ?? []).map((action) => ({
+      id: `${profileId}.restricted.${action}`,
+      action,
+      decision: 'deny' as const,
+      reason: `Action '${action}' is restricted by the selected professional profile`,
+    })),
+    ...(professional.approvalActions ?? []).map((action) => ({
+      id: `${profileId}.approval.${action}`,
+      action,
+      decision: 'require_approval' as const,
+      reason: `Action '${action}' requires human approval for the selected professional profile`,
+    })),
+  ];
 }
 
 function bearer(request: FastifyRequest): string {
@@ -653,6 +695,25 @@ export function buildServer(
   app.get('/v1/profiles', async (request) => {
     await requireCredential(store, request, undefined, options.externalAuth);
     return profileRegistry;
+  });
+
+  app.get('/v1/professions', async (request) => {
+    await requireCredential(store, request, undefined, options.externalAuth);
+    const query = request.query as { search?: string; category?: string };
+    const profiles = query.search
+      ? searchProfessionProfiles(query.search)
+      : professionCatalog;
+    return query.category
+      ? profiles.filter((profile) => profile.category === query.category)
+      : profiles;
+  });
+
+  app.get('/v1/professions/:professionId', async (request) => {
+    await requireCredential(store, request, undefined, options.externalAuth);
+    const params = request.params as { professionId: string };
+    const profile = getProfessionProfile(params.professionId);
+    if (!profile) throw error(404, 'Profession profile not found');
+    return profile;
   });
 
   app.patch('/v1/profile', async (request) => {
@@ -1365,6 +1426,54 @@ export function buildServer(
     const decision = DecisionStyleSchema.parse(human.decision ?? {});
     const behavior = BehavioralContractSchema.parse(human.behavior ?? {});
     const judgment = JudgmentRulesSchema.parse(human.judgment ?? {});
+    const selectedProfessionId =
+      delegation.profileId ?? domain.profession ?? 'generalist_assistant_v1';
+    const selectedProfession =
+      getProfessionProfile(selectedProfessionId) ??
+      getProfessionProfile('generalist_assistant_v1');
+    const professionalContext = selectedProfession
+      ? {
+          profileId: selectedProfessionId,
+          profileVersion: selectedProfession.version,
+          title: selectedProfession.title,
+          category: selectedProfession.category,
+          role: human.role || selectedProfession.title,
+          industry: domain.industry,
+          specialization: domain.specialization,
+          seniority: domain.seniority,
+          jurisdictions: domain.jurisdictions,
+          objective: selectedProfession.objective,
+          responsibilities: selectedProfession.responsibilities,
+          knowledgeAreas: selectedProfession.knowledgeAreas,
+          operatingPatterns: selectedProfession.operatingPatterns,
+          communicationPatterns: selectedProfession.communicationPatterns,
+          decisionPatterns: selectedProfession.decisionPatterns,
+          failureModes: selectedProfession.failureModes,
+          escalationTriggers: selectedProfession.escalationTriggers,
+          safetyBoundaries: selectedProfession.safetyBoundaries,
+          sensitiveDataClasses: selectedProfession.sensitiveDataClasses,
+          regulated: selectedProfession.regulated,
+          licenseRequiredFor: selectedProfession.licenseRequiredFor,
+          restrictedActions: selectedProfession.restrictedActions,
+          approvalActions: selectedProfession.approvalActions,
+          requiredContext: selectedProfession.requiredContext,
+          missingContext: missingProfessionalContext(
+            selectedProfession.requiredContext,
+            {
+              ...domain,
+              role: human.role,
+              communicationStyle: persona.communicationStyle,
+              goal: body.task,
+              constraints: human.knownConstraints,
+            },
+          ),
+          humanFacts: visibleFacts(
+            biography.domainExpertise,
+            includeSensitiveContext,
+          ),
+          source: selectedProfession.source,
+        }
+      : undefined;
 
     let interaction: InteractionContext = {
       conversationId: body.conversationId,
@@ -1552,6 +1661,7 @@ export function buildServer(
       memory,
       authority: delegation.authority,
       judgment,
+      professional: professionalContext,
       humanModel: scopedHumanModel.model,
       interaction,
       grounding,
@@ -1643,12 +1753,10 @@ export function buildServer(
       : undefined;
     const human = store.humans.get(credential.humanId);
     if (!delegation || !human) throw error(403, 'Active delegation required');
-    const result = evaluatePolicy(
-      delegation.authority,
-      human.judgment,
-      body,
-      delegation.policyRules,
-    );
+    const result = evaluatePolicy(delegation.authority, human.judgment, body, [
+      ...professionalPolicyRules(context.packet.professional ?? {}),
+      ...delegation.policyRules,
+    ]);
     store.recordAudit({
       humanId: human.id,
       organizationId: human.organizationId,
@@ -1712,7 +1820,10 @@ export function buildServer(
         confidence: body.confidence,
         sensitiveFields: body.sensitiveFields,
       },
-      delegation.policyRules,
+      [
+        ...professionalPolicyRules(context.packet.professional ?? {}),
+        ...delegation.policyRules,
+      ],
     );
     if (
       policyResult.decision !== 'require_approval' &&

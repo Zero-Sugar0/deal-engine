@@ -99,6 +99,11 @@ describe('DEAL control plane', () => {
     expect(contextResponse.statusCode).toBe(200);
     const context = contextResponse.json();
     expect(context.signature).toBeTypeOf('string');
+    expect(context.packet.professional.title).toBe('Growth Operator');
+    expect(context.packet.professional.category).toBe('sales_marketing');
+    expect(context.packet.professional.safetyBoundaries).toContain(
+      'Do not impersonate the human.',
+    );
     expect(context.packet.memory.corrections).toContain(
       'Never target agencies or current customers',
     );
@@ -309,6 +314,72 @@ describe('DEAL control plane', () => {
     expect(profiles.json()[0].id).toBe('growth_operator_v1');
     expect(profiles.json()).toHaveLength(15);
 
+    const professions = await app.inject({
+      method: 'GET',
+      url: '/v1/professions?search=finance',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    expect(professions.statusCode).toBe(200);
+    expect(
+      professions
+        .json()
+        .some(
+          (profile: { id: string }) =>
+            profile.id === 'personal_finance_organizer_v1',
+        ),
+    ).toBe(true);
+
+    const clinical = await app.inject({
+      method: 'GET',
+      url: '/v1/professions/clinical_intake_coordinator_v1',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    expect(clinical.statusCode).toBe(200);
+    expect(clinical.json().regulated).toBe(true);
+
+    const financeAgent = await app.inject({
+      method: 'POST',
+      url: '/v1/agents',
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: { name: 'Finance Context Agent', runtime: 'test' },
+    });
+    const financeDelegation = await app.inject({
+      method: 'POST',
+      url: '/v1/delegations',
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: {
+        agentId: financeAgent.json().agent.id,
+        purpose: 'Organize personal finance information',
+        profileId: 'personal_finance_organizer_v1',
+        authority: {
+          mayRead: ['context_read'],
+          mayDraft: [],
+          mayWrite: ['investment_recommendation'],
+          requiresApproval: [],
+        },
+      },
+    });
+    expect(financeDelegation.statusCode).toBe(200);
+    const financeContext = await app.inject({
+      method: 'POST',
+      url: '/v1/context',
+      headers: { authorization: `Bearer ${financeAgent.json().apiKey}` },
+      payload: { task: 'Review an investment option' },
+    });
+    const financePolicy = await app.inject({
+      method: 'POST',
+      url: '/v1/policy/evaluate',
+      headers: { authorization: `Bearer ${financeAgent.json().apiKey}` },
+      payload: {
+        contextPacketId: financeContext.json().packetId,
+        action: 'investment_recommendation',
+      },
+    });
+    expect(financePolicy.json().decision).toBe('deny');
+    expect(financePolicy.json().matchedRules).toContain(
+      'personal_finance_organizer_v1.restricted.investment_recommendation',
+    );
+
     const onboarding = await app.inject({
       method: 'POST',
       url: '/v1/onboarding',
@@ -513,7 +584,7 @@ describe('DEAL control plane', () => {
       },
     });
     const packet = response.json().packet;
-    expect(packet.schemaVersion).toBe('3');
+    expect(packet.schemaVersion).toBe('4');
     expect(packet.humanModel.version).toBe(onboarding.json().modelVersion);
     expect(packet.humanModel.identity.preferredName).toBe('Alex');
     expect(packet.humanModel.identity.selfDescription).toContain(

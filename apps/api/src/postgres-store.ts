@@ -942,6 +942,7 @@ export class PostgresDealStore extends DealStore {
         business: 'B2B HR SaaS',
         icp: 'HR leaders at US companies with 50-500 employees',
         offer: 'A workflow platform that reduces manual HR operations',
+        jurisdictions: [],
         exclusions: ['agencies', 'current customers', 'suppressed contacts'],
         goals: ['book qualified meetings', 'improve reply quality'],
         terminology: {
