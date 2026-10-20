@@ -5,8 +5,8 @@
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "build": "./node_modules/.bin/tsc -p packages/core/tsconfig.json && ./node_modules/.bin/tsc -p packages/skills/tsconfig.json && ./node_modules/.bin/tsc -p packages/policy/tsconfig.json && ./node_modules/.bin/tsc -p packages/memory/tsconfig.json && ./node_modules/.bin/tsc -p packages/sdk/tsconfig.json && ./node_modules/.bin/tsc -p packages/evals/tsconfig.json && ./node_modules/.bin/tsc -p apps/api/tsconfig.json && ./node_modules/.bin/tsc -p apps/mcp/tsconfig.json && pnpm --filter @deal/dashboard build",
-    "start": "node apps/api/dist/index.js",
-    "dev": "./node_modules/.bin/tsx apps/api/src/index.ts",
+    "start": "node --env-file-if-exists=.env apps/api/dist/index.js",
+    "dev": "node --env-file-if-exists=.env --import=tsx apps/api/src/index.ts",
     "test": "./node_modules/.bin/vitest run",
     "build:deal-sdk": "./node_modules/.bin/tsc -p packages/core/tsconfig.json && ./node_modules/.bin/tsc -p packages/sdk/tsconfig.json",
     "ai:typecheck": "pnpm build:deal-sdk && ./node_modules/.bin/tsc -p scripts/tsconfig.json --noEmit",

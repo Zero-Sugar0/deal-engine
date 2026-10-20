@@ -48,7 +48,13 @@ export function createDealAuth(pool: Pool): Auth<DealAuthOptions> {
     basePath: '/api/auth',
     secret: authSecret,
     trustedOrigins: configuredOrigins(),
-    plugins: [dash()],
+    plugins: [
+      dash({
+        apiUrl: process.env.BETTER_AUTH_API_URL,
+        kvUrl: process.env.BETTER_AUTH_KV_URL,
+        apiKey: process.env.BETTER_AUTH_API_KEY,
+      }),
+    ],
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 12,
