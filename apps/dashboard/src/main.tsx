@@ -1,598 +1,1043 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
-type Approval = {
-  id: string;
-  action: string;
-  summary: string;
-  status: string;
-  createdAt: string;
-  payloadHash: string;
-};
-type AuditEvent = {
-  id: string;
-  eventType: string;
-  payload: Record<string, unknown>;
-  occurredAt: string;
-};
-type Workflow = {
-  id: string;
-  profileId: string;
-  goal: string;
-  currentStep: string;
-  updatedAt: string;
-};
-type ProfileFact = {
-  value: string;
-  confirmation?: string;
-  confidence?: number;
-  sensitivity?: string;
-};
-type Profile = {
-  human: {
-    displayName: string;
-    role: string;
-    identity: {
-      preferredName?: string;
-      mission?: string;
-      organization?: string;
-      locale?: string;
-      timezone?: string;
-      selfDescription?: string;
-      languages?: ProfileFact[];
-      identityMarkers?: ProfileFact[];
-      affiliations?: ProfileFact[];
-    };
-    selfConcept: {
-      summary?: string;
-      identityStatements?: ProfileFact[];
-      strengths?: ProfileFact[];
-      growthEdges?: ProfileFact[];
-      aspirations?: ProfileFact[];
-      fears?: ProfileFact[];
-      nonNegotiables?: ProfileFact[];
-      valuesHierarchy?: Array<{
-        value: string;
-        priority?: number;
-        meaning?: string;
-      }>;
-      howTheyDescribeThemselves?: string[];
-    };
-    biography: {
-      summary?: string;
-      currentChapter?: string;
-      formativeExperiences?: ProfileFact[];
-      careerArc?: Array<{
-        title: string;
-        summary: string;
-        period?: string;
-        lessons?: string[];
-      }>;
-      domainExpertise?: ProfileFact[];
-      lifeContext?: ProfileFact[];
-    };
-    relationships: Array<{
-      id: string;
-      label: string;
-      role?: string;
-      context?: string;
-      trustLevel?: string;
-      communicationPreferences?: string[];
-      boundaries?: string[];
-    }>;
-    relational: {
-      trustSignals?: ProfileFact[];
-      trustBreakers?: ProfileFact[];
-      calmingFactors?: ProfileFact[];
-      frustrationTriggers?: ProfileFact[];
-      acknowledgmentPreferences?: string[];
-      repairProtocol?: string[];
-    };
-    boundaries: {
-      neverAssume?: string[];
-      mustAsk?: string[];
-      neverMention?: string[];
-      neverInfer?: string[];
-      consentRules?: string[];
-      privacyPreferences?: string[];
-    };
-    domain: {
-      business?: string;
-      icp?: string;
-      offer?: string;
-      exclusions?: string[];
-    };
-    persona: {
-      communicationStyle?: string;
-      tone?: string;
-      directness?: number;
-      warmth?: number;
-      verbosity?: string;
-      values?: string[];
-      preferredPhrases?: string[];
-      avoidedPhrases?: string[];
-      greetingStyle?: string;
-      signoffStyle?: string;
-      sentenceRhythm?: string;
-      useContractions?: boolean;
-      emojiPolicy?: string;
-      leadWith?: string;
-      explainWith?: string;
-      askStyle?: string;
-      formattingPreferences?: string[];
-      modes?: Array<{ id: string; audience: string; purpose?: string }>;
-    };
-    decision: {
-      priorities?: string[];
-      tradeoffs?: string[];
-      riskTolerance?: string;
-      reversibilityPreference?: string;
-      northStars?: string[];
-      heuristics?: string[];
-      decisionProcess?: string[];
-      redLines?: string[];
-    };
-    behavior: {
-      relationship?: string;
-      speakAs?: string;
-      whenUncertain?: string;
-      whenDisagreeing?: string;
-      whenWrong?: string;
-      responsePrinciples?: string[];
-      neverClaim?: string[];
-      neverDo?: string[];
-    };
-    currentPriorities?: string[];
-    knownConstraints?: string[];
-  };
-  delegations: Array<{
-    id: string;
-    purpose: string;
-    profileId?: string;
-    authority: {
-      mayRead?: string[];
-      mayDraft?: string[];
-      mayWrite?: string[];
-      requiresApproval?: string[];
-    };
-  }>;
-};
+type Route = '/' | '/sign-in' | '/sign-up' | '/app';
 
-const API_DEFAULT =
-  import.meta.env.VITE_DEAL_API_URL ?? 'https://deal-engine.up.railway.app';
+const integrations = [
+  'OpenAI',
+  'Claude',
+  'LangChain',
+  'Vercel AI',
+  'OpenRouter',
+  'Codex',
+  'Cursor',
+];
 
-function factValues(items: ProfileFact[] | undefined): string[] {
-  return (items ?? []).map((item) => item.value);
+const sessions = [
+  {
+    status: 'Aligned',
+    color: 'green',
+    title: 'Reply to the partner',
+    body: 'Used your direct voice, kept the commitment reversible, and surfaced one ambiguity.',
+  },
+  {
+    status: 'Learning',
+    color: 'amber',
+    title: 'Review the new context',
+    body: 'A new preference was detected. You decide whether it becomes part of the human model.',
+  },
+  {
+    status: 'Protected',
+    color: 'blue',
+    title: 'Pause before sending',
+    body: 'The action crossed a boundary, so your agent asked before it acted.',
+  },
+];
+
+const features = [
+  [
+    'lilac',
+    'human model',
+    'A living identity for every agent',
+    'Your values, voice, history, relationships, and current season stay coherent across every agent you use.',
+    'identity',
+  ],
+  [
+    'blush',
+    'conversation',
+    'Context that arrives at the right moment',
+    'deal compiles only what matters for the current task, audience, and conversation.',
+    'context',
+  ],
+  [
+    'blue',
+    'judgment',
+    'More than preferences',
+    'Give your agents the reasoning patterns behind your choices, not just a list of instructions.',
+    'judgment',
+  ],
+  [
+    'blue',
+    'memory',
+    'Memory with provenance',
+    'Every remembered detail carries confidence, source, correction history, and a clear place in your model.',
+    'memory',
+  ],
+  [
+    'lilac',
+    'boundaries',
+    'A boundary before a bad decision',
+    'Your agent knows when to move, when to ask, and when a request should stop.',
+    'boundary',
+  ],
+  [
+    'blush',
+    'continuity',
+    'The thread stays intact',
+    'Carry open loops, active priorities, and relationship context between tools and providers.',
+    'continuity',
+  ],
+  [
+    'blush',
+    'corrections',
+    'Teach it once',
+    'Correct an assumption and deal makes that correction stronger than stale or inferred memory.',
+    'correction',
+  ],
+  [
+    'blue',
+    'professional context',
+    'The right mind for the work',
+    'Switch between founder, analyst, clinician, operator, or advisor without losing the person underneath.',
+    'profession',
+  ],
+  [
+    'lilac',
+    'authority',
+    'Scoped by design',
+    'Each connected agent receives only the authority, context, and sensitivity it has earned.',
+    'authority',
+  ],
+  [
+    'blue',
+    'outcomes',
+    'Memory that learns from outcomes',
+    'Close the loop after a decision so future context reflects what actually worked.',
+    'outcomes',
+  ],
+  [
+    'lilac',
+    'voice',
+    'Human in the details',
+    'Tone, rhythm, warmth, directness, and disagreement style are part of the operating model.',
+    'voice',
+  ],
+  [
+    'blush',
+    'privacy',
+    'Grounded, not exposed',
+    'Sensitive context is scoped, redacted, signed, and kept under the human’s control.',
+    'privacy',
+  ],
+];
+
+const benefits = [
+  [
+    '01',
+    'One human model',
+    'Keep identity and judgment consistent across every agent.',
+  ],
+  ['02', 'Provider neutral', 'Use the models and runtimes you already trust.'],
+  [
+    '03',
+    'Evidence over guesses',
+    'Separate confirmed facts from inference and memory.',
+  ],
+  [
+    '04',
+    'Correction first',
+    'Your direct correction always wins over stale context.',
+  ],
+  [
+    '05',
+    'Ask at the edge',
+    'Make ambiguity visible before it becomes an action.',
+  ],
+  [
+    '06',
+    'Portable by design',
+    'Your context belongs to you, not to a single provider.',
+  ],
+  ['07', 'Signed context', 'Every packet is scoped, expiring, and verifiable.'],
+  [
+    '08',
+    'Quietly present',
+    'The best context feels like understanding, not interruption.',
+  ],
+  [
+    '09',
+    'Built for real work',
+    'From personal decisions to regulated professional domains.',
+  ],
+];
+
+const faqs = [
+  [
+    'What is deal?',
+    'deal is the human context layer for AI agents. It gives an agent a grounded understanding of who it represents, how that person thinks, what matters to them, and where the boundaries are.',
+  ],
+  [
+    'Does deal replace my model or agent framework?',
+    'No. Your existing agent keeps its model, tools, execution loop, and provider credentials. deal gives that agent the human context to use them well.',
+  ],
+  [
+    'Which agents can use deal?',
+    'Any agent that can call an API or use an SDK. The first adapters cover OpenAI, Claude, LangChain, Vercel AI, OpenRouter, Codex, Cursor, and custom runtimes.',
+  ],
+  [
+    'Can I correct what the agent remembers?',
+    'Yes. Corrections are first-class context. They supersede conflicting inferred or stale memory and are retained with provenance.',
+  ],
+  [
+    'Does deal make decisions for me?',
+    'It helps an agent reason in your style and enforce your boundaries. Consequential actions can still require your explicit approval.',
+  ],
+  [
+    'Where does my context live?',
+    'deal keeps canonical identity, authority, memory provenance, and governance in its own protected data layer. Semantic retrieval is optional and remains subordinate to your canonical model.',
+  ],
+  [
+    'Can teams use one human model?',
+    'Yes. Organizations can maintain shared context while preserving individual identity, authority, and sensitive boundaries.',
+  ],
+  [
+    'How does this work for finance or healthcare?',
+    'Professional context is scoped by role, domain, jurisdiction, and evidence. deal provides operating guidance and boundaries; it does not invent licensing or replace qualified professionals.',
+  ],
+];
+
+function navigate(path: Route) {
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function lineValues(items: string[] | undefined): string[] {
-  return items ?? [];
-}
-
-function App() {
-  const [apiUrl, setApiUrl] = useState(
-    localStorage.getItem('deal_api_url') ?? API_DEFAULT,
-  );
-  const [token, setToken] = useState(
-    localStorage.getItem('deal_human_token') ?? 'local-human-key',
-  );
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [approvals, setApprovals] = useState<Approval[]>([]);
-  const [audit, setAudit] = useState<AuditEvent[]>([]);
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const headers = useMemo(
-    () => ({
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    }),
-    [token],
-  );
-  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await fetch(`${apiUrl.replace(/\/$/, '')}${path}`, {
-      ...init,
-      headers: { ...headers, ...(init.headers ?? {}) },
-    });
-    const body = await response.json();
-    if (!response.ok)
-      throw new Error(body.error ?? `Request failed: ${response.status}`);
-    return body as T;
-  }
-
-  async function refresh() {
-    setLoading(true);
-    setError('');
-    localStorage.setItem('deal_api_url', apiUrl);
-    localStorage.setItem('deal_human_token', token);
-    try {
-      const [nextProfile, nextApprovals, nextAudit, nextWorkflows] =
-        await Promise.all([
-          request<Profile>('/v1/profile'),
-          request<Approval[]>('/v1/approvals'),
-          request<AuditEvent[]>('/v1/audit'),
-          request<Workflow[]>('/v1/workflows'),
-        ]);
-      setProfile(nextProfile);
-      setApprovals(nextApprovals);
-      setAudit(nextAudit);
-      setWorkflows(nextWorkflows);
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : 'Unable to connect to DEAL',
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function decide(id: string, decision: 'approved' | 'denied') {
-    await request(`/v1/approvals/${id}/decision`, {
-      method: 'POST',
-      body: JSON.stringify({ decision }),
-    });
-    await refresh();
-  }
-
+function useRoute(): Route {
+  const [path, setPath] = useState(window.location.pathname as Route);
   useEffect(() => {
-    void refresh();
+    const update = () => setPath(window.location.pathname as Route);
+    window.addEventListener('popstate', update);
+    return () => window.removeEventListener('popstate', update);
   }, []);
+  if (path === '/sign-in' || path === '/sign-up' || path === '/app')
+    return path;
+  return '/';
+}
 
+function Logo({ light = false }: { light?: boolean }) {
   return (
-    <main className="shell">
-      <header className="topbar">
-        <div>
-          <span className="eyebrow">DEAL / CONTROL PLANE</span>
-          <h1>Human context, with judgment.</h1>
-        </div>
-        <button className="ghost" onClick={() => void refresh()}>
-          {loading ? 'Syncing…' : 'Refresh'}
-        </button>
-      </header>
+    <button
+      className={`logo ${light ? 'logo-light' : ''}`}
+      onClick={() => navigate('/')}
+    >
+      <span className="logo-mark" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+      <span>deal</span>
+    </button>
+  );
+}
 
-      <section className="connection panel">
-        <div>
-          <label>
-            API URL
-            <input
-              value={apiUrl}
-              onChange={(event) => setApiUrl(event.target.value)}
-            />
-          </label>
-        </div>
-        <div>
-          <label>
-            Human token
-            <input
-              type="password"
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
-            />
-          </label>
-        </div>
-        <button onClick={() => void refresh()}>Connect</button>
-      </section>
-      {error && <div className="error">{error}</div>}
+function Arrow() {
+  return <span aria-hidden="true">↗</span>;
+}
 
-      {profile && (
-        <>
-          <section className="hero-grid">
-            <article className="panel hero">
-              <span className="eyebrow">PRINCIPAL</span>
-              <h2>{profile.human.displayName}</h2>
-              <p>
-                {profile.human.role} · {profile.human.domain.business}
-              </p>
-              <div className="quote">
-                “
-                {profile.human.persona.communicationStyle ??
-                  'Context-aware and truthful'}
-                ”
-              </div>
-            </article>
-            <article className="panel">
-              <span className="eyebrow">HUMAN CONTEXT</span>
-              <h3>Mission</h3>
-              <p>{profile.human.identity.mission ?? 'Not defined yet.'}</p>
-              <h3>Ideal customer profile</h3>
-              <p>{profile.human.domain.icp}</p>
-              <h3>Boundaries and current priorities</h3>
-              <div className="chips">
-                {(profile.human.domain.exclusions ?? []).map((item) => (
-                  <span className="chip" key={item}>
-                    {item}
-                  </span>
-                ))}
-                {(profile.human.currentPriorities ?? []).map((item) => (
-                  <span className="chip priority" key={item}>
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </article>
-          </section>
-          <section className="three-col">
-            <article className="panel">
-              <span className="eyebrow">SELF-CONCEPT</span>
-              <h3>How this person understands themselves</h3>
-              <p>{profile.human.selfConcept.summary ?? 'Not defined yet.'}</p>
-              <div className="chips">
-                {lineValues(
-                  profile.human.selfConcept.howTheyDescribeThemselves,
-                ).map((item) => (
-                  <span className="chip" key={item}>
-                    {item}
-                  </span>
-                ))}
-              </div>
-              <h4>Non-negotiables</h4>
-              <ul>
-                {factValues(profile.human.selfConcept.nonNegotiables).map(
-                  (item) => (
-                    <li key={item}>{item}</li>
-                  ),
-                )}
-              </ul>
-            </article>
-            <article className="panel">
-              <span className="eyebrow">BIOGRAPHY</span>
-              <h3>Personal and professional context</h3>
-              <p>{profile.human.biography.summary ?? 'Not defined yet.'}</p>
-              <p className="muted">
-                {profile.human.biography.currentChapter ??
-                  'No current chapter recorded.'}
-              </p>
-              <h4>Expertise</h4>
-              <div className="chips">
-                {factValues(profile.human.biography.domainExpertise).map(
-                  (item) => (
-                    <span className="chip" key={item}>
-                      {item}
-                    </span>
-                  ),
-                )}
-              </div>
-            </article>
-            <article className="panel">
-              <span className="eyebrow">VALUES HIERARCHY</span>
-              <h3>What wins when values conflict</h3>
-              <div className="value-list">
-                {(profile.human.selfConcept.valuesHierarchy ?? []).map(
-                  (item) => (
-                    <div className="value-row" key={item.value}>
-                      <strong>{item.value}</strong>
-                      <span>{item.priority ?? 50}</span>
-                      <small>{item.meaning ?? 'Priority in judgment'}</small>
-                    </div>
-                  ),
-                )}
-              </div>
-            </article>
-          </section>
-          <section className="panel">
-            <div className="section-title">
-              <div>
-                <span className="eyebrow">HUMAN MODEL</span>
-                <h2>How this person wants to be represented</h2>
-              </div>
-              <span className="count">
-                {profile.human.behavior.relationship}
-              </span>
-            </div>
-            <div className="model-grid">
-              <div>
-                <span className="eyebrow">VOICE</span>
-                <p>
-                  {profile.human.persona.tone ?? 'balanced'} tone ·{' '}
-                  {profile.human.persona.verbosity ?? 'balanced'} ·{' '}
-                  {Math.round((profile.human.persona.directness ?? 0.5) * 100)}%
-                  direct
-                </p>
-              </div>
-              <div>
-                <span className="eyebrow">DECISION STYLE</span>
-                <p>
-                  {profile.human.decision.riskTolerance ?? 'balanced'} risk ·{' '}
-                  {profile.human.decision.reversibilityPreference ?? 'balanced'}
-                </p>
-              </div>
-              <div>
-                <span className="eyebrow">WHEN UNCERTAIN</span>
-                <p>
-                  {profile.human.behavior.whenUncertain ?? 'State uncertainty'}
-                </p>
-              </div>
-              <div>
-                <span className="eyebrow">WHEN WRONG</span>
-                <p>{profile.human.behavior.whenWrong ?? 'Admit and correct'}</p>
-              </div>
-              <div>
-                <span className="eyebrow">COMMUNICATION MECHANICS</span>
-                <p>
-                  {profile.human.persona.greetingStyle ?? 'brief'} greeting ·{' '}
-                  {profile.human.persona.sentenceRhythm ?? 'varied'} rhythm ·{' '}
-                  {profile.human.persona.askStyle ?? 'minimal'} questions
-                </p>
-              </div>
-              <div>
-                <span className="eyebrow">DECISION HEURISTICS</span>
-                <p>
-                  {(profile.human.decision.heuristics ?? []).join(' · ') ||
-                    'Not defined yet.'}
-                </p>
-              </div>
-            </div>
-            <div className="three-col compact-grid">
-              <div>
-                <span className="eyebrow">TRUST SIGNALS</span>
-                <ul>
-                  {factValues(profile.human.relational.trustSignals).map(
-                    (item) => (
-                      <li key={item}>{item}</li>
-                    ),
-                  )}
-                </ul>
-              </div>
-              <div>
-                <span className="eyebrow">TRUST BREAKERS</span>
-                <ul>
-                  {factValues(profile.human.relational.trustBreakers).map(
-                    (item) => (
-                      <li key={item}>{item}</li>
-                    ),
-                  )}
-                </ul>
-              </div>
-              <div>
-                <span className="eyebrow">CONSENT AND BOUNDARIES</span>
-                <ul>
-                  {lineValues(profile.human.boundaries.mustAsk).map((item) => (
-                    <li key={item}>Ask: {item}</li>
-                  ))}
-                  {lineValues(profile.human.boundaries.neverInfer).map(
-                    (item) => (
-                      <li key={item}>Never infer: {item}</li>
-                    ),
-                  )}
-                </ul>
-              </div>
-            </div>
-            <div className="agents">
-              <span className="eyebrow">CONNECTED AGENT RELATIONSHIPS</span>
-              {profile.delegations.map((delegation) => (
-                <div className="agent" key={delegation.id}>
-                  <div>
-                    <strong>
-                      {delegation.profileId ?? 'General context relationship'}
-                    </strong>
-                    <p>{delegation.purpose}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="agents">
-              <span className="eyebrow">AUDIENCE MODES</span>
-              {(profile.human.persona.modes ?? []).map((mode) => (
-                <div className="agent" key={mode.id}>
-                  <div>
-                    <strong>{mode.audience}</strong>
-                    <p>
-                      {mode.purpose ?? 'Audience-specific communication mode'}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        </>
-      )}
+function Button({
+  children,
+  secondary = false,
+  onClick,
+  type = 'button',
+}: {
+  children: ReactNode;
+  secondary?: boolean;
+  onClick?: () => void;
+  type?: 'button' | 'submit';
+}) {
+  return (
+    <button
+      className={`button ${secondary ? 'button-secondary' : ''}`}
+      onClick={onClick}
+      type={type}
+    >
+      {children}
+    </button>
+  );
+}
 
-      <section className="panel workflow-panel">
-        <div className="section-title">
-          <div>
-            <span className="eyebrow">PLAYBOOK STATE</span>
-            <h2>Expert workflows</h2>
+function Notch({ variant = 'chat' }: { variant?: string }) {
+  const rows: Record<string, string[]> = {
+    chat: ['context ready', 'voice: direct · warm'],
+    identity: ['human model', 'confidence 98%'],
+    context: ['task context', '3 memories selected'],
+    judgment: ['decision style', 'ask before commitment'],
+    memory: ['memory evidence', 'confirmed · 2 sources'],
+    boundary: ['boundary check', 'approval required'],
+    continuity: ['open loop', 'partner follow-up'],
+    correction: ['correction saved', 'supersedes inference'],
+    profession: ['professional mode', 'financial analyst'],
+    authority: ['delegation scope', 'read · draft · ask'],
+    outcomes: ['outcome recorded', 'reply quality improved'],
+    voice: ['response guidance', 'concise · evidence-led'],
+    privacy: ['packet signed', 'expires in 14 min'],
+  };
+  const [first, second] = rows[variant] ?? rows.chat;
+  return (
+    <div className="notch" aria-label={`${first}, ${second}`}>
+      <span className="notch-dot green-dot" />
+      <span className="notch-label">{first}</span>
+      <span className="notch-divider" />
+      <span className="notch-label muted-label">{second}</span>
+      <span className="notch-dot lilac-dot" />
+    </div>
+  );
+}
+
+function Atmosphere({
+  children,
+  dark = false,
+}: {
+  children: ReactNode;
+  dark?: boolean;
+}) {
+  return (
+    <div className={`atmosphere ${dark ? 'atmosphere-dark' : ''}`}>
+      {children}
+    </div>
+  );
+}
+
+function HomePage() {
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  return (
+    <div className="site">
+      <Atmosphere>
+        <header className="nav container">
+          <Logo />
+          <div className="demo-notch">
+            <span className="tiny-dot green-dot" />
+            <span>your context is ready</span>
+            <button onClick={() => navigate('/app')}>
+              try the workspace <Arrow />
+            </button>
           </div>
-          <span className="count">{workflows.length} runs</span>
+          <Button secondary onClick={() => navigate('/sign-in')}>
+            Enter workspace <Arrow />
+          </Button>
+        </header>
+        <section className="hero container">
+          <div className="hero-copy">
+            <span className="eyebrow">the human context engine for agents</span>
+            <h1>
+              Your agent,<em>humanized.</em>
+            </h1>
+            <p className="hero-lede">
+              deal gives every AI agent a grounded understanding of who you are,
+              how you think, and how you want the work done.
+            </p>
+            <div className="hero-actions">
+              <Button onClick={() => navigate('/sign-up')}>
+                Give your agent a human <Arrow />
+              </Button>
+              <Button
+                secondary
+                onClick={() =>
+                  document
+                    .getElementById('how-it-works')
+                    ?.scrollIntoView({ behavior: 'smooth' })
+                }
+              >
+                See how it works
+              </Button>
+            </div>
+          </div>
+          <div className="hero-compatibility">
+            <span>works with the agents you already use</span>
+            <div className="pill-row">
+              {integrations.map((item) => (
+                <span className="integration-pill" key={item}>
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="hero-landscape" aria-hidden="true">
+            <div className="sun-glow" />
+            <div className="mountain mountain-back" />
+            <div className="mountain mountain-mid" />
+            <div className="mountain mountain-front" />
+          </div>
+        </section>
+      </Atmosphere>
+      <section className="workflow-section" id="how-it-works">
+        <div className="container section-center">
+          <span className="eyebrow">less explaining. more doing.</span>
+          <h2>
+            Stop reintroducing yourself
+            <br />
+            <em>to every agent.</em>
+          </h2>
+          <p className="section-lede">
+            One human model follows you from conversation to conversation,
+            provider to provider, and decision to decision.
+          </p>
+          <div className="session-grid">
+            {sessions.map((session) => (
+              <article className="session-card" key={session.title}>
+                <div className="session-status">
+                  <span className={`status-dot ${session.color}`} />
+                  {session.status}
+                  <span className="session-line" />
+                </div>
+                <h3>{session.title}</h3>
+                <p>{session.body}</p>
+              </article>
+            ))}
+          </div>
         </div>
-        {workflows.length === 0 ? (
-          <p className="muted">No workflow runs yet.</p>
-        ) : (
-          <div className="workflow-list">
-            {workflows.map((workflow) => (
-              <div className="workflow" key={workflow.id}>
-                <div>
-                  <strong>{workflow.profileId}</strong>
-                  <p>{workflow.goal}</p>
+      </section>
+      <section className="features-section container" id="features">
+        <div className="section-heading">
+          <span className="eyebrow">
+            the layer between intelligence and action
+          </span>
+          <h2>
+            Everything an agent needs
+            <br />
+            <em>to understand the human.</em>
+          </h2>
+        </div>
+        <div className="feature-grid">
+          {features.map(([tone, tag, title, body, variant]) => (
+            <article className="feature-card" key={title}>
+              <div className={`mockup-panel ${tone}`}>
+                <Notch variant={variant} />
+                <div className="mockup-window">
+                  <div className="window-bar">
+                    <span />
+                    <span />
+                    <span />
+                    <small>{tag}</small>
+                  </div>
+                  <div className="window-lines">
+                    <b />
+                    <b />
+                    <b />
+                    <i />
+                  </div>
+                  <div className="window-footer">
+                    <span className="mini-check">✓</span>
+                    <span>grounded context</span>
+                    <span className="mini-progress" />
+                  </div>
                 </div>
-                <div>
-                  <span className="status">{workflow.currentStep}</span>
-                  <small>{new Date(workflow.updatedAt).toLocaleString()}</small>
-                </div>
+              </div>
+              <span className="feature-tag">{tag}</span>
+              <h3>{title}</h3>
+              <p>{body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <section className="benefits-section container">
+        <div className="divider" />
+        <div className="benefit-grid">
+          {benefits.map(([number, title, body]) => (
+            <article className="benefit" key={number}>
+              <span className="benefit-icon">{number}</span>
+              <div>
+                <h3>{title}</h3>
+                <p>{body}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+      <section className="integrations-section">
+        <div className="container section-center">
+          <span className="eyebrow">bring your own agent</span>
+          <h2>
+            Keep the tools
+            <br />
+            <em>you already love.</em>
+          </h2>
+          <p className="section-lede">
+            deal sits quietly beside your stack. It supplies the human layer
+            while your agent keeps its model, tools, and way of working.
+          </p>
+          <div className="integration-cards">
+            <article className="integration-card">
+              <span className="card-kicker">native sdk</span>
+              <h3>
+                One small layer.
+                <br />
+                Every provider.
+              </h3>
+              <p>
+                Connect once and carry identity, memory, judgment, and
+                boundaries into every model call.
+              </p>
+              <button onClick={() => navigate('/sign-up')}>
+                Explore the sdk <Arrow />
+              </button>
+            </article>
+            <article className="integration-card integration-card-dark">
+              <span className="card-kicker">agent runtime</span>
+              <h3>
+                Your agent stays
+                <br />
+                in the driver’s seat.
+              </h3>
+              <p>
+                deal does not own your tools or execution loop. It helps your
+                agent understand when and how to use them.
+              </p>
+              <button onClick={() => navigate('/sign-up')}>
+                See the architecture <Arrow />
+              </button>
+            </article>
+          </div>
+          <div className="pill-row pill-row-wide">
+            {[
+              'OpenAI Agents',
+              'Claude Agent SDK',
+              'LangChain v1',
+              'Vercel AI SDK',
+              'OpenRouter',
+              'Responses API',
+              'Chat Completions',
+              'Custom runtime',
+            ].map((item) => (
+              <span className="integration-pill" key={item}>
+                {item}
+              </span>
+            ))}
+          </div>
+          <div className="terminal-row">
+            <span className="terminal-mark">›_</span>
+            <span>Works anywhere your agent can make an API call.</span>
+            <a href="#features">
+              Read the integration guide <Arrow />
+            </a>
+          </div>
+        </div>
+      </section>
+      <section className="pricing-section container">
+        <div className="section-center pricing-heading">
+          <span className="eyebrow">early access</span>
+          <h2>
+            Make your agent feel
+            <br />
+            <em>like it knows you.</em>
+          </h2>
+        </div>
+        <div className="pricing-card">
+          <div className="pricing-offer">
+            <span className="offer-badge">founding access</span>
+            <h3>
+              Human context
+              <br />
+              for your agents.
+            </h3>
+            <p>
+              Start building with the identity, memory, and judgment layer your
+              agents have been missing.
+            </p>
+            <div className="price">
+              <small>from</small>
+              <strong>$0</strong>
+              <span>while in early access</span>
+            </div>
+            <Button onClick={() => navigate('/sign-up')}>
+              Start shaping your agent <Arrow />
+            </Button>
+            <a href="#faq">Questions? Read the faq</a>
+          </div>
+          <div className="pricing-benefits">
+            <span className="card-kicker">included from day one</span>
+            {[
+              'A portable human model',
+              'Provider-neutral sdk and adapters',
+              'Memory with provenance and corrections',
+              'Scoped context packets',
+              'Boundaries and approval logic',
+              'A workspace to review what your agent learns',
+            ].map((item) => (
+              <div className="benefit-line" key={item}>
+                <span>✓</span>
+                {item}
               </div>
             ))}
           </div>
-        )}
+        </div>
+        <p className="licence-note">
+          No credit card required. Your context stays yours, even when the model
+          changes.
+        </p>
+        <blockquote>
+          “It is the first time my agents feel like they are working from the
+          same understanding of me.”
+        </blockquote>
+        <div className="resource-grid">
+          <a href="#features">
+            <span>01</span>
+            <strong>Human context, explained</strong>
+            <small>Why intelligence needs identity.</small>
+            <Arrow />
+          </a>
+          <a href="#how-it-works">
+            <span>02</span>
+            <strong>Inside the context packet</strong>
+            <small>What reaches your agent each turn.</small>
+            <Arrow />
+          </a>
+          <a href="#faq">
+            <span>03</span>
+            <strong>Trust by design</strong>
+            <small>Boundaries, memory, and approval.</small>
+            <Arrow />
+          </a>
+          <a href="https://github.com/zester4/deal-engine">
+            <span>04</span>
+            <strong>Build with deal</strong>
+            <small>Read the open architecture.</small>
+            <Arrow />
+          </a>
+        </div>
       </section>
-
-      <section className="two-col">
-        <article className="panel">
-          <div className="section-title">
-            <div>
-              <span className="eyebrow">HUMAN CHECKPOINT</span>
-              <h2>Approvals</h2>
-            </div>
-            <span className="count">
-              {approvals.filter((item) => item.status === 'pending').length}{' '}
-              pending
-            </span>
+      <section className="faq-section" id="faq">
+        <div className="container">
+          <span className="eyebrow">questions, answered</span>
+          <h2>
+            Good context deserves
+            <br />
+            <em>good questions.</em>
+          </h2>
+          <div className="faq-list">
+            {faqs.map(([question, answer], index) => (
+              <div
+                className={`faq-row ${openFaq === index ? 'faq-open' : ''}`}
+                key={question}
+              >
+                <button
+                  onClick={() => setOpenFaq(openFaq === index ? null : index)}
+                >
+                  <span>{question}</span>
+                  <b>{openFaq === index ? '−' : '+'}</b>
+                </button>
+                {openFaq === index && <p>{answer}</p>}
+              </div>
+            ))}
           </div>
-          {approvals.length === 0 ? (
-            <p className="muted">No approval requests.</p>
-          ) : (
-            <div className="approval-list">
-              {approvals.map((approval) => (
-                <div className="approval" key={approval.id}>
-                  <div>
-                    <strong>{approval.action}</strong>
-                    <p>{approval.summary}</p>
-                    <small>
-                      {new Date(approval.createdAt).toLocaleString()}
-                    </small>
-                  </div>
-                  <div className="actions">
-                    {approval.status === 'pending' ? (
-                      <>
-                        <button
-                          onClick={() => void decide(approval.id, 'approved')}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          className="danger"
-                          onClick={() => void decide(approval.id, 'denied')}
-                        >
-                          Deny
-                        </button>
-                      </>
-                    ) : (
-                      <span className={`status ${approval.status}`}>
-                        {approval.status}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+        </div>
+      </section>
+      <Atmosphere dark>
+        <section className="closing-cta container section-center">
+          <span className="eyebrow">the human layer for the agent era</span>
+          <h2>
+            Make a little more room
+            <br />
+            <em>for understanding.</em>
+          </h2>
+          <p className="section-lede">
+            Give your agents a way to know who they are helping before they
+            decide what to do.
+          </p>
+          <div className="hero-actions">
+            <Button onClick={() => navigate('/sign-up')}>
+              Give your agent a human <Arrow />
+            </Button>
+            <Button secondary onClick={() => navigate('/sign-in')}>
+              Enter the workspace
+            </Button>
+          </div>
+          <small>
+            No credit card required · start with your existing agent
+          </small>
+        </section>
+      </Atmosphere>
+      <footer className="footer container">
+        <div className="footer-top">
+          <Logo />
+          <div className="footer-links">
+            <a href="#features">Product</a>
+            <a href="#how-it-works">How it works</a>
+            <a href="#faq">Faq</a>
+            <a href="https://github.com/zester4/deal-engine">Github</a>
+          </div>
+          <span className="footer-note">
+            Human context for the agents you already use.
+          </span>
+        </div>
+        <div className="footer-bottom">
+          <span>© 2026 deal</span>
+          <span>
+            Built for thoughtful agents and the people they represent.
+          </span>
+          <div>
+            <a href="#">Privacy</a>
+            <a href="#">Terms</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
+  const [submitted, setSubmitted] = useState(false);
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitted(true);
+  }
+  const signIn = mode === 'sign-in';
+  return (
+    <div className="auth-page">
+      <div className="auth-visual">
+        <div className="auth-orb orb-one" />
+        <div className="auth-orb orb-two" />
+        <div className="auth-content">
+          <Logo light />
+          <span className="eyebrow">the human context engine</span>
+          <h1>
+            {signIn
+              ? 'Welcome back to your human model.'
+              : 'Give your agent a better understanding.'}
+          </h1>
+          <p>
+            {signIn
+              ? 'Your context, your boundaries, and the work already in motion.'
+              : 'Start with the person behind the prompt. Build a context layer that travels.'}
+          </p>
+          <div className="auth-preview">
+            <Notch variant="chat" />
+            <strong>context ready</strong>
+            <span>identity · memory · judgment</span>
+          </div>
+        </div>
+      </div>
+      <main className="auth-form-wrap">
+        <div className="auth-form-top">
+          <button className="text-button" onClick={() => navigate('/')}>
+            ← Back to deal
+          </button>
+          <span>
+            {signIn ? 'New here?' : 'Already have an account?'}{' '}
+            <button
+              className="inline-link"
+              onClick={() => navigate(signIn ? '/sign-up' : '/sign-in')}
+            >
+              {signIn ? 'Create an account' : 'Sign in'}
+            </button>
+          </span>
+        </div>
+        <div className="auth-form">
+          <span className="eyebrow">
+            {signIn ? 'welcome back' : 'early access'}
+          </span>
+          <h2>{signIn ? 'Enter your workspace.' : 'Start with the human.'}</h2>
+          <p>
+            {signIn
+              ? 'Sign in to review what your agents understand and how they act.'
+              : 'Create your workspace and start shaping the context your agents carry.'}
+          </p>
+          <form onSubmit={submit}>
+            <label>
+              Email address
+              <input type="email" placeholder="you@company.com" required />
+            </label>
+            {!signIn && (
+              <label>
+                What should we call you?
+                <input type="text" placeholder="Your name" required />
+              </label>
+            )}
+            <Button type="submit">
+              {signIn ? 'Continue with email' : 'Create workspace'} <Arrow />
+            </Button>
+          </form>
+          <div className="auth-divider">
+            <span>or continue with</span>
+          </div>
+          <Button secondary onClick={() => setSubmitted(true)}>
+            Continue with single sign-on
+          </Button>
+          {submitted && (
+            <div className="auth-message">
+              Your secure sign-in flow will open here when authentication is
+              connected.
             </div>
           )}
-        </article>
-        <article className="panel">
-          <div className="section-title">
-            <div>
-              <span className="eyebrow">IMMUTABLE TRAIL</span>
-              <h2>Recent audit</h2>
+          <small className="auth-legal">
+            By continuing, you agree to the deal terms and privacy policy.
+          </small>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function DashboardPage() {
+  const [active, setActive] = useState('Overview');
+  const navItems = ['Overview', 'Human model', 'Memory', 'Agents', 'Approvals'];
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <Logo />
+        <div className="workspace-switch">
+          <span className="workspace-avatar">DF</span>
+          <span>
+            <strong>Demo Founder</strong>
+            <small>personal workspace</small>
+          </span>
+          <span>⌄</span>
+        </div>
+        <nav>
+          {navItems.map((item, index) => (
+            <button
+              className={active === item ? 'nav-active' : ''}
+              onClick={() => setActive(item)}
+              key={item}
+            >
+              <span className="nav-icon">
+                {['◌', '◈', '⌁', '◇', '✓'][index]}
+              </span>
+              {item}
+              {item === 'Approvals' && <b>2</b>}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <button onClick={() => navigate('/')}>
+            <span className="nav-icon">↗</span>View homepage
+          </button>
+          <button onClick={() => navigate('/sign-in')}>
+            <span className="nav-icon">↪</span>Sign out
+          </button>
+        </div>
+      </aside>
+      <main className="app-main">
+        <header className="app-header">
+          <div>
+            <span className="eyebrow">
+              {active === 'Overview' ? 'tuesday, october 20' : 'human context'}
+            </span>
+            <h1>{active === 'Overview' ? 'Good morning, founder.' : active}</h1>
+          </div>
+          <div className="app-actions">
+            <span className="sync-status">
+              <i /> synced just now
+            </span>
+            <button className="avatar-button">DF</button>
+          </div>
+        </header>
+        {active === 'Overview' ? (
+          <Overview />
+        ) : (
+          <PlaceholderView title={active} />
+        )}
+      </main>
+    </div>
+  );
+}
+
+function Overview() {
+  return (
+    <div className="overview">
+      <section className="dashboard-hero">
+        <div>
+          <span className="eyebrow">your human model</span>
+          <h2>
+            Clear enough to
+            <br />
+            <em>act like you.</em>
+          </h2>
+          <p>
+            Everything your agents need to understand the person behind the
+            work, kept in one living model.
+          </p>
+          <button className="dark-link">
+            Review the model <Arrow />
+          </button>
+        </div>
+        <div className="dashboard-model">
+          <Notch variant="identity" />
+          <div className="model-surface">
+            <span className="surface-label">current signal</span>
+            <strong>Protect durable trust.</strong>
+            <p>Priority 01 · confirmed by you</p>
+            <div className="surface-bar">
+              <i />
             </div>
           </div>
-          <div className="audit-list">
-            {audit
-              .slice(-8)
-              .reverse()
-              .map((event) => (
-                <div className="audit" key={event.id}>
-                  <span className="dot" />
-                  <div>
-                    <strong>{event.eventType}</strong>
-                    <p>{new Date(event.occurredAt).toLocaleString()}</p>
-                  </div>
-                </div>
-              ))}
+          <div className="model-tags">
+            <span>identity</span>
+            <span>values</span>
+            <span>boundaries</span>
           </div>
-        </article>
+        </div>
       </section>
-    </main>
+      <div className="stat-grid">
+        <div className="stat-card">
+          <span>active agents</span>
+          <strong>04</strong>
+          <small>all within scope</small>
+        </div>
+        <div className="stat-card">
+          <span>context turns</span>
+          <strong>128</strong>
+          <small>this month</small>
+        </div>
+        <div className="stat-card">
+          <span>memory confidence</span>
+          <strong>94%</strong>
+          <small>up 8% this month</small>
+        </div>
+        <div className="stat-card stat-alert">
+          <span>human checkpoints</span>
+          <strong>02</strong>
+          <small>waiting for you</small>
+        </div>
+      </div>
+      <div className="dashboard-columns">
+        <section className="dashboard-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">agent activity</span>
+              <h3>What is happening now</h3>
+            </div>
+            <button className="quiet-link">
+              View all <Arrow />
+            </button>
+          </div>
+          <div className="activity-list">
+            <Activity
+              dot="green"
+              name="OpenAI agent"
+              task="Drafting a partner reply"
+              time="2 min ago"
+              status="Context supplied"
+            />
+            <Activity
+              dot="blue"
+              name="Claude workspace"
+              task="Reviewing the new brief"
+              time="18 min ago"
+              status="Learning"
+            />
+            <Activity
+              dot="amber"
+              name="Custom runtime"
+              task="Paused before commitment"
+              time="1 hr ago"
+              status="Needs you"
+            />
+          </div>
+        </section>
+        <section className="dashboard-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">human checkpoints</span>
+              <h3>Waiting for your call</h3>
+            </div>
+            <span className="panel-count">2</span>
+          </div>
+          <div className="checkpoint">
+            <span className="checkpoint-icon">!</span>
+            <div>
+              <strong>External commitment</strong>
+              <p>Agent wants to send a proposal to a new partner.</p>
+              <small>Requires your approval · 12 min ago</small>
+            </div>
+          </div>
+          <div className="checkpoint">
+            <span className="checkpoint-icon">?</span>
+            <div>
+              <strong>Ambiguous preference</strong>
+              <p>Should this be direct or more relational?</p>
+              <small>Needs clarification · 34 min ago</small>
+            </div>
+          </div>
+        </section>
+      </div>
+      <section className="dashboard-panel model-summary">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">model pulse</span>
+            <h3>What deal understands about you</h3>
+          </div>
+          <button className="quiet-link">
+            Open human model <Arrow />
+          </button>
+        </div>
+        <div className="pulse-grid">
+          <Pulse label="voice" value="direct, warm, evidence-led" />
+          <Pulse label="decision style" value="reversible first" />
+          <Pulse label="trust signal" value="clear tradeoffs" />
+          <Pulse label="never assume" value="consent to commitment" />
+        </div>
+      </section>
+    </div>
   );
+}
+
+function Activity({
+  dot,
+  name,
+  task,
+  time,
+  status,
+}: {
+  dot: string;
+  name: string;
+  task: string;
+  time: string;
+  status: string;
+}) {
+  return (
+    <div className="activity">
+      <span className={`status-dot ${dot}`} />
+      <div>
+        <strong>{name}</strong>
+        <p>{task}</p>
+      </div>
+      <div className="activity-meta">
+        <span>{status}</span>
+        <small>{time}</small>
+      </div>
+    </div>
+  );
+}
+function Pulse({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="pulse">
+      <span className="eyebrow">{label}</span>
+      <strong>{value}</strong>
+      <div className="pulse-line">
+        <i />
+      </div>
+    </div>
+  );
+}
+function PlaceholderView({ title }: { title: string }) {
+  return (
+    <section className="empty-view">
+      <span className="empty-mark">◌</span>
+      <span className="eyebrow">{title.toLowerCase()}</span>
+      <h2>
+        A calmer place to
+        <br />
+        <em>understand the work.</em>
+      </h2>
+      <p>
+        This section is ready for the next layer of your human context
+        workspace.
+      </p>
+      <Button secondary onClick={() => navigate('/app')}>
+        Back to overview
+      </Button>
+    </section>
+  );
+}
+
+function App() {
+  const route = useRoute();
+  if (route === '/sign-in') return <AuthPage mode="sign-in" />;
+  if (route === '/sign-up') return <AuthPage mode="sign-up" />;
+  if (route === '/app') return <DashboardPage />;
+  return <HomePage />;
 }
 
 createRoot(document.getElementById('root')!).render(<App />);

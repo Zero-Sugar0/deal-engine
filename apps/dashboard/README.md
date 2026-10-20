@@ -1,8 +1,8 @@
 # DEAL Dashboard
 
-The user-facing control surface. It currently provides a focused trust console for the
-first Growth Operator slice: profile, identity, response behavior, memory boundaries,
-continuity, optional approvals, and recent audit history.
+The public product surface for deal. It includes the marketing homepage, sign-in and
+sign-up entry points, and the authenticated workspace shell for human context, agents,
+memory, approvals, and audit.
 
 ## Local development
 
@@ -12,9 +12,16 @@ cd apps/dashboard
 ../../node_modules/.bin/vite
 ```
 
-Open `http://localhost:5173`. The dashboard defaults to the hosted deal API. Set
-`VITE_DEAL_API_URL` only when using a self-hosted or local API. The human token is
-entered privately in the connection panel and is never bundled into the frontend.
+Open `http://localhost:5173`. The dashboard is configured to use the hosted deal API
+without exposing infrastructure configuration in the user interface. Set
+`VITE_DEAL_API_URL` only when using a self-hosted or local API.
+
+Routes:
+
+- `/` — product homepage
+- `/sign-in` — sign-in entry point
+- `/sign-up` — workspace creation entry point
+- `/app` — human context workspace
 
 ## Screens
 
