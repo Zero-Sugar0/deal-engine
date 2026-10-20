@@ -6,6 +6,7 @@ import type { MemoryRecord } from '@deal/core';
 import {
   InMemoryAdapter,
   PostgresMemoryAdapter,
+  type MemoryAdapter,
   type MemoryEmbeddingProvider,
 } from '@deal/memory';
 import {
@@ -65,10 +66,34 @@ export class PostgresDealStore extends DealStore {
 
   constructor(
     connectionString: string,
-    options: { embeddingProvider?: MemoryEmbeddingProvider } = {},
+    options: {
+      embeddingProvider?: MemoryEmbeddingProvider;
+      semanticAdapter?: MemoryAdapter;
+    } = {},
   ) {
-    const pool = new Pool({ connectionString, max: 10 });
-    super(new PostgresMemoryAdapter(pool, options.embeddingProvider));
+    const pool = new Pool({
+      connectionString,
+      max: Number(process.env.DEAL_DB_POOL_MAX ?? 20),
+      connectionTimeoutMillis: Number(
+        process.env.DEAL_DB_CONNECTION_TIMEOUT_MS ?? 5_000,
+      ),
+      idleTimeoutMillis: Number(process.env.DEAL_DB_IDLE_TIMEOUT_MS ?? 30_000),
+      ...(process.env.DEAL_DATABASE_SSL === 'true'
+        ? {
+            ssl: {
+              rejectUnauthorized:
+                process.env.DEAL_DATABASE_SSL_VERIFY !== 'false',
+            },
+          }
+        : {}),
+    });
+    super(
+      new PostgresMemoryAdapter(
+        pool,
+        options.embeddingProvider,
+        options.semanticAdapter,
+      ),
+    );
     this.pool = pool;
     this.ready = this.initialize();
   }

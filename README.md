@@ -138,6 +138,8 @@ Production controls now include:
   correction lineage, and optional embedding vectors from an OpenAI-compatible
   endpoint. Full-text retrieval remains the deterministic fallback when no
   embedding provider is configured.
+- Optional Supermemory v4 hybrid retrieval, mirrored after canonical Postgres
+  writes and re-validated against Postgres before results reach an agent.
 
 External systems and tool credentials remain owned by the host agent and are
 intentionally outside this repository’s core scope.

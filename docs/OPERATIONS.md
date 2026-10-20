@@ -8,6 +8,10 @@ calendar, or OAuth connector credentials.
 
 - `DATABASE_URL`: shared Postgres 16+ connection string. Every API instance must
   use the same database.
+- `DEAL_DB_POOL_MAX`, `DEAL_DB_CONNECTION_TIMEOUT_MS`, and
+  `DEAL_DB_IDLE_TIMEOUT_MS`: tune bounded database connection usage.
+- `DEAL_DATABASE_SSL=true` for TLS database connections; keep verification on
+  unless the deployment explicitly provides a private test certificate.
 - `DEAL_JWT_SECRET`: at least 32 random characters. It signs context and action
   packets.
 - `DEAL_DASHBOARD_ORIGIN`: explicit browser origin in production.
@@ -56,6 +60,18 @@ organization, sensitivity, validity, and supersession filters before ranking.
 Set `DEAL_EMBEDDING_URL` to an OpenAI-compatible embedding endpoint to enable
 semantic reranking; without it, the indexed `tsvector` path is deterministic and
 durable. The embedding service is an optimization, not the authority for memory.
+
+For an additional managed semantic index, set `SUPERMEMORY_API_KEY` and leave
+`SUPERMEMORY_API_VERSION=v4`. DEAL writes canonical records to Postgres first,
+mirrors them to Supermemory with a `deal:<memory-id>` reference, and accepts
+semantic hits only after resolving them back through Postgres. Supermemory v4 is
+used for its documented create/search surface; DEAL's canonical state handles
+corrections and forgetting, so stale remote hits are rejected. This keeps
+Supermemory useful for recall without allowing remote results to bypass DEAL's
+tenant, validity, supersession, sensitivity, or correction rules. Set
+`SUPERMEMORY_API_VERSION=v3` only for an older compatible gateway.
+`SUPERMEMORY_TIMEOUT_MS` bounds remote retrieval latency; Postgres retrieval
+continues to work if Supermemory is unavailable or times out.
 
 ## Rate limits and observability
 

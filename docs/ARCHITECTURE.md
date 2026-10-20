@@ -135,20 +135,20 @@ Records every context disclosure, decision, approval, action, and outcome.
 
 Use existing memory infrastructure for retrieval and extraction. Use DEAL for canonical structure and governance.
 
-| Concern                      | Owner                            |
-| ---------------------------- | -------------------------------- |
-| Canonical memory records     | DEAL/Postgres                    |
-| Durable lexical retrieval    | DEAL/Postgres                    |
-| Optional semantic reranking  | Configured embedding provider    |
-| External semantic substrate  | Supermemory adapter (optional)   |
-| Document/file ingestion      | Host agent or external substrate |
-| Fact extraction              | Host agent or external substrate |
-| User profile summary         | DEAL                             |
-| Canonical persona schema     | DEAL                             |
-| Identity and authority       | DEAL                             |
-| Judgment and boundaries      | DEAL                             |
-| Consent and audit            | DEAL                             |
-| Cross-agent context contract | DEAL                             |
+| Concern                      | Owner                                                     |
+| ---------------------------- | --------------------------------------------------------- |
+| Canonical memory records     | DEAL/Postgres                                             |
+| Durable lexical retrieval    | DEAL/Postgres                                             |
+| Optional semantic reranking  | Configured embedding provider                             |
+| External semantic substrate  | Supermemory v4 adapter (optional, canonical-first mirror) |
+| Document/file ingestion      | Host agent or external substrate                          |
+| Fact extraction              | Host agent or external substrate                          |
+| User profile summary         | DEAL                                                      |
+| Canonical persona schema     | DEAL                                                      |
+| Identity and authority       | DEAL                                                      |
+| Judgment and boundaries      | DEAL                                                      |
+| Consent and audit            | DEAL                                                      |
+| Cross-agent context contract | DEAL                                                      |
 
 ## Security model
 

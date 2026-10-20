@@ -86,7 +86,9 @@ CREATE TABLE IF NOT EXISTS memory_records (
   kind text NOT NULL,
   content jsonb NOT NULL,
   content_text text NOT NULL DEFAULT '',
+  search_vector tsvector GENERATED ALWAYS AS (to_tsvector('simple', content_text)) STORED,
   embedding jsonb,
+  semantic_ref text,
   confidence numeric CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1)),
   source text,
   confirmation text CHECK (confirmation IS NULL OR confirmation IN ('user_confirmed', 'agent_observed', 'inferred')),
@@ -105,6 +107,8 @@ ALTER TABLE memory_records ADD COLUMN IF NOT EXISTS priority integer NOT NULL DE
 ALTER TABLE memory_records ADD COLUMN IF NOT EXISTS sensitivity text NOT NULL DEFAULT 'normal';
 ALTER TABLE memory_records ADD COLUMN IF NOT EXISTS content_text text NOT NULL DEFAULT '';
 ALTER TABLE memory_records ADD COLUMN IF NOT EXISTS embedding jsonb;
+ALTER TABLE memory_records ADD COLUMN IF NOT EXISTS semantic_ref text;
+ALTER TABLE memory_records ADD COLUMN IF NOT EXISTS search_vector tsvector GENERATED ALWAYS AS (to_tsvector('simple', content_text)) STORED;
 UPDATE memory_records SET content_text = COALESCE(content->>'text', content::text) WHERE content_text = '';
 UPDATE memory_records SET confirmation = 'user_confirmed' WHERE confirmation IS NULL AND source = 'user_confirmed';
 UPDATE memory_records SET priority = 100 WHERE kind = 'correction' AND priority = 50 AND confirmation = 'user_confirmed';
@@ -227,7 +231,8 @@ CREATE TABLE IF NOT EXISTS rate_limit_windows (
 
 CREATE INDEX IF NOT EXISTS memory_records_human_kind_idx ON memory_records (human_id, kind, created_at DESC);
 CREATE INDEX IF NOT EXISTS memory_records_human_priority_idx ON memory_records (human_id, priority DESC, created_at DESC);
-CREATE INDEX IF NOT EXISTS memory_records_content_search_idx ON memory_records USING GIN (to_tsvector('simple', content_text));
+CREATE INDEX IF NOT EXISTS memory_records_search_vector_idx ON memory_records USING GIN (search_vector);
+CREATE INDEX IF NOT EXISTS memory_records_semantic_ref_idx ON memory_records (semantic_ref);
 CREATE INDEX IF NOT EXISTS external_identities_human_idx ON external_identities (human_id);
 CREATE INDEX IF NOT EXISTS rate_limit_windows_updated_idx ON rate_limit_windows (updated_at);
 CREATE INDEX IF NOT EXISTS context_packets_agent_expiry_idx ON context_packets (agent_id, expires_at DESC);
