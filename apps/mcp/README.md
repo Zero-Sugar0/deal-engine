@@ -4,10 +4,12 @@ The MCP adapter exposes DEAL’s human-context surfaces over stdio and delegates
 all compilation, memory, continuity, and boundary decisions to the DEAL API.
 
 ```bash
-DEAL_API_URL=http://localhost:3000 \
-DEAL_API_KEY=local-agent-key \
+DEAL_API_KEY=your-agent-api-key \
 node apps/mcp/dist/index.js
 ```
+
+`DEAL_API_URL` is optional for the hosted service; the MCP adapter defaults to
+the hosted deal API when it is omitted.
 
 Available tools:
 

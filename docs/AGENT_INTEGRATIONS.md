@@ -18,16 +18,16 @@ host agent runtime
 The TypeScript SDK exposes one stable runtime and thin native adapters:
 
 ```bash
-pnpm add @deal/sdk-ts
+pnpm add @deal/sdk
 ```
 
 ```ts
-import { DEAL, createDealAgentRuntime } from '@deal/sdk-ts';
+import { deal, createDealAgentRuntime } from '@deal/sdk';
 
-// Hosted DEAL: an API key is sufficient. The URL is built into the SDK.
-const deal = new DEAL(process.env.DEAL_API_KEY!);
+// Hosted deal: an API key is sufficient. The URL is built into the sdk.
+const client = new deal(process.env.DEAL_API_KEY!);
 
-const runtime = createDealAgentRuntime(deal);
+const runtime = createDealAgentRuntime(client);
 const prepared = await runtime.prepareChat({
   messages: [
     { role: 'user', content: 'Draft a thoughtful reply to the customer' },
@@ -84,7 +84,7 @@ import {
   createDealAgentRuntime,
   createDealLangChainMiddleware,
   taskFromMessages,
-} from '@deal/sdk-ts';
+} from '@deal/sdk';
 
 const runtime = createDealAgentRuntime(process.env.DEAL_API_KEY!);
 
@@ -129,10 +129,10 @@ maps the run context into a scoped instruction string.
 ```ts
 import { Agent, run } from '@openai/agents';
 import {
-  DEAL,
+  deal,
   createDealAgentRuntime,
   createDealOpenAIInstructions,
-} from '@deal/sdk-ts';
+} from '@deal/sdk';
 
 type AppContext = {
   task: string;
@@ -164,7 +164,7 @@ For the direct OpenAI Responses API, use the same runtime at the
 
 ```ts
 import OpenAI from 'openai';
-import { withDealOpenAIResponsesRequest } from '@deal/sdk-ts';
+import { withDealOpenAIResponsesRequest } from '@deal/sdk';
 
 const request = await withDealOpenAIResponsesRequest(
   { model: process.env.OPENAI_MODEL!, input: userInput },
@@ -194,10 +194,10 @@ an existing system prompt and appends the scoped DEAL context.
 ```ts
 import Anthropic from '@anthropic-ai/sdk';
 import {
-  DEAL,
+  deal,
   createDealAgentRuntime,
   withDealClaudeMessagesRequest,
-} from '@deal/sdk-ts';
+} from '@deal/sdk';
 
 const runtime = createDealAgentRuntime(process.env.DEAL_API_KEY!);
 
@@ -231,10 +231,10 @@ Language Model Specification v4 `transformParams` hook.
 import { gateway } from '@ai-sdk/gateway';
 import { streamText, wrapLanguageModel } from 'ai';
 import {
-  DEAL,
+  deal,
   createDealAgentRuntime,
   createDealAISDKMiddleware,
-} from '@deal/sdk-ts';
+} from '@deal/sdk';
 
 const runtime = createDealAgentRuntime(process.env.DEAL_API_KEY!);
 
@@ -265,10 +265,10 @@ is only responsible for selecting the model; DEAL remains the context layer.
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { wrapLanguageModel } from 'ai';
 import {
-  DEAL,
+  deal,
   createDealAgentRuntime,
   createDealAISDKMiddleware,
-} from '@deal/sdk-ts';
+} from '@deal/sdk';
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY!,

@@ -1,7 +1,7 @@
 import { HumanContextPacketSchema } from '@deal/core';
 import type { HumanContextPacket } from '@deal/core';
-import { DEAL } from './index.js';
-import type { ContextRequest, DEALOptions } from './index.js';
+import { deal } from './index.js';
+import type { ContextRequest, DealOptions } from './index.js';
 
 export type ContextEnvelope = {
   packetId: string;
@@ -391,7 +391,7 @@ export class DealAgentRuntime {
   >();
 
   constructor(
-    private readonly client: DealClientPort | DEAL,
+    private readonly client: DealClientPort | deal,
     options: DealAgentRuntimeOptions = {},
   ) {
     this.render = options.render ?? renderDealContext;
@@ -468,11 +468,11 @@ export class DealAgentRuntime {
 }
 
 export function createDealAgentRuntime(
-  client: DealClientPort | DEAL | string | DEALOptions,
+  client: DealClientPort | deal | string | DealOptions,
   options?: DealAgentRuntimeOptions,
 ): DealAgentRuntime {
   if (typeof client === 'string')
-    return new DealAgentRuntime(new DEAL(client), options);
+    return new DealAgentRuntime(new deal(client), options);
   if ('getContext' in client) return new DealAgentRuntime(client, options);
-  return new DealAgentRuntime(new DEAL(client), options);
+  return new DealAgentRuntime(new deal(client), options);
 }

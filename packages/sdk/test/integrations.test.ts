@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { HumanContextPacket } from '@deal/core';
 import {
-  DEAL,
-  DEAL_DEFAULT_API_URL,
+  deal,
+  defaultApiUrl,
   createDealAISDKMiddleware,
   createDealAgentRuntime,
   createDealClaudeAgentOptions,
@@ -200,7 +200,7 @@ describe('agent integrations', () => {
   it('supports API-key-only clients with a hosted default endpoint', async () => {
     let calledUrl = '';
     let authorization = '';
-    const deal = new DEAL({
+    const client = new deal({
       apiKey: 'deal_test_key',
       fetch: async (input, init) => {
         calledUrl = String(input);
@@ -214,8 +214,8 @@ describe('agent integrations', () => {
       },
     });
 
-    await deal.getProfile();
-    expect(calledUrl).toBe(`${DEAL_DEFAULT_API_URL}/v1/profile`);
+    await client.getProfile();
+    expect(calledUrl).toBe(`${defaultApiUrl}/v1/profile`);
     expect(authorization).toBe('Bearer deal_test_key');
   });
 

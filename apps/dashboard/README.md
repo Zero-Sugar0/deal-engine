@@ -12,8 +12,9 @@ cd apps/dashboard
 ../../node_modules/.bin/vite
 ```
 
-Open `http://localhost:5173`. The default API is `http://localhost:3000` and the default
-local human token is `local-human-key`; both can be changed in the connection panel.
+Open `http://localhost:5173`. The dashboard defaults to the hosted deal API. Set
+`VITE_DEAL_API_URL` only when using a self-hosted or local API. The human token is
+entered privately in the connection panel and is never bundled into the frontend.
 
 ## Screens
 

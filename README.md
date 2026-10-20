@@ -64,7 +64,7 @@ packages/
   core/                Domain models, schemas, context compiler
   memory/              Memory adapter interface + Supermemory adapter
   policy/              Deterministic judgment and boundary rules
-  sdk-ts/              TypeScript SDK for agent developers
+  sdk/                 TypeScript SDK for agent developers
   sdk-python/          Python SDK for agent developers
   evals/               Evaluation scenarios and golden datasets
 apps/mcp/               MCP adapter for the context engine
@@ -93,8 +93,8 @@ The first runnable vertical slice is now available:
 - Versioned schemas and context compiler under `packages/core`
 - Deterministic policy engine under `packages/policy`
 - Memory adapter contract, local adapter, and Supermemory adapter under `packages/memory`
-- TypeScript client under `packages/sdk-ts` and a dependency-free Python client under `packages/sdk-python`
-- Provider-native TypeScript integrations for LangChain, OpenAI Agents, Claude, Vercel AI SDK/AI Gateway, and OpenRouter under `packages/sdk-ts`
+- TypeScript client under `packages/sdk` and a dependency-free Python client under `packages/sdk-python`
+- Provider-native TypeScript integrations for LangChain, OpenAI Agents, Claude, Vercel AI SDK/AI Gateway, and OpenRouter under `packages/sdk`
 - Postgres migration with tenant isolation under `infra/db/migrations`
 - Vite trust dashboard under `apps/dashboard`
 - MCP stdio adapter under `apps/mcp`
@@ -109,7 +109,7 @@ pnpm install
 ./node_modules/.bin/tsc -p packages/core/tsconfig.json
 ./node_modules/.bin/tsc -p packages/policy/tsconfig.json
 ./node_modules/.bin/tsc -p packages/memory/tsconfig.json
-./node_modules/.bin/tsc -p packages/sdk-ts/tsconfig.json
+./node_modules/.bin/tsc -p packages/sdk/tsconfig.json
 ./node_modules/.bin/tsc -p apps/api/tsconfig.json
 node apps/api/dist/index.js
 ```
@@ -153,13 +153,14 @@ use the adapter native to the runtime:
 
 ```ts
 import {
-  DEAL,
+  deal,
   createDealAgentRuntime,
   createDealOpenAIInstructions,
-} from '@deal/sdk-ts';
+} from '@deal/sdk';
 
-// Hosted DEAL: the SDK has the API endpoint built in. Keep this key server-side.
-const runtime = createDealAgentRuntime(process.env.DEAL_API_KEY!);
+// Hosted deal: the sdk has the API endpoint built in. Keep this key server-side.
+const client = new deal(process.env.DEAL_API_KEY!);
+const runtime = createDealAgentRuntime(client);
 
 const instructions = createDealOpenAIInstructions({
   runtime,
@@ -174,7 +175,7 @@ const instructions = createDealOpenAIInstructions({
 For LangChain, AI SDK, Claude, OpenAI Responses, and OpenRouter, the adapters
 can infer the task from the current chat messages. A custom `request` function
 is only needed when an application has its own run-context shape. Self-hosted
-installations can still pass `{ apiKey, baseUrl }` to `DEAL`.
+installations can still pass `{ apiKey, baseUrl }` to `deal`.
 
 The full integration guide, including LangChain middleware, Claude system
 prompts, AI SDK/AI Gateway middleware, OpenRouter, outcomes, and security rules

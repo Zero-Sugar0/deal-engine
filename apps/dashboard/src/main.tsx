@@ -159,7 +159,8 @@ type Profile = {
   }>;
 };
 
-const API_DEFAULT = 'http://localhost:3000';
+const API_DEFAULT =
+  import.meta.env.VITE_DEAL_API_URL ?? 'https://deal-engine.up.railway.app';
 
 function factValues(items: ProfileFact[] | undefined): string[] {
   return (items ?? []).map((item) => item.value);

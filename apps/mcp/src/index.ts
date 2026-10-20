@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline';
 
-const apiUrl = process.env.DEAL_API_URL ?? 'http://localhost:3000';
+const apiUrl = process.env.DEAL_API_URL ?? 'https://deal-engine.up.railway.app';
 const apiKey = process.env.DEAL_API_KEY ?? 'local-agent-key';
 
 type JsonRpcRequest = {

@@ -47,12 +47,12 @@ export type HumanProfileUpdate = {
   knownConstraints?: string[];
 };
 
-/** The hosted DEAL API used when a self-hosted base URL is not supplied. */
-export const DEAL_DEFAULT_API_URL = 'https://api.deal.engine';
+/** The hosted deal API. Users only need to provide an API key. */
+export const defaultApiUrl = 'https://deal-engine.up.railway.app';
 
-export interface DEALOptions {
+export interface DealOptions {
   apiKey: string;
-  /** Optional for self-hosted DEAL installations. Hosted users only need an API key. */
+  /** Optional for self-hosted deal installations. Hosted users only need an API key. */
   baseUrl?: string;
   fetch?: typeof fetch;
   timeoutMs?: number;
@@ -116,25 +116,25 @@ export interface WorkflowRun {
   updatedAt: string;
 }
 
-export class DEAL {
+export class deal {
   private readonly requestFetch: typeof fetch;
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
 
-  constructor(input: string | DEALOptions) {
+  constructor(input: string | DealOptions) {
     const options = typeof input === 'string' ? { apiKey: input } : input;
-    if (!options.apiKey.trim()) throw new Error('DEAL API key is required');
+    if (!options.apiKey.trim()) throw new Error('deal API key is required');
     this.options = options;
     this.baseUrl = (
       options.baseUrl ??
       readEnvironmentApiUrl() ??
-      DEAL_DEFAULT_API_URL
+      defaultApiUrl
     ).replace(/\/$/, '');
     this.timeoutMs = options.timeoutMs ?? 15_000;
     this.requestFetch = options.fetch ?? fetch;
   }
 
-  private readonly options: DEALOptions;
+  private readonly options: DealOptions;
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const controller = new AbortController();
@@ -162,7 +162,7 @@ export class DEAL {
     }
     if (!response.ok)
       throw new Error(
-        body?.error ?? `DEAL request failed with ${response.status}`,
+        body?.error ?? `deal request failed with ${response.status}`,
       );
     return body as T;
   }
@@ -423,7 +423,7 @@ function readEnvironmentApiUrl(): string | undefined {
 /** Construct a hosted client without repeating the API endpoint in application code. */
 export function createDealClient(
   apiKey: string,
-  options: Omit<DEALOptions, 'apiKey'> = {},
-): DEAL {
-  return new DEAL({ ...options, apiKey });
+  options: Omit<DealOptions, 'apiKey'> = {},
+): deal {
+  return new deal({ ...options, apiKey });
 }

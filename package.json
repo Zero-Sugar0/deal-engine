@@ -4,11 +4,11 @@
   "version": "0.1.0",
   "packageManager": "pnpm@11.25.0",
   "scripts": {
-    "build": "./node_modules/.bin/tsc -p packages/core/tsconfig.json && ./node_modules/.bin/tsc -p packages/policy/tsconfig.json && ./node_modules/.bin/tsc -p packages/memory/tsconfig.json && ./node_modules/.bin/tsc -p packages/sdk-ts/tsconfig.json && ./node_modules/.bin/tsc -p packages/evals/tsconfig.json && ./node_modules/.bin/tsc -p apps/api/tsconfig.json && ./node_modules/.bin/tsc -p apps/mcp/tsconfig.json && pnpm --filter @deal/dashboard build",
+    "build": "./node_modules/.bin/tsc -p packages/core/tsconfig.json && ./node_modules/.bin/tsc -p packages/policy/tsconfig.json && ./node_modules/.bin/tsc -p packages/memory/tsconfig.json && ./node_modules/.bin/tsc -p packages/sdk/tsconfig.json && ./node_modules/.bin/tsc -p packages/evals/tsconfig.json && ./node_modules/.bin/tsc -p apps/api/tsconfig.json && ./node_modules/.bin/tsc -p apps/mcp/tsconfig.json && pnpm --filter @deal/dashboard build",
     "start": "node apps/api/dist/index.js",
     "dev": "./node_modules/.bin/tsx apps/api/src/index.ts",
     "test": "./node_modules/.bin/vitest run",
-    "typecheck": "./node_modules/.bin/tsc -p packages/core/tsconfig.json --noEmit && ./node_modules/.bin/tsc -p packages/policy/tsconfig.json --noEmit && ./node_modules/.bin/tsc -p packages/memory/tsconfig.json --noEmit && ./node_modules/.bin/tsc -p packages/sdk-ts/tsconfig.json --noEmit && ./node_modules/.bin/tsc -p packages/evals/tsconfig.json --noEmit && ./node_modules/.bin/tsc -p apps/api/tsconfig.json --noEmit && ./node_modules/.bin/tsc -p apps/mcp/tsconfig.json --noEmit",
+    "typecheck": "./node_modules/.bin/tsc -p packages/core/tsconfig.json --noEmit && ./node_modules/.bin/tsc -p packages/policy/tsconfig.json --noEmit && ./node_modules/.bin/tsc -p packages/memory/tsconfig.json --noEmit && ./node_modules/.bin/tsc -p packages/sdk/tsconfig.json --noEmit && ./node_modules/.bin/tsc -p packages/evals/tsconfig.json --noEmit && ./node_modules/.bin/tsc -p apps/api/tsconfig.json --noEmit && ./node_modules/.bin/tsc -p apps/mcp/tsconfig.json --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

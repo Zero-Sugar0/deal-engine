@@ -105,7 +105,7 @@ importers:
         specifier: workspace:*
         version: link:../core
 
-  packages/sdk-ts:
+  packages/sdk:
     dependencies:
       '@deal/core':
         specifier: workspace:*
