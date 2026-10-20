@@ -464,6 +464,53 @@ describe('DEAL control plane', () => {
     expect(newContext.statusCode).toBe(200);
   });
 
+  it('keeps key creation explicit and returns a new key only once', async () => {
+    const agentResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/agents',
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: {
+        name: 'Explicit Key Agent',
+        runtime: 'test',
+        createApiKey: false,
+      },
+    });
+    expect(agentResponse.statusCode).toBe(200);
+    expect(agentResponse.json().apiKey).toBeUndefined();
+
+    const agent = agentResponse.json().agent;
+    const before = await app.inject({
+      method: 'GET',
+      url: '/v1/agents',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    const beforeAgent = before
+      .json()
+      .agents.find((item: { id: string }) => item.id === agent.id);
+    expect(beforeAgent.credentials).toHaveLength(0);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: `/v1/agents/${agent.id}/credentials`,
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: { name: 'Local comparison key' },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().apiKey).toMatch(/^deal_/);
+    expect(created.json().credential.name).toBe('Local comparison key');
+
+    const after = await app.inject({
+      method: 'GET',
+      url: '/v1/agents',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    const afterAgent = after
+      .json()
+      .agents.find((item: { id: string }) => item.id === agent.id);
+    expect(afterAgent.credentials[0].name).toBe('Local comparison key');
+    expect(afterAgent.credentials[0].active).toBe(true);
+  });
+
   it('exposes profile, onboarding, memory, and workflow surfaces', async () => {
     const agentProfile = await app.inject({
       method: 'GET',

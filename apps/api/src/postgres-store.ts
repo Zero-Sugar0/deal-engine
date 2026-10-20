@@ -116,6 +116,7 @@ export class PostgresDealStore extends DealStore {
           '001_initial.sql',
           '002_skill_registry.sql',
           '003_better_auth.sql',
+          '004_account_onboarding_and_credentials.sql',
         ].map((file) => path.join(defaultMigrationDirectory, file));
     for (const migrationPath of migrationPaths) {
       let migration: string;
@@ -163,7 +164,7 @@ export class PostgresDealStore extends DealStore {
       skills,
     ] = await Promise.all([
       this.pool.query(
-        'SELECT id, email, display_name, organization_id, role, identity, persona, self_concept, biography, relationships, relational, boundaries, domain, decision, behavior, current_priorities, known_constraints, model_version, judgment FROM humans',
+        'SELECT id, email, display_name, organization_id, role, identity, persona, self_concept, biography, relationships, relational, boundaries, domain, decision, behavior, current_priorities, known_constraints, model_version, judgment, onboarding FROM humans',
       ),
       this.pool.query(
         'SELECT id, name, runtime, owner_human_id, status FROM agents',
@@ -172,7 +173,7 @@ export class PostgresDealStore extends DealStore {
         'SELECT id, human_id, agent_id, purpose, authority, policy_rules, profile_id, expires_at, revoked_at FROM delegations',
       ),
       this.pool.query(
-        'SELECT id, token_hash, kind, human_id, agent_id, expires_at, revoked_at FROM credentials',
+        'SELECT id, token_hash, kind, human_id, agent_id, name, created_at, expires_at, revoked_at FROM credentials',
       ),
       this.pool.query(
         'SELECT id, human_id, agent_id, packet, signature, created_at FROM context_packets',
@@ -224,6 +225,7 @@ export class PostgresDealStore extends DealStore {
         knownConstraints: row.known_constraints ?? [],
         modelVersion: Number(row.model_version ?? 1),
         judgment: row.judgment ?? {},
+        onboarding: row.onboarding ?? undefined,
       };
       this.humans.set(human.id, human);
     }
@@ -258,6 +260,8 @@ export class PostgresDealStore extends DealStore {
         kind: row.kind,
         humanId: row.human_id,
         agentId: row.agent_id ?? undefined,
+        name: row.name ?? undefined,
+        createdAt: iso(row.created_at),
         expiresAt: iso(row.expires_at),
         revokedAt: iso(row.revoked_at),
       };
@@ -516,7 +520,7 @@ export class PostgresDealStore extends DealStore {
           ],
         );
         const humanWrite = await client.query(
-          `INSERT INTO humans(id, email, display_name, organization_id, role, identity, persona, self_concept, biography, relationships, relational, boundaries, domain, decision, behavior, current_priorities, known_constraints, model_version, judgment) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17::jsonb,$18,$19::jsonb) ON CONFLICT(id) DO UPDATE SET email=EXCLUDED.email, display_name=EXCLUDED.display_name, role=EXCLUDED.role, identity=EXCLUDED.identity, persona=EXCLUDED.persona, self_concept=EXCLUDED.self_concept, biography=EXCLUDED.biography, relationships=EXCLUDED.relationships, relational=EXCLUDED.relational, boundaries=EXCLUDED.boundaries, domain=EXCLUDED.domain, decision=EXCLUDED.decision, behavior=EXCLUDED.behavior, current_priorities=EXCLUDED.current_priorities, known_constraints=EXCLUDED.known_constraints, model_version=EXCLUDED.model_version, judgment=EXCLUDED.judgment WHERE humans.model_version = EXCLUDED.model_version - 1`,
+          `INSERT INTO humans(id, email, display_name, organization_id, role, identity, persona, self_concept, biography, relationships, relational, boundaries, domain, decision, behavior, current_priorities, known_constraints, model_version, judgment, onboarding) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17::jsonb,$18,$19::jsonb,$20::jsonb) ON CONFLICT(id) DO UPDATE SET email=EXCLUDED.email, display_name=EXCLUDED.display_name, role=EXCLUDED.role, identity=EXCLUDED.identity, persona=EXCLUDED.persona, self_concept=EXCLUDED.self_concept, biography=EXCLUDED.biography, relationships=EXCLUDED.relationships, relational=EXCLUDED.relational, boundaries=EXCLUDED.boundaries, domain=EXCLUDED.domain, decision=EXCLUDED.decision, behavior=EXCLUDED.behavior, current_priorities=EXCLUDED.current_priorities, known_constraints=EXCLUDED.known_constraints, model_version=EXCLUDED.model_version, judgment=EXCLUDED.judgment, onboarding=EXCLUDED.onboarding WHERE humans.model_version = EXCLUDED.model_version - 1`,
           [
             human.id,
             human.email,
@@ -537,6 +541,7 @@ export class PostgresDealStore extends DealStore {
             json(human.knownConstraints),
             human.modelVersion,
             json(human.judgment),
+            json(human.onboarding),
           ],
         );
         if (snapshot && humanWrite.rowCount === 0)
@@ -584,7 +589,7 @@ export class PostgresDealStore extends DealStore {
           continue;
         const human = this.humans.get(credential.humanId)!;
         await client.query(
-          `INSERT INTO credentials(id, organization_id, token_hash, kind, human_id, agent_id, expires_at, revoked_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO UPDATE SET token_hash=EXCLUDED.token_hash, expires_at=EXCLUDED.expires_at, revoked_at=EXCLUDED.revoked_at`,
+          `INSERT INTO credentials(id, organization_id, token_hash, kind, human_id, agent_id, name, created_at, expires_at, revoked_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(id) DO UPDATE SET token_hash=EXCLUDED.token_hash, name=EXCLUDED.name, expires_at=EXCLUDED.expires_at, revoked_at=EXCLUDED.revoked_at`,
           [
             credential.id,
             human.organizationId,
@@ -592,6 +597,8 @@ export class PostgresDealStore extends DealStore {
             credential.kind,
             credential.humanId,
             credential.agentId ?? null,
+            credential.name ?? null,
+            credential.createdAt ?? new Date().toISOString(),
             credential.expiresAt ?? null,
             credential.revokedAt ?? null,
           ],

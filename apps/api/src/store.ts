@@ -42,6 +42,14 @@ export interface Human {
   knownConstraints: string[];
   modelVersion: number;
   judgment: JudgmentRules;
+  onboarding?: OnboardingProfile;
+}
+
+export interface OnboardingProfile {
+  role?: string;
+  focus?: string;
+  referralSource?: string;
+  completedAt?: string;
 }
 
 export interface Agent {
@@ -70,6 +78,8 @@ export interface Credential {
   kind: 'agent' | 'human';
   humanId: string;
   agentId?: string;
+  name?: string;
+  createdAt?: string;
   expiresAt?: string;
   revokedAt?: string;
 }
@@ -253,6 +263,7 @@ export class DealStore {
       ...input,
       id: crypto.randomUUID(),
       tokenHash: hashToken(token),
+      createdAt: input.createdAt ?? new Date().toISOString(),
     };
     this.credentials.set(credential.id, credential);
     return token;

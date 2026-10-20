@@ -15,8 +15,9 @@ import {
   getDealSessionToken,
   setDealSessionToken,
 } from './auth-client';
+import { AccountExperience, OnboardingPage } from './account';
 
-type Route = '/' | '/about' | '/sign-in' | '/sign-up' | '/app';
+type Route = '/' | '/about' | '/sign-in' | '/sign-up' | '/onboarding' | '/app';
 
 type DashboardAgent = {
   id: string;
@@ -25,6 +26,8 @@ type DashboardAgent = {
   status: 'active' | 'suspended';
   credentials: Array<{
     id: string;
+    name?: string;
+    createdAt?: string;
     active: boolean;
     expiresAt?: string;
     revokedAt?: string;
@@ -53,7 +56,49 @@ type DashboardProfile = {
     displayName: string;
     email: string;
     organizationId: string;
+    role?: string;
+    modelVersion?: number;
+    identity?: Record<string, unknown>;
+    persona?: Record<string, unknown>;
+    selfConcept?: Record<string, unknown>;
+    biography?: Record<string, unknown>;
+    relational?: Record<string, unknown>;
+    boundaries?: Record<string, unknown>;
+    domain?: Record<string, unknown>;
+    decision?: Record<string, unknown>;
+    behavior?: Record<string, unknown>;
+    currentPriorities?: string[];
+    knownConstraints?: string[];
+    onboarding?: {
+      role?: string;
+      focus?: string;
+      referralSource?: string;
+      completedAt?: string;
+    };
   };
+  delegations?: Array<Record<string, unknown>>;
+};
+
+type DashboardMemory = {
+  id: string;
+  kind: string;
+  content: string | Record<string, unknown>;
+  confirmation?: string;
+  confidence?: number;
+  source?: string;
+  createdAt: string;
+};
+
+type DashboardApproval = {
+  id: string;
+  agentId: string;
+  action: string;
+  summary: string;
+  payload: unknown;
+  payloadHash: string;
+  status: 'pending' | 'approved' | 'denied' | 'expired';
+  createdAt: string;
+  policyResult?: { reason?: string; risk?: string };
 };
 
 async function dashboardRequest<T>(
@@ -317,6 +362,7 @@ function useRoute(): Route {
     path === '/about' ||
     path === '/sign-in' ||
     path === '/sign-up' ||
+    path === '/onboarding' ||
     path === '/app'
   )
     return path;
@@ -1179,7 +1225,6 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [newApiKey, setNewApiKey] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [pending, setPending] = useState(false);
   const signIn = mode === 'sign-in';
@@ -1216,7 +1261,6 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage('');
-    setNewApiKey('');
     if (!email.trim() || !password) {
       setErrorMessage('Enter your email and password.');
       return;
@@ -1240,17 +1284,12 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
           : null;
       if (sessionToken) setDealSessionToken(sessionToken);
       const provisioned = await dashboardRequest<{
-        apiKey?: string;
-        human: DashboardProfile['human'];
+        onboardingCompleted?: boolean;
       }>(null, '/v1/auth/provision', {
         method: 'POST',
         body: JSON.stringify({}),
       });
-      if (provisioned.apiKey) {
-        setNewApiKey(provisioned.apiKey);
-      } else {
-        navigate('/app');
-      }
+      navigate(provisioned.onboardingCompleted ? '/app' : '/onboarding');
     } catch (error) {
       setErrorMessage(readableAuthError(error));
     } finally {
@@ -1357,23 +1396,6 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
               <Arrow />
             </Button>
           </form>
-          {newApiKey && (
-            <div className="auth-key-reveal">
-              <span className="eyebrow">save this once</span>
-              <strong>Your first connection key</strong>
-              <code>{newApiKey}</code>
-              <button
-                className="quiet-link"
-                onClick={() => navigator.clipboard.writeText(newApiKey)}
-                type="button"
-              >
-                Copy key
-              </button>
-              <Button type="button" onClick={() => navigate('/app')}>
-                See your model <Arrow />
-              </Button>
-            </div>
-          )}
           {errorMessage && <div className="auth-error">{errorMessage}</div>}
           <small className="auth-legal">
             Your password is handled by Better Auth. Agent keys are shown once
@@ -1903,7 +1925,8 @@ function App() {
   const route = useRoute();
   if (route === '/sign-in') return <AuthPage mode="sign-in" />;
   if (route === '/sign-up') return <AuthPage mode="sign-up" />;
-  if (route === '/app') return <DashboardPage />;
+  if (route === '/onboarding') return <OnboardingPage onNavigate={navigate} />;
+  if (route === '/app') return <AccountExperience onNavigate={navigate} />;
   if (route === '/about') return <AboutPage />;
   return <HomePage />;
 }

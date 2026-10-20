@@ -689,6 +689,7 @@ export function buildServer(
       );
       return {
         provisioned: false,
+        onboardingCompleted: Boolean(human.onboarding?.completedAt),
         human: {
           id: human.id,
           email: human.email,
@@ -719,7 +720,7 @@ export function buildServer(
     human.identity = {
       ...human.identity,
       preferredName: displayName,
-      organization: `${displayName}'s workspace`,
+      organization: `${displayName}'s human model`,
       mission: 'Make better decisions with context, continuity, and care.',
     };
     human.persona = {
@@ -808,11 +809,6 @@ export function buildServer(
       },
       policyRules: [],
     });
-    const apiKey = store.issueCredential({
-      kind: 'agent',
-      humanId: human.id,
-      agentId: agent.id,
-    });
     store.linkExternalIdentity({
       organizationId,
       humanId,
@@ -830,6 +826,7 @@ export function buildServer(
     });
     return {
       provisioned: true,
+      onboardingCompleted: false,
       human: {
         id: human.id,
         email: human.email,
@@ -837,7 +834,6 @@ export function buildServer(
         organizationId: human.organizationId,
       },
       agent,
-      apiKey,
     };
   });
 
@@ -892,6 +888,7 @@ export function buildServer(
       z.object({
         name: z.string().min(1),
         runtime: z.string().min(1),
+        createApiKey: z.boolean().default(true),
         credentialExpiresAt: z.string().datetime().optional(),
       }),
       request.body,
@@ -904,12 +901,15 @@ export function buildServer(
       status: 'active' as const,
     };
     store.agents.set(agent.id, agent);
-    const apiKey = store.issueCredential({
-      kind: 'agent',
-      humanId: credential.humanId,
-      agentId: agent.id,
-      expiresAt: body.credentialExpiresAt,
-    });
+    const apiKey = body.createApiKey
+      ? store.issueCredential({
+          kind: 'agent',
+          humanId: credential.humanId,
+          agentId: agent.id,
+          expiresAt: body.credentialExpiresAt,
+          name: `${agent.name} key`,
+        })
+      : undefined;
     store.recordAudit({
       humanId: credential.humanId,
       organizationId:
@@ -918,7 +918,7 @@ export function buildServer(
       eventType: 'agent.created',
       payload: { agentId: agent.id },
     });
-    return { agent, apiKey };
+    return { agent, ...(apiKey ? { apiKey } : {}) };
   });
 
   app.get('/v1/agents', async (request) => {
@@ -937,6 +937,8 @@ export function buildServer(
           .filter((item) => item.agentId === agent.id)
           .map((item) => ({
             id: item.id,
+            name: item.name,
+            createdAt: item.createdAt,
             active:
               !item.revokedAt &&
               (!item.expiresAt || new Date(item.expiresAt).getTime() > now),
@@ -945,6 +947,61 @@ export function buildServer(
           })),
       }));
     return { agents };
+  });
+
+  app.post('/v1/agents/:agentId/credentials', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const params = request.params as { agentId: string };
+    const body = parse(
+      z.object({
+        name: z.string().trim().min(1).max(80).optional(),
+        credentialExpiresAt: z.string().datetime().optional(),
+      }),
+      request.body,
+    );
+    const agent = store.agents.get(params.agentId);
+    if (!agent || agent.ownerHumanId !== credential.humanId)
+      throw error(404, 'Agent not found');
+    const name = body.name ?? `${agent.name} key`;
+    const apiKey = store.issueCredential({
+      kind: 'agent',
+      humanId: credential.humanId,
+      agentId: agent.id,
+      name,
+      expiresAt: body.credentialExpiresAt,
+    });
+    const created = [...store.credentials.values()].find(
+      (item) =>
+        item.humanId === credential.humanId &&
+        item.agentId === agent.id &&
+        item.name === name &&
+        item.tokenHash === hashToken(apiKey),
+    );
+    const human = store.humans.get(credential.humanId)!;
+    store.recordAudit({
+      humanId: human.id,
+      organizationId: human.organizationId,
+      agentId: agent.id,
+      eventType: 'credential.created',
+      payload: { credentialId: created?.id, agentId: agent.id },
+    });
+    return {
+      agentId: agent.id,
+      apiKey,
+      credential: created
+        ? {
+            id: created.id,
+            name: created.name,
+            createdAt: created.createdAt,
+            expiresAt: created.expiresAt,
+          }
+        : undefined,
+    };
   });
 
   app.post('/v1/agents/:agentId/credentials/rotate', async (request) => {
@@ -956,7 +1013,10 @@ export function buildServer(
     );
     const params = request.params as { agentId: string };
     const body = parse(
-      z.object({ credentialExpiresAt: z.string().datetime().optional() }),
+      z.object({
+        credentialExpiresAt: z.string().datetime().optional(),
+        name: z.string().trim().min(1).max(80).optional(),
+      }),
       request.body,
     );
     const agent = store.agents.get(params.agentId);
@@ -970,6 +1030,7 @@ export function buildServer(
       kind: 'agent',
       humanId: credential.humanId,
       agentId: agent.id,
+      name: body.name ?? `${agent.name} key`,
       expiresAt: body.credentialExpiresAt,
     });
     const human = store.humans.get(credential.humanId)!;
@@ -1517,6 +1578,8 @@ export function buildServer(
       z.object({
         displayName: z.string().min(1).optional(),
         role: z.string().optional(),
+        focus: z.string().optional(),
+        referralSource: z.string().optional(),
         business: z.string().optional(),
         icp: z.string().optional(),
         offer: z.string().optional(),
@@ -1587,6 +1650,13 @@ export function buildServer(
     if (!human) throw error(404, 'Human not found');
     if (body.displayName !== undefined) human.displayName = body.displayName;
     if (body.role !== undefined) human.role = body.role;
+    human.onboarding = {
+      ...human.onboarding,
+      role: body.role ?? human.onboarding?.role ?? human.role,
+      focus: body.focus ?? human.onboarding?.focus,
+      referralSource: body.referralSource ?? human.onboarding?.referralSource,
+      completedAt: new Date().toISOString(),
+    };
     human.identity = IdentityProfileSchema.parse({
       ...human.identity,
       ...body.identity,
@@ -1682,7 +1752,12 @@ export function buildServer(
       humanId: human.id,
       organizationId: human.organizationId,
       eventType: 'onboarding.completed',
-      payload: { fields: Object.keys(body) },
+      payload: {
+        fields: Object.keys(body),
+        role: human.onboarding.role,
+        focus: human.onboarding.focus,
+        referralSource: human.onboarding.referralSource,
+      },
     });
     return human;
   });
