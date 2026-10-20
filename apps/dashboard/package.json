@@ -10,6 +10,10 @@
   },
   "dependencies": {
     "@lobehub/icons": "^6.0.0",
+    "@shikijs/core": "4.5.0",
+    "@shikijs/engine-javascript": "4.5.0",
+    "@shikijs/langs": "4.5.0",
+    "@shikijs/themes": "4.5.0",
     "@vitejs/plugin-react": "^4.3.4",
     "better-auth": "1.7.12",
     "react": "^19.0.0",

@@ -120,6 +120,24 @@ paths:
       summary: Remove the authenticated person's saved AI Gateway key
       responses:
         '200': { description: Revocation result }
+  /v1/developer/ai-gateway/models:
+    get:
+      summary: List current language models available through AI Gateway
+      description: Returns model IDs and display metadata without exposing any provider credential.
+      responses:
+        '200':
+          description: Current language model catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [models]
+                properties:
+                  models:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AiGatewayModel'
+        '502': { description: AI Gateway model catalog unavailable }
   /v1/skills/keys:
     get:
       summary: Get public keys used to verify organization skill attestations
@@ -560,6 +578,16 @@ components:
           description: Masked final characters only; never the provider key.
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    AiGatewayModel:
+      type: object
+      required: [id, name, provider, description]
+      properties:
+        id: { type: string, example: openai/gpt-4.1-mini }
+        name: { type: string }
+        provider: { type: string }
+        description: { type: string }
+        contextWindow: { type: integer, minimum: 0 }
+        maxTokens: { type: integer, minimum: 0 }
     SkillDescriptor:
       type: object
       required: [name, description]

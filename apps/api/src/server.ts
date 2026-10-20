@@ -119,6 +119,22 @@ const aiGatewayCredentialBody = z.object({
     .regex(/^[^/\s]+\/[^/\s]+$/, 'Model must use provider/model format'),
 });
 
+const aiGatewayModelSchema = z.object({
+  id: z.string().min(3),
+  name: z.string().optional(),
+  owned_by: z.string().optional(),
+  description: z.string().optional(),
+  type: z.string().optional(),
+  context_window: z.number().optional(),
+  max_tokens: z.number().optional(),
+  modalities: z
+    .object({
+      input: z.array(z.string()).optional(),
+      output: z.array(z.string()).optional(),
+    })
+    .optional(),
+});
+
 function error(
   statusCode: number,
   message: string,
@@ -1376,6 +1392,83 @@ export function buildServer(
       createdAt: saved.createdAt,
       updatedAt: saved.updatedAt,
     };
+  });
+
+  app.get('/v1/developer/ai-gateway/models', async (request, reply) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const human = store.humans.get(credential.humanId);
+    if (!human) throw error(404, 'Human not found');
+    const saved = store.getActiveAiGatewayCredential(human.id);
+    let gatewayKey = process.env.AI_GATEWAY_API_KEY?.trim();
+    if (saved) {
+      try {
+        gatewayKey = decryptSecret(
+          saved.encryptedApiKey,
+          credentialEncryptionKey,
+        );
+      } catch (cause) {
+        request.log.error(
+          { err: cause, humanId: human.id },
+          'Saved AI gateway credential could not be decrypted',
+        );
+        return reply.code(503).send({
+          error:
+            'Your saved AI key is temporarily unavailable. Replace it on the Developer page or contact support.',
+          requestId: request.id,
+        });
+      }
+    }
+    try {
+      const response = await fetch(
+        process.env.DEAL_AI_GATEWAY_MODELS_URL ??
+          'https://ai-gateway.vercel.sh/v1/models',
+        {
+          headers: gatewayKey
+            ? { Authorization: `Bearer ${gatewayKey}` }
+            : undefined,
+          signal: AbortSignal.timeout(7_500),
+        },
+      );
+      if (!response.ok)
+        return reply.code(502).send({
+          error: 'The AI Gateway model list could not be loaded.',
+          requestId: request.id,
+        });
+      const body = z
+        .object({ data: z.array(aiGatewayModelSchema) })
+        .parse(await response.json());
+      const models = body.data
+        .filter(
+          (model) =>
+            model.type === 'language' &&
+            model.modalities?.output?.includes('text') !== false,
+        )
+        .map((model) => ({
+          id: model.id,
+          name: model.name ?? model.id,
+          provider: model.owned_by ?? model.id.split('/')[0],
+          description: model.description ?? '',
+          contextWindow: model.context_window,
+          maxTokens: model.max_tokens,
+        }))
+        .sort((left, right) =>
+          `${left.provider}/${left.name}`.localeCompare(
+            `${right.provider}/${right.name}`,
+          ),
+        );
+      return { models };
+    } catch (cause) {
+      request.log.warn({ err: cause }, 'AI Gateway model list failed');
+      return reply.code(502).send({
+        error: 'The AI Gateway model list could not be loaded.',
+        requestId: request.id,
+      });
+    }
   });
 
   app.put('/v1/developer/ai-gateway', async (request) => {

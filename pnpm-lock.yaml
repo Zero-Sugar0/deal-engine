@@ -76,6 +76,18 @@ importers:
       '@lobehub/icons':
         specifier: ^6.0.0
         version: 6.0.0(@lobehub/ui@6.5.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@shikijs/core':
+        specifier: 4.5.0
+        version: 4.5.0
+      '@shikijs/engine-javascript':
+        specifier: 4.5.0
+        version: 4.5.0
+      '@shikijs/langs':
+        specifier: 4.5.0
+        version: 4.5.0
+      '@shikijs/themes':
+        specifier: 4.5.0
+        version: 4.5.0
       '@vitejs/plugin-react':
         specifier: ^4.3.4
         version: 4.7.0(vite@6.4.4(@types/node@22.20.5)(tsx@4.23.15)(yaml@2.9.1))

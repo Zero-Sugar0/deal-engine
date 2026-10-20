@@ -10,6 +10,39 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { authClient, dealApiUrl, getDealSessionToken } from './auth-client';
 
+type CodeToken = { content: string; color?: string };
+type CodeTokenLines = CodeToken[][];
+let markdownHighlighterPromise:
+  | Promise<import('@shikijs/core').HighlighterGeneric<string, string>>
+  | undefined;
+
+function getMarkdownHighlighter() {
+  markdownHighlighterPromise ??= Promise.all([
+    import('@shikijs/core'),
+    import('@shikijs/engine-javascript'),
+    import('@shikijs/themes/github-dark'),
+  ]).then(([core, engine, theme]) =>
+    core.createHighlighterCore({
+      engine: engine.createJavaScriptRegexEngine({ forgiving: true }),
+      themes: [theme.default],
+      langs: [
+        import('@shikijs/langs/bash').then((module) => module.default),
+        import('@shikijs/langs/css').then((module) => module.default),
+        import('@shikijs/langs/diff').then((module) => module.default),
+        import('@shikijs/langs/html').then((module) => module.default),
+        import('@shikijs/langs/javascript').then((module) => module.default),
+        import('@shikijs/langs/json').then((module) => module.default),
+        import('@shikijs/langs/markdown').then((module) => module.default),
+        import('@shikijs/langs/python').then((module) => module.default),
+        import('@shikijs/langs/sql').then((module) => module.default),
+        import('@shikijs/langs/typescript').then((module) => module.default),
+        import('@shikijs/langs/yaml').then((module) => module.default),
+      ],
+    }),
+  );
+  return markdownHighlighterPromise;
+}
+
 type Navigate = (path: string) => void;
 
 type Human = {
@@ -116,6 +149,15 @@ type ComparisonResponse = {
     memoryReferences: number;
     agentId: string;
   };
+};
+
+type AiGatewayModel = {
+  id: string;
+  name: string;
+  provider: string;
+  description: string;
+  contextWindow?: number;
+  maxTokens?: number;
 };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -524,6 +566,106 @@ type ImageAttachment = {
   data: string;
 };
 
+function normalizeCodeLanguage(value: string): string {
+  const language = value.toLowerCase();
+  return (
+    (
+      {
+        js: 'javascript',
+        jsx: 'javascript',
+        ts: 'typescript',
+        tsx: 'typescript',
+        sh: 'bash',
+        shell: 'bash',
+        md: 'markdown',
+        yml: 'yaml',
+        text: 'markdown',
+        txt: 'markdown',
+      } as Record<string, string>
+    )[language] ?? language
+  );
+}
+
+function CodeBlock({ code, language }: { code: string; language: string }) {
+  const [tokens, setTokens] = useState<CodeTokenLines>();
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getMarkdownHighlighter()
+      .then((highlighter) => {
+        if (!active) return;
+        try {
+          const loadedLanguage = normalizeCodeLanguage(language);
+          const loaded = highlighter.getLoadedLanguages();
+          const safeLanguage = loaded.includes(loadedLanguage as never)
+            ? loadedLanguage
+            : 'markdown';
+          setTokens(
+            highlighter.codeToTokens(code, {
+              lang: safeLanguage,
+              theme: 'github-dark',
+            }).tokens as CodeTokenLines,
+          );
+        } catch {
+          setTokens(undefined);
+        }
+      })
+      .catch(() => setTokens(undefined));
+    return () => {
+      active = false;
+    };
+  }, [code, language]);
+
+  async function copyCode() {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  }
+
+  return (
+    <div className="try-code-block">
+      <div className="try-code-toolbar">
+        <span>{language || 'text'}</span>
+        <button onClick={copyCode} type="button">
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <pre>
+        <code>
+          {tokens
+            ? tokens.map((line, lineIndex) => (
+                <span className="try-code-line" key={lineIndex}>
+                  {line.map((token, tokenIndex) => (
+                    <span
+                      key={`${lineIndex}-${tokenIndex}`}
+                      style={token.color ? { color: token.color } : undefined}
+                    >
+                      {token.content}
+                    </span>
+                  ))}
+                </span>
+              ))
+            : code}
+        </code>
+      </pre>
+    </div>
+  );
+}
+
+function MarkdownCode({
+  children,
+  className,
+}: {
+  children?: ReactNode;
+  className?: string;
+}) {
+  const code = String(children ?? '').replace(/\n$/, '');
+  const language = className?.replace(/^language-/, '') ?? '';
+  if (!className) return <code className="try-inline-code">{children}</code>;
+  return <CodeBlock code={code} language={language} />;
+}
+
 function TryItView() {
   const [task, setTask] = useState('');
   const [attachment, setAttachment] = useState<ImageAttachment>();
@@ -827,6 +969,12 @@ function ComparisonCard({
   tone: 'plain' | 'humanized';
   context?: ComparisonResponse['context'];
 }) {
+  const [copied, setCopied] = useState(false);
+  async function copyResponse() {
+    await navigator.clipboard.writeText(response);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  }
   return (
     <article className={`try-response-card try-response-${tone}`}>
       <div className="try-response-heading">
@@ -837,10 +985,20 @@ function ComparisonCard({
           <h3>{label}</h3>
           <p>{description}</p>
         </div>
-        {context && <span className="try-response-badge">Humanized</span>}
+        <div className="try-response-actions">
+          {context && <span className="try-response-badge">Humanized</span>}
+          <button onClick={copyResponse} type="button">
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
       </div>
-      <div className="try-markdown">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{response}</ReactMarkdown>
+      <div className="try-markdown" role="document">
+        <ReactMarkdown
+          components={{ code: MarkdownCode }}
+          remarkPlugins={[remarkGfm]}
+        >
+          {response}
+        </ReactMarkdown>
       </div>
     </article>
   );
@@ -3216,6 +3374,8 @@ function DeveloperView() {
   const [agentName, setAgentName] = useState('');
   const [runtime, setRuntime] = useState('');
   const [gateway, setGateway] = useState<AiGatewaySettings | null>(null);
+  const [gatewayModels, setGatewayModels] = useState<AiGatewayModel[]>([]);
+  const [gatewayModelQuery, setGatewayModelQuery] = useState('');
   const [gatewayApiKey, setGatewayApiKey] = useState('');
   const [gatewayModel, setGatewayModel] = useState('');
   const [gatewayEditing, setGatewayEditing] = useState(false);
@@ -3237,6 +3397,13 @@ function DeveloperView() {
       if (response.configured && response.model)
         setGatewayModel(response.model);
     });
+  const loadGatewayModels = () =>
+    request<{ models: AiGatewayModel[] }>('/v1/developer/ai-gateway/models')
+      .then((response) => setGatewayModels(response.models))
+      .catch(() => {
+        // Model selection remains available through the exact provider/model
+        // field when the live catalog is temporarily unavailable.
+      });
   useEffect(() => {
     Promise.all([load(), loadGateway()])
       .catch((error) =>
@@ -3247,6 +3414,7 @@ function DeveloperView() {
         ),
       )
       .finally(() => setGatewayLoading(false));
+    void loadGatewayModels();
   }, []);
   const activeAgent =
     agents.find((agent) => agent.id === selectedAgent) ?? agents[0];
@@ -3381,6 +3549,17 @@ function DeveloperView() {
       setGatewayBusy(false);
     }
   }
+  const visibleGatewayModels = gatewayModels
+    .filter((model) => {
+      const query = gatewayModelQuery.trim().toLowerCase();
+      return (
+        !query ||
+        model.id.toLowerCase().includes(query) ||
+        model.name.toLowerCase().includes(query) ||
+        model.provider.toLowerCase().includes(query)
+      );
+    })
+    .slice(0, 80);
   return (
     <div className="account-content">
       <section className="section-intro-row developer-intro">
@@ -3547,13 +3726,28 @@ function DeveloperView() {
               <label>
                 Model
                 <input
+                  onChange={(event) => setGatewayModelQuery(event.target.value)}
+                  placeholder="Filter available models"
+                  value={gatewayModelQuery}
+                />
+                <input
+                  list="deal-gateway-models"
                   onChange={(event) => setGatewayModel(event.target.value)}
                   placeholder="provider/model-id"
                   required
                   value={gatewayModel}
                 />
+                <datalist id="deal-gateway-models">
+                  {visibleGatewayModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} · {model.provider}
+                    </option>
+                  ))}
+                </datalist>
                 <small>
-                  Use the model name supported by your gateway account.
+                  {gatewayModels.length
+                    ? `${gatewayModels.length} current language models loaded. Choose one or enter an exact provider/model ID.`
+                    : 'Enter an exact provider/model ID. The live catalog will appear when available.'}
                 </small>
               </label>
               <div className="gateway-form-actions">
