@@ -1,5 +1,12 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import OpenAI from '@lobehub/icons/es/OpenAI/components/Mono.js';
+import Claude from '@lobehub/icons/es/Claude/components/Mono.js';
+import LangChain from '@lobehub/icons/es/LangChain/components/Mono.js';
+import Vercel from '@lobehub/icons/es/Vercel/components/Mono.js';
+import OpenRouter from '@lobehub/icons/es/OpenRouter/components/Mono.js';
+import Codex from '@lobehub/icons/es/Codex/components/Mono.js';
+import Cursor from '@lobehub/icons/es/Cursor/components/Mono.js';
 import './styles.css';
 import './refinements.css';
 
@@ -14,6 +21,27 @@ const integrations = [
   'Codex',
   'Cursor',
 ];
+
+function BrandIcon({ name, size = 19 }: { name: string; size?: number }) {
+  const Icon = name.startsWith('Claude')
+    ? Claude
+    : name.startsWith('LangChain')
+      ? LangChain
+      : name.startsWith('Vercel')
+        ? Vercel
+        : name.startsWith('OpenRouter')
+          ? OpenRouter
+          : name === 'Codex'
+            ? Codex
+            : name === 'Cursor'
+              ? Cursor
+              : name.startsWith('OpenAI') ||
+                  name === 'Responses API' ||
+                  name === 'Chat Completions'
+                ? OpenAI
+                : undefined;
+  return Icon ? <Icon size={size} aria-hidden="true" /> : null;
+}
 
 const sessions = [
   {
@@ -351,6 +379,7 @@ function HomePage() {
             <div className="pill-row">
               {integrations.map((item) => (
                 <span className="integration-pill" key={item}>
+                  <BrandIcon name={item} />
                   {item}
                 </span>
               ))}
@@ -484,6 +513,11 @@ function HomePage() {
           </p>
           <div className="integration-cards">
             <article className="integration-card">
+              <div className="provider-signature">
+                <OpenAI size={32} />
+                <Claude size={32} />
+                <OpenRouter size={32} />
+              </div>
               <span className="card-kicker">native sdk</span>
               <h3>
                 One small layer.
@@ -499,6 +533,11 @@ function HomePage() {
               </button>
             </article>
             <article className="integration-card integration-card-dark">
+              <div className="provider-signature">
+                <LangChain size={32} />
+                <Vercel size={32} />
+                <Cursor size={32} />
+              </div>
               <span className="card-kicker">agent runtime</span>
               <h3>
                 Your agent stays
@@ -526,6 +565,7 @@ function HomePage() {
               'Custom runtime',
             ].map((item) => (
               <span className="integration-pill" key={item}>
+                <BrandIcon name={item} size={16} />
                 {item}
               </span>
             ))}

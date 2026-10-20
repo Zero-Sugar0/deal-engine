@@ -1,4 +1,55 @@
 /* Compact controls and an atmospheric, image-led visual rhythm. */
+.integration-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.integration-pill svg {
+  flex: none;
+}
+.hero-compatibility .pill-row {
+  gap: 8px;
+}
+.hero-compatibility .integration-pill {
+  flex-direction: column;
+  gap: 6px;
+  min-width: 56px;
+  padding: 10px 9px 8px;
+  background: #f8f5ffcc;
+}
+.hero-compatibility .integration-pill svg {
+  width: 23px;
+  height: 23px;
+}
+.provider-signature {
+  display: flex;
+  align-items: center;
+  gap: 21px;
+  margin-bottom: 23px;
+  color: #453b57;
+}
+.provider-signature svg {
+  flex: none;
+}
+.integration-card-dark .provider-signature {
+  color: #e5dbf3;
+}
+.integration-cards .integration-card {
+  position: relative;
+  min-height: 265px;
+}
+.integration-card .card-kicker {
+  margin-top: 0;
+}
+.integration-card h3 {
+  font-weight: 500;
+}
+.pill-row-wide .integration-pill {
+  background: #ffffff8c;
+  border-color: #74648720;
+  padding: 7px 11px;
+}
 :root {
   scrollbar-width: thin;
   scrollbar-color: #b4aac8 #f5f2f8;
