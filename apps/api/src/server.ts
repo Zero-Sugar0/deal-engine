@@ -1908,7 +1908,7 @@ export function buildServer(
         behavior: BehavioralContractSchema.partial().optional(),
         currentPriorities: z.array(z.string()).optional(),
         knownConstraints: z.array(z.string()).optional(),
-        judgment: z.record(z.unknown()).optional(),
+        judgment: JudgmentRulesSchema.partial().optional(),
       }),
       request.body,
     );
@@ -1968,7 +1968,11 @@ export function buildServer(
     if (body.currentPriorities)
       human.currentPriorities = body.currentPriorities;
     if (body.knownConstraints) human.knownConstraints = body.knownConstraints;
-    if (body.judgment) human.judgment = { ...human.judgment, ...body.judgment };
+    if (body.judgment)
+      human.judgment = JudgmentRulesSchema.parse({
+        ...human.judgment,
+        ...body.judgment,
+      });
     human.modelVersion = (human.modelVersion ?? 1) + 1;
     store.recordAudit({
       humanId: human.id,

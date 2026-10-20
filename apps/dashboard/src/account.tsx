@@ -29,6 +29,7 @@ type Human = {
   domain?: Record<string, unknown>;
   decision?: Record<string, unknown>;
   behavior?: Record<string, unknown>;
+  judgment?: Record<string, unknown>;
   currentPriorities?: string[];
   knownConstraints?: string[];
   onboarding?: {
@@ -1112,6 +1113,85 @@ function EmptyState({
   );
 }
 
+type ModelSection =
+  | 'identity'
+  | 'persona'
+  | 'selfConcept'
+  | 'biography'
+  | 'relational'
+  | 'boundaries'
+  | 'domain'
+  | 'decision'
+  | 'behavior'
+  | 'judgment';
+
+type ModelDraft = {
+  displayName: string;
+  role: string;
+  identity: Record<string, unknown>;
+  persona: Record<string, unknown>;
+  selfConcept: Record<string, unknown>;
+  biography: Record<string, unknown>;
+  relationships: Array<Record<string, unknown>>;
+  relational: Record<string, unknown>;
+  boundaries: Record<string, unknown>;
+  domain: Record<string, unknown>;
+  decision: Record<string, unknown>;
+  behavior: Record<string, unknown>;
+  currentPriorities: string[];
+  knownConstraints: string[];
+  judgment: Record<string, unknown>;
+};
+
+type ObjectField = {
+  key: string;
+  label: string;
+  kind?: 'text' | 'textarea' | 'number' | 'list' | 'select';
+  options?: string[];
+  placeholder?: string;
+};
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function recordList(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+      )
+    : [];
+}
+
+function stringLines(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function modelDraft(profile: Human): ModelDraft {
+  return {
+    displayName: profile.displayName,
+    role: profile.role ?? '',
+    identity: structuredClone(recordValue(profile.identity)),
+    persona: structuredClone(recordValue(profile.persona)),
+    selfConcept: structuredClone(recordValue(profile.selfConcept)),
+    biography: structuredClone(recordValue(profile.biography)),
+    relationships: structuredClone(profile.relationships ?? []),
+    relational: structuredClone(recordValue(profile.relational)),
+    boundaries: structuredClone(recordValue(profile.boundaries)),
+    domain: structuredClone(recordValue(profile.domain)),
+    decision: structuredClone(recordValue(profile.decision)),
+    behavior: structuredClone(recordValue(profile.behavior)),
+    currentPriorities: [...(profile.currentPriorities ?? [])],
+    knownConstraints: [...(profile.knownConstraints ?? [])],
+    judgment: structuredClone(recordValue(profile.judgment)),
+  };
+}
+
 function HumanModelView({
   profile,
   setProfile,
@@ -1120,17 +1200,27 @@ function HumanModelView({
   setProfile: (profile: Human) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [displayName, setDisplayName] = useState(profile.displayName);
-  const [role, setRole] = useState(profile.role ?? '');
-  const [voice, setVoice] = useState(
-    display(profile.persona?.communicationStyle, ''),
-  );
+  const [draft, setDraft] = useState<ModelDraft>(() => modelDraft(profile));
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const values = list(profile.persona?.values);
   const boundaries = list(profile.boundaries?.mustAsk);
   const principles = list(profile.behavior?.responsePrinciples);
   const priorities = profile.currentPriorities ?? [];
+
+  function beginEditing() {
+    setDraft(modelDraft(profile));
+    setErrorMessage('');
+    setEditing(true);
+  }
+
+  function updateSection(section: ModelSection, field: string, value: unknown) {
+    const nextValue = value === '' ? undefined : value;
+    setDraft((current) => ({
+      ...current,
+      [section]: { ...current[section], [field]: nextValue },
+    }));
+  }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1139,11 +1229,7 @@ function HumanModelView({
     try {
       const updated = await request<Human>('/v1/profile', {
         method: 'PATCH',
-        body: JSON.stringify({
-          displayName,
-          role,
-          persona: { communicationStyle: voice },
-        }),
+        body: JSON.stringify(draft),
       });
       setProfile(updated);
       setEditing(false);
@@ -1158,7 +1244,7 @@ function HumanModelView({
 
   return (
     <div className="account-content">
-      <section className="section-intro-row">
+      <section className="section-intro-row model-page-intro">
         <div>
           <span className="eyebrow">Human model</span>
           <h2>
@@ -1167,116 +1253,1810 @@ function HumanModelView({
             <em>your way of working.</em>
           </h2>
           <p>
-            This is the understanding your agents can carry into their work.
-            Direct corrections always outrank old or inferred memory.
+            Shape the identity, voice, history, boundaries, and judgment your
+            agents carry with them. You can change every part at any time.
           </p>
         </div>
-        <SmallButton onClick={() => setEditing((value) => !value)}>
-          {editing ? 'Close editor' : 'Edit basics'}
-        </SmallButton>
+        <div className="model-page-actions">
+          {editing && (
+            <span className="model-edit-status">Editing all sections</span>
+          )}
+          <SmallButton
+            onClick={editing ? () => setEditing(false) : beginEditing}
+            secondary={editing}
+          >
+            {editing ? 'Close editor' : 'Edit everything'}
+          </SmallButton>
+        </div>
       </section>
-      {editing && (
-        <form className="account-panel model-editor" onSubmit={save}>
-          <PanelHeading
-            eyebrow="Your basics"
-            title="Keep the starting point current"
-          />
-          <div className="editor-grid">
-            <label>
-              Name
-              <input
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-              />
-            </label>
-            <label>
-              What you do
-              <input
-                value={role}
-                onChange={(event) => setRole(event.target.value)}
-                placeholder="Founder, designer, developer…"
-              />
-            </label>
-            <label className="editor-wide">
-              How should your agent sound?
-              <textarea
-                value={voice}
-                onChange={(event) => setVoice(event.target.value)}
-              />
-            </label>
+      {editing ? (
+        <form className="full-model-editor" onSubmit={save}>
+          <div className="editor-save-bar">
+            <div>
+              <span className="eyebrow">Full model editor</span>
+              <strong>Make it unmistakably yours.</strong>
+              <small>
+                Changes are versioned and shared with future agent runs.
+              </small>
+            </div>
+            <div className="editor-save-actions">
+              <SmallButton onClick={() => setEditing(false)} secondary>
+                Cancel
+              </SmallButton>
+              <SmallButton disabled={busy} type="submit">
+                {busy ? 'Saving…' : 'Save whole model'}
+              </SmallButton>
+            </div>
           </div>
           {errorMessage && <div className="account-error">{errorMessage}</div>}
-          <SmallButton disabled={busy} type="submit">
-            {busy ? 'Saving…' : 'Save changes'}
-          </SmallButton>
+          <EditorSection eyebrow="Identity" title="Who you are">
+            <div className="editor-grid">
+              <TextField
+                label="Display name"
+                value={draft.displayName}
+                onChange={(value) =>
+                  setDraft((current) => ({ ...current, displayName: value }))
+                }
+              />
+              <TextField
+                label="What you do"
+                value={draft.role}
+                placeholder="Founder, designer, researcher…"
+                onChange={(value) =>
+                  setDraft((current) => ({ ...current, role: value }))
+                }
+              />
+              <TextField
+                label="Preferred name"
+                value={draft.identity.preferredName}
+                onChange={(value) =>
+                  updateSection('identity', 'preferredName', value)
+                }
+              />
+              <TextField
+                label="Pronouns"
+                value={draft.identity.pronouns}
+                onChange={(value) =>
+                  updateSection('identity', 'pronouns', value)
+                }
+              />
+              <TextField
+                label="Organization"
+                value={draft.identity.organization}
+                onChange={(value) =>
+                  updateSection('identity', 'organization', value)
+                }
+              />
+              <TextField
+                label="Legal name"
+                value={draft.identity.legalName}
+                onChange={(value) =>
+                  updateSection('identity', 'legalName', value)
+                }
+              />
+              <TextField
+                label="Locale"
+                value={draft.identity.locale}
+                placeholder="en"
+                onChange={(value) => updateSection('identity', 'locale', value)}
+              />
+              <TextField
+                label="Timezone"
+                value={draft.identity.timezone}
+                placeholder="Africa/Lagos"
+                onChange={(value) =>
+                  updateSection('identity', 'timezone', value)
+                }
+              />
+              <TextField
+                label="Honorific"
+                value={draft.identity.honorific}
+                onChange={(value) =>
+                  updateSection('identity', 'honorific', value)
+                }
+              />
+              <TextField
+                label="Name pronunciation"
+                value={draft.identity.namePronunciation}
+                onChange={(value) =>
+                  updateSection('identity', 'namePronunciation', value)
+                }
+              />
+              <TextAreaField
+                className="editor-wide"
+                label="Mission"
+                value={draft.identity.mission}
+                onChange={(value) =>
+                  updateSection('identity', 'mission', value)
+                }
+              />
+              <TextAreaField
+                className="editor-wide"
+                label="How you describe yourself"
+                value={draft.identity.selfDescription}
+                onChange={(value) =>
+                  updateSection('identity', 'selfDescription', value)
+                }
+              />
+            </div>
+            <FactListEditor
+              label="Languages"
+              value={draft.identity.languages}
+              onChange={(value) =>
+                updateSection('identity', 'languages', value)
+              }
+            />
+            <FactListEditor
+              label="Identity markers"
+              value={draft.identity.identityMarkers}
+              onChange={(value) =>
+                updateSection('identity', 'identityMarkers', value)
+              }
+            />
+            <FactListEditor
+              label="Affiliations"
+              value={draft.identity.affiliations}
+              onChange={(value) =>
+                updateSection('identity', 'affiliations', value)
+              }
+            />
+            <FactListEditor
+              label="Accessibility needs"
+              value={draft.identity.accessibilityNeeds}
+              onChange={(value) =>
+                updateSection('identity', 'accessibilityNeeds', value)
+              }
+            />
+          </EditorSection>
+
+          <EditorSection eyebrow="Voice" title="How you want to sound">
+            <div className="editor-grid">
+              <TextField
+                label="Persona name"
+                value={draft.persona.displayName}
+                onChange={(value) =>
+                  updateSection('persona', 'displayName', value)
+                }
+              />
+              <TextField
+                label="Persona role"
+                value={draft.persona.role}
+                onChange={(value) => updateSection('persona', 'role', value)}
+              />
+              <TextField
+                label="Communication style"
+                value={draft.persona.communicationStyle}
+                onChange={(value) =>
+                  updateSection('persona', 'communicationStyle', value)
+                }
+              />
+              <SelectField
+                label="Tone"
+                value={draft.persona.tone}
+                options={['warm', 'direct', 'formal', 'playful', 'calm']}
+                onChange={(value) => updateSection('persona', 'tone', value)}
+              />
+              <SelectField
+                label="Verbosity"
+                value={draft.persona.verbosity}
+                options={['concise', 'balanced', 'detailed']}
+                onChange={(value) =>
+                  updateSection('persona', 'verbosity', value)
+                }
+              />
+              <SelectField
+                label="Structure"
+                value={draft.persona.structure}
+                options={['conversational', 'bulleted', 'narrative', 'mixed']}
+                onChange={(value) =>
+                  updateSection('persona', 'structure', value)
+                }
+              />
+              <SelectField
+                label="Humor"
+                value={draft.persona.humor}
+                options={['none', 'light', 'playful']}
+                onChange={(value) => updateSection('persona', 'humor', value)}
+              />
+              <SelectField
+                label="Risk tolerance"
+                value={draft.persona.riskTolerance}
+                options={['low', 'medium', 'high']}
+                onChange={(value) =>
+                  updateSection('persona', 'riskTolerance', value)
+                }
+              />
+              <SelectField
+                label="Greeting"
+                value={draft.persona.greetingStyle}
+                options={['none', 'brief', 'personal', 'contextual']}
+                onChange={(value) =>
+                  updateSection('persona', 'greetingStyle', value)
+                }
+              />
+              <SelectField
+                label="Sign-off"
+                value={draft.persona.signoffStyle}
+                options={['none', 'brief', 'warm', 'name']}
+                onChange={(value) =>
+                  updateSection('persona', 'signoffStyle', value)
+                }
+              />
+              <SelectField
+                label="Sentence rhythm"
+                value={draft.persona.sentenceRhythm}
+                options={['crisp', 'conversational', 'reflective', 'varied']}
+                onChange={(value) =>
+                  updateSection('persona', 'sentenceRhythm', value)
+                }
+              />
+              <SelectField
+                label="Punctuation"
+                value={draft.persona.punctuation}
+                options={['minimal', 'standard', 'expressive']}
+                onChange={(value) =>
+                  updateSection('persona', 'punctuation', value)
+                }
+              />
+              <SelectField
+                label="Emoji policy"
+                value={draft.persona.emojiPolicy}
+                options={['none', 'rare', 'contextual', 'frequent']}
+                onChange={(value) =>
+                  updateSection('persona', 'emojiPolicy', value)
+                }
+              />
+              <SelectField
+                label="Response length"
+                value={draft.persona.responseLength}
+                options={['one_line', 'short', 'medium', 'long']}
+                onChange={(value) =>
+                  updateSection('persona', 'responseLength', value)
+                }
+              />
+              <SelectField
+                label="Lead with"
+                value={draft.persona.leadWith}
+                options={[
+                  'answer',
+                  'context',
+                  'empathy',
+                  'options',
+                  'recommendation',
+                ]}
+                onChange={(value) =>
+                  updateSection('persona', 'leadWith', value)
+                }
+              />
+              <SelectField
+                label="Explain with"
+                value={draft.persona.explainWith}
+                options={[
+                  'examples',
+                  'evidence',
+                  'analogy',
+                  'steps',
+                  'tradeoffs',
+                ]}
+                onChange={(value) =>
+                  updateSection('persona', 'explainWith', value)
+                }
+              />
+              <SelectField
+                label="Ask style"
+                value={draft.persona.askStyle}
+                options={[
+                  'one_question_at_a_time',
+                  'grouped',
+                  'minimal',
+                  'exploratory',
+                ]}
+                onChange={(value) =>
+                  updateSection('persona', 'askStyle', value)
+                }
+              />
+              <SelectField
+                label="Disagreement"
+                value={draft.persona.disagreementStyle}
+                options={[
+                  'gentle_pushback',
+                  'challenge_with_reasoning',
+                  'direct_pushback',
+                  'defer',
+                ]}
+                onChange={(value) =>
+                  updateSection('persona', 'disagreementStyle', value)
+                }
+              />
+              <SelectField
+                label="Empathy"
+                value={draft.persona.empathyStyle}
+                options={['validating', 'practical', 'warm', 'minimal']}
+                onChange={(value) =>
+                  updateSection('persona', 'empathyStyle', value)
+                }
+              />
+              <TextField
+                label="Working hours"
+                value={draft.persona.workingHours}
+                onChange={(value) =>
+                  updateSection('persona', 'workingHours', value)
+                }
+              />
+              <TextField
+                label="Language"
+                value={draft.persona.language}
+                onChange={(value) =>
+                  updateSection('persona', 'language', value)
+                }
+              />
+              <TextField
+                label="Dialect"
+                value={draft.persona.dialect}
+                onChange={(value) => updateSection('persona', 'dialect', value)}
+              />
+            </div>
+            <ToggleField
+              label="Use contractions"
+              value={draft.persona.useContractions}
+              onChange={(value) =>
+                updateSection('persona', 'useContractions', value)
+              }
+            />
+            <StringListEditor
+              label="Preferred phrases"
+              value={draft.persona.preferredPhrases}
+              onChange={(value) =>
+                updateSection('persona', 'preferredPhrases', value)
+              }
+            />
+            <StringListEditor
+              label="Phrases to avoid"
+              value={draft.persona.avoidedPhrases}
+              onChange={(value) =>
+                updateSection('persona', 'avoidedPhrases', value)
+              }
+            />
+            <StringListEditor
+              label="Formatting preferences"
+              value={draft.persona.formattingPreferences}
+              onChange={(value) =>
+                updateSection('persona', 'formattingPreferences', value)
+              }
+            />
+            <StringListEditor
+              label="Values in your own words"
+              value={draft.persona.values}
+              onChange={(value) => updateSection('persona', 'values', value)}
+            />
+            <ObjectListEditor
+              label="Voice examples"
+              value={draft.persona.examples}
+              fields={[
+                { key: 'situation', label: 'Situation' },
+                {
+                  key: 'preferredResponse',
+                  label: 'Preferred response',
+                  kind: 'textarea',
+                },
+                { key: 'why', label: 'Why it works', kind: 'textarea' },
+                { key: 'channel', label: 'Channel' },
+              ]}
+              onChange={(value) => updateSection('persona', 'examples', value)}
+            />
+            <ObjectListEditor
+              label="Audience modes"
+              value={draft.persona.modes}
+              fields={[
+                { key: 'id', label: 'ID' },
+                { key: 'audience', label: 'Audience' },
+                { key: 'purpose', label: 'Purpose', kind: 'textarea' },
+                {
+                  key: 'tone',
+                  label: 'Tone',
+                  kind: 'select',
+                  options: ['warm', 'direct', 'formal', 'playful', 'calm'],
+                },
+                {
+                  key: 'verbosity',
+                  label: 'Verbosity',
+                  kind: 'select',
+                  options: ['concise', 'balanced', 'detailed'],
+                },
+                {
+                  key: 'structure',
+                  label: 'Structure',
+                  kind: 'select',
+                  options: ['conversational', 'bulleted', 'narrative', 'mixed'],
+                },
+                {
+                  key: 'preferredPhrases',
+                  label: 'Preferred phrases',
+                  kind: 'list',
+                },
+                {
+                  key: 'avoidedPhrases',
+                  label: 'Phrases to avoid',
+                  kind: 'list',
+                },
+                {
+                  key: 'formattingPreferences',
+                  label: 'Formatting',
+                  kind: 'list',
+                },
+                { key: 'notes', label: 'Notes', kind: 'list' },
+              ]}
+              onChange={(value) => updateSection('persona', 'modes', value)}
+            />
+          </EditorSection>
+
+          <EditorSection eyebrow="Self concept" title="What matters underneath">
+            <TextAreaField
+              label="Summary"
+              value={draft.selfConcept.summary}
+              onChange={(value) =>
+                updateSection('selfConcept', 'summary', value)
+              }
+            />
+            <StringListEditor
+              label="How you describe yourself"
+              value={draft.selfConcept.howTheyDescribeThemselves}
+              onChange={(value) =>
+                updateSection('selfConcept', 'howTheyDescribeThemselves', value)
+              }
+            />
+            {[
+              ['Identity statements', 'identityStatements'],
+              ['Strengths', 'strengths'],
+              ['Growth edges', 'growthEdges'],
+              ['Aspirations', 'aspirations'],
+              ['Fears and sensitivities', 'fears'],
+              ['Non-negotiables', 'nonNegotiables'],
+            ].map(([label, field]) => (
+              <FactListEditor
+                key={field}
+                label={label}
+                value={draft.selfConcept[field]}
+                onChange={(value) => updateSection('selfConcept', field, value)}
+              />
+            ))}
+            <ValueListEditor
+              label="Values hierarchy"
+              value={draft.selfConcept.valuesHierarchy}
+              onChange={(value) =>
+                updateSection('selfConcept', 'valuesHierarchy', value)
+              }
+            />
+          </EditorSection>
+
+          <EditorSection
+            eyebrow="Biography"
+            title="The experience behind the decisions"
+          >
+            <TextAreaField
+              label="Biography summary"
+              value={draft.biography.summary}
+              onChange={(value) => updateSection('biography', 'summary', value)}
+            />
+            <TextAreaField
+              label="Current chapter"
+              value={draft.biography.currentChapter}
+              onChange={(value) =>
+                updateSection('biography', 'currentChapter', value)
+              }
+            />
+            <FactListEditor
+              label="Formative experiences"
+              value={draft.biography.formativeExperiences}
+              onChange={(value) =>
+                updateSection('biography', 'formativeExperiences', value)
+              }
+            />
+            <ChapterListEditor
+              label="Career arc"
+              value={draft.biography.careerArc}
+              onChange={(value) =>
+                updateSection('biography', 'careerArc', value)
+              }
+            />
+            {[
+              ['Places', 'places'],
+              ['Languages', 'languages'],
+              ['Domain expertise', 'domainExpertise'],
+              ['Life context', 'lifeContext'],
+            ].map(([label, field]) => (
+              <FactListEditor
+                key={field}
+                label={label}
+                value={draft.biography[field]}
+                onChange={(value) => updateSection('biography', field, value)}
+              />
+            ))}
+          </EditorSection>
+
+          <EditorSection
+            eyebrow="Relationships"
+            title="How trust changes by person and audience"
+          >
+            <RelationshipListEditor
+              value={draft.relationships}
+              onChange={(value) =>
+                setDraft((current) => ({ ...current, relationships: value }))
+              }
+            />
+          </EditorSection>
+
+          <EditorSection
+            eyebrow="Relational signals"
+            title="What builds or breaks trust"
+          >
+            {[
+              ['Trust signals', 'trustSignals'],
+              ['Trust breakers', 'trustBreakers'],
+              ['Calming factors', 'calmingFactors'],
+              ['Frustration triggers', 'frustrationTriggers'],
+              ['Sensitive topics', 'sensitiveTopics'],
+              ['Emotional context notes', 'emotionalContextNotes'],
+            ].map(([label, field]) => (
+              <FactListEditor
+                key={field}
+                label={label}
+                value={draft.relational[field]}
+                onChange={(value) => updateSection('relational', field, value)}
+              />
+            ))}
+            {[
+              ['Acknowledgment preferences', 'acknowledgmentPreferences'],
+              ['Encouragement preferences', 'encouragementPreferences'],
+              ['Conflict preferences', 'conflictPreferences'],
+              ['Repair protocol', 'repairProtocol'],
+            ].map(([label, field]) => (
+              <StringListEditor
+                key={field}
+                label={label}
+                value={draft.relational[field]}
+                onChange={(value) => updateSection('relational', field, value)}
+              />
+            ))}
+          </EditorSection>
+
+          <EditorSection
+            eyebrow="Boundaries"
+            title="What your agents must protect"
+          >
+            {[
+              ['Never assume', 'neverAssume'],
+              ['Must ask first', 'mustAsk'],
+              ['Never mention', 'neverMention'],
+              ['Never infer', 'neverInfer'],
+              ['Sensitive topics', 'sensitiveTopics'],
+              ['Consent rules', 'consentRules'],
+              ['Protected attributes', 'protectedAttributes'],
+              ['Privacy preferences', 'privacyPreferences'],
+            ].map(([label, field]) => (
+              <StringListEditor
+                key={field}
+                label={label}
+                value={draft.boundaries[field]}
+                onChange={(value) => updateSection('boundaries', field, value)}
+              />
+            ))}
+          </EditorSection>
+
+          <EditorSection
+            eyebrow="Decisions"
+            title="How you choose and weigh tradeoffs"
+          >
+            <div className="editor-grid">
+              <SelectField
+                label="Risk tolerance"
+                value={draft.decision.riskTolerance}
+                options={['low', 'medium', 'high']}
+                onChange={(value) =>
+                  updateSection('decision', 'riskTolerance', value)
+                }
+              />
+              <SelectField
+                label="Reversibility"
+                value={draft.decision.reversibilityPreference}
+                options={['reversible_first', 'balanced', 'decisive']}
+                onChange={(value) =>
+                  updateSection('decision', 'reversibilityPreference', value)
+                }
+              />
+              <SelectField
+                label="Time horizon"
+                value={draft.decision.timeHorizon}
+                options={[
+                  'immediate',
+                  'quarter',
+                  'annual',
+                  'multi_year',
+                  'mixed',
+                ]}
+                onChange={(value) =>
+                  updateSection('decision', 'timeHorizon', value)
+                }
+              />
+              <SelectField
+                label="Default stance"
+                value={draft.decision.defaultStance}
+                options={[
+                  'curious',
+                  'cautious',
+                  'decisive',
+                  'patient',
+                  'experimental',
+                ]}
+                onChange={(value) =>
+                  updateSection('decision', 'defaultStance', value)
+                }
+              />
+              <NumberField
+                label="Confidence floor"
+                value={draft.decision.confidenceFloor}
+                onChange={(value) =>
+                  updateSection('decision', 'confidenceFloor', value)
+                }
+              />
+              <NumberField
+                label="Evidence threshold"
+                value={draft.decision.evidenceThreshold}
+                onChange={(value) =>
+                  updateSection('decision', 'evidenceThreshold', value)
+                }
+              />
+            </div>
+            {[
+              ['Priorities', 'priorities'],
+              ['Tradeoffs', 'tradeoffs'],
+              ['Ask before commitment', 'asksBeforeCommitment'],
+              ['North stars', 'northStars'],
+              ['Decision process', 'decisionProcess'],
+              ['Autonomy preferences', 'autonomyPreferences'],
+              ['Escalation triggers', 'escalationTriggers'],
+              ['Red lines', 'redLines'],
+              ['Heuristics', 'heuristics'],
+            ].map(([label, field]) => (
+              <StringListEditor
+                key={field}
+                label={label}
+                value={draft.decision[field]}
+                onChange={(value) => updateSection('decision', field, value)}
+              />
+            ))}
+            <ObjectListEditor
+              label="Decision examples"
+              value={draft.decision.examples}
+              fields={[
+                { key: 'situation', label: 'Situation', kind: 'textarea' },
+                { key: 'decision', label: 'Decision', kind: 'textarea' },
+                { key: 'reasoning', label: 'Reasoning', kind: 'textarea' },
+                { key: 'outcome', label: 'Outcome', kind: 'textarea' },
+                { key: 'lesson', label: 'Lesson', kind: 'textarea' },
+              ]}
+              onChange={(value) => updateSection('decision', 'examples', value)}
+            />
+          </EditorSection>
+
+          <EditorSection eyebrow="Behavior" title="How your agent should act">
+            <div className="editor-grid">
+              <SelectField
+                label="Relationship"
+                value={draft.behavior.relationship}
+                options={['assistant', 'advisor', 'delegate', 'representative']}
+                onChange={(value) =>
+                  updateSection('behavior', 'relationship', value)
+                }
+              />
+              <SelectField
+                label="Speak as"
+                value={draft.behavior.speakAs}
+                options={['agent', 'representative', 'collaborator']}
+                onChange={(value) =>
+                  updateSection('behavior', 'speakAs', value)
+                }
+              />
+              <SelectField
+                label="When uncertain"
+                value={draft.behavior.whenUncertain}
+                options={['ask', 'state_uncertainty', 'offer_options']}
+                onChange={(value) =>
+                  updateSection('behavior', 'whenUncertain', value)
+                }
+              />
+              <SelectField
+                label="When disagreeing"
+                value={draft.behavior.whenDisagreeing}
+                options={[
+                  'challenge_respectfully',
+                  'surface_tradeoff',
+                  'defer',
+                ]}
+                onChange={(value) =>
+                  updateSection('behavior', 'whenDisagreeing', value)
+                }
+              />
+              <SelectField
+                label="When wrong"
+                value={draft.behavior.whenWrong}
+                options={[
+                  'admit_and_correct',
+                  'explain_correction',
+                  'brief_apology',
+                ]}
+                onChange={(value) =>
+                  updateSection('behavior', 'whenWrong', value)
+                }
+              />
+              <SelectField
+                label="Refusal style"
+                value={draft.behavior.refusalStyle}
+                options={[
+                  'brief_and_firm',
+                  'explain_boundary',
+                  'offer_safe_alternative',
+                ]}
+                onChange={(value) =>
+                  updateSection('behavior', 'refusalStyle', value)
+                }
+              />
+            </div>
+            <ToggleField
+              label="Disclose that the agent is an AI"
+              value={draft.behavior.discloseAgentIdentity}
+              onChange={(value) =>
+                updateSection('behavior', 'discloseAgentIdentity', value)
+              }
+            />
+            <ToggleField
+              label="Preserve my human voice"
+              value={draft.behavior.preserveHumanVoice}
+              onChange={(value) =>
+                updateSection('behavior', 'preserveHumanVoice', value)
+              }
+            />
+            <ToggleField
+              label="Never impersonate me"
+              value={draft.behavior.neverImpersonate}
+              onChange={(value) =>
+                updateSection('behavior', 'neverImpersonate', value)
+              }
+            />
+            {[
+              ['Ask before', 'askBefore'],
+              ['Never claim', 'neverClaim'],
+              ['Never do', 'neverDo'],
+              ['Response principles', 'responsePrinciples'],
+            ].map(([label, field]) => (
+              <StringListEditor
+                key={field}
+                label={label}
+                value={draft.behavior[field]}
+                onChange={(value) => updateSection('behavior', field, value)}
+              />
+            ))}
+          </EditorSection>
+
+          <EditorSection
+            eyebrow="Work and domain"
+            title="The world your agent is operating in"
+          >
+            <div className="editor-grid">
+              {[
+                ['Business', 'business'],
+                ['Ideal customer', 'icp'],
+                ['Offer', 'offer'],
+                ['Industry', 'industry'],
+                ['Specialization', 'specialization'],
+                ['Seniority', 'seniority'],
+                ['Profession profile', 'profession'],
+              ].map(([label, field]) => (
+                <TextField
+                  key={field}
+                  label={label}
+                  value={draft.domain[field]}
+                  onChange={(value) => updateSection('domain', field, value)}
+                />
+              ))}
+            </div>
+            {[
+              ['Jurisdictions', 'jurisdictions'],
+              ['Exclusions', 'exclusions'],
+              ['Goals', 'goals'],
+            ].map(([label, field]) => (
+              <StringListEditor
+                key={field}
+                label={label}
+                value={draft.domain[field]}
+                onChange={(value) => updateSection('domain', field, value)}
+              />
+            ))}
+            <TerminologyEditor
+              value={draft.domain.terminology}
+              onChange={(value) =>
+                updateSection('domain', 'terminology', value)
+              }
+            />
+          </EditorSection>
+
+          <EditorSection
+            eyebrow="Current direction"
+            title="What matters in this season"
+          >
+            <StringListEditor
+              label="Current priorities"
+              value={draft.currentPriorities}
+              onChange={(value) =>
+                setDraft((current) => ({
+                  ...current,
+                  currentPriorities: value,
+                }))
+              }
+            />
+            <StringListEditor
+              label="Known constraints"
+              value={draft.knownConstraints}
+              onChange={(value) =>
+                setDraft((current) => ({ ...current, knownConstraints: value }))
+              }
+            />
+          </EditorSection>
+
+          <EditorSection
+            eyebrow="Judgment"
+            title="Where your agent should pause"
+          >
+            <StringListEditor
+              label="Ask if missing"
+              value={draft.judgment.askIfMissing}
+              onChange={(value) =>
+                updateSection('judgment', 'askIfMissing', value)
+              }
+            />
+            <StringListEditor
+              label="Escalate if"
+              value={draft.judgment.escalateIf}
+              onChange={(value) =>
+                updateSection('judgment', 'escalateIf', value)
+              }
+            />
+            <StringListEditor
+              label="Refuse if"
+              value={draft.judgment.refuseIf}
+              onChange={(value) => updateSection('judgment', 'refuseIf', value)}
+            />
+            <NumberField
+              label="Confidence threshold"
+              value={draft.judgment.confidenceThreshold}
+              onChange={(value) =>
+                updateSection('judgment', 'confidenceThreshold', value)
+              }
+            />
+          </EditorSection>
+          <div className="editor-bottom-save">
+            <SmallButton disabled={busy} type="submit">
+              {busy ? 'Saving…' : 'Save whole model'}
+            </SmallButton>
+          </div>
         </form>
+      ) : (
+        <>
+          <div className="model-grid">
+            <ModelCard
+              eyebrow="Identity"
+              title="Who you are"
+              values={[
+                ['Name', profile.displayName],
+                ['Role', profile.role],
+                ['Mission', profile.identity?.mission],
+                ['Current chapter', profile.biography?.currentChapter],
+              ]}
+            />
+            <ModelCard
+              eyebrow="Voice"
+              title="How you sound"
+              values={[
+                ['Style', profile.persona?.communicationStyle],
+                ['Tone', profile.persona?.tone],
+                ['Directness', profile.persona?.directness],
+                ['Rhythm', profile.persona?.verbosity],
+              ]}
+            />
+            <ModelCard
+              eyebrow="Values"
+              title="What you protect"
+              items={values}
+              empty="Add values through the full model editor."
+            />
+            <ModelCard
+              eyebrow="Boundaries"
+              title="Where to pause"
+              items={boundaries}
+              empty="No checkpoints have been added yet."
+            />
+            <ModelCard
+              eyebrow="Judgment"
+              title="How you choose"
+              values={[
+                ['Risk', profile.decision?.riskTolerance],
+                ['Default', profile.decision?.defaultStance],
+                ['Tradeoff', profile.decision?.tradeoffs],
+                ['Ask before', profile.decision?.asksBeforeCommitment],
+              ]}
+            />
+            <ModelCard
+              eyebrow="Working principles"
+              title="What good looks like"
+              items={principles}
+              empty="Your agents will learn these from explicit feedback."
+            />
+          </div>
+          <section className="account-panel focus-panel">
+            <PanelHeading eyebrow="Right now" title="Your current focus" />
+            {priorities.length ? (
+              <div className="focus-list">
+                {priorities.map((item) => (
+                  <span key={item}>{item}</span>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                compact
+                title="Nothing here yet"
+                body="Add a priority when you want your agents to understand this season of your work."
+              />
+            )}
+          </section>
+        </>
       )}
-      <div className="model-grid">
-        <ModelCard
-          eyebrow="Identity"
-          title="Who you are"
-          values={[
-            ['Name', profile.displayName],
-            ['Role', profile.role],
-            ['Mission', profile.identity?.mission],
-            ['Current chapter', profile.biography?.currentChapter],
-          ]}
-        />
-        <ModelCard
-          eyebrow="Voice"
-          title="How you sound"
-          values={[
-            ['Style', profile.persona?.communicationStyle],
-            ['Tone', profile.persona?.tone],
-            ['Directness', profile.persona?.directness],
-            ['Rhythm', profile.persona?.verbosity],
-          ]}
-        />
-        <ModelCard
-          eyebrow="Values"
-          title="What you protect"
-          items={values}
-          empty="Add values through your next conversation with an agent."
-        />
-        <ModelCard
-          eyebrow="Boundaries"
-          title="Where to pause"
-          items={boundaries}
-          empty="No checkpoints have been added yet."
-        />
-        <ModelCard
-          eyebrow="Judgment"
-          title="How you choose"
-          values={[
-            ['Risk', profile.decision?.riskTolerance],
-            ['Default', profile.decision?.defaultStance],
-            ['Tradeoff', profile.decision?.tradeoffs],
-            ['Ask before', profile.decision?.asksBeforeCommitment],
-          ]}
-        />
-        <ModelCard
-          eyebrow="Working principles"
-          title="What good looks like"
-          items={principles}
-          empty="Your agents will learn these from explicit feedback."
-        />
+    </div>
+  );
+}
+
+function EditorSection({
+  eyebrow,
+  title,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="editor-section">
+      <div className="editor-section-heading">
+        <span className="eyebrow">{eyebrow}</span>
+        <h3>{title}</h3>
       </div>
-      <section className="account-panel focus-panel">
-        <PanelHeading eyebrow="Right now" title="Your current focus" />
-        {priorities.length ? (
-          <div className="focus-list">
-            {priorities.map((item) => (
-              <span key={item}>{item}</span>
+      <div className="editor-section-content">{children}</div>
+    </section>
+  );
+}
+
+function TextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: unknown;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="editor-field">
+      <span>{label}</span>
+      <input
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        value={
+          typeof value === 'string' ? value : value == null ? '' : String(value)
+        }
+      />
+    </label>
+  );
+}
+
+function TextAreaField({
+  label,
+  value,
+  onChange,
+  className = '',
+}: {
+  label: string;
+  value: unknown;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  return (
+    <label className={`editor-field ${className}`}>
+      <span>{label}</span>
+      <textarea
+        onChange={(event) => onChange(event.target.value)}
+        value={
+          typeof value === 'string' ? value : value == null ? '' : String(value)
+        }
+      />
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: unknown;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="editor-field">
+      <span>{label}</span>
+      <select
+        onChange={(event) => onChange(event.target.value)}
+        value={typeof value === 'string' ? value : ''}
+      >
+        <option value="">Not set</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option.replaceAll('_', ' ')}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  onChange,
+  min = 0,
+  max = 1,
+  step = 0.05,
+}: {
+  label: string;
+  value: unknown;
+  onChange: (value: number | undefined) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+}) {
+  return (
+    <label className="editor-field">
+      <span>{label}</span>
+      <input
+        max={max}
+        min={min}
+        onChange={(event) =>
+          onChange(event.target.value ? Number(event.target.value) : undefined)
+        }
+        step={step}
+        type="number"
+        value={typeof value === 'number' ? value : ''}
+      />
+    </label>
+  );
+}
+
+function ToggleField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: unknown;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className="editor-toggle">
+      <input
+        checked={value === true}
+        onChange={(event) => onChange(event.target.checked)}
+        type="checkbox"
+      />
+      <span>{label}</span>
+      <i />
+    </label>
+  );
+}
+
+function StringListEditor({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: unknown;
+  onChange: (value: string[]) => void;
+}) {
+  return (
+    <label className="editor-list-field">
+      <span>{label}</span>
+      <textarea
+        onChange={(event) =>
+          onChange(
+            event.target.value
+              .split('\n')
+              .map((item) => item.trim())
+              .filter(Boolean),
+          )
+        }
+        placeholder="One item per line"
+        value={stringLines(value).join('\n')}
+      />
+    </label>
+  );
+}
+
+function FactListEditor({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: unknown;
+  onChange: (value: Array<Record<string, unknown>>) => void;
+}) {
+  const facts = recordList(value);
+  function update(index: number, field: string, fieldValue: unknown) {
+    onChange(
+      facts.map((fact, currentIndex) =>
+        currentIndex === index ? { ...fact, [field]: fieldValue } : fact,
+      ),
+    );
+  }
+  return (
+    <div className="editor-collection">
+      <div className="editor-collection-heading">
+        <span>{label}</span>
+        <button
+          onClick={() =>
+            onChange([
+              ...facts,
+              {
+                value: '',
+                confidence: 1,
+                confirmation: 'user_confirmed',
+                sensitivity: 'normal',
+                tags: [],
+              },
+            ])
+          }
+          type="button"
+        >
+          + Add detail
+        </button>
+      </div>
+      {facts.map((fact, index) => (
+        <div className="fact-editor-card" key={String(fact.id ?? index)}>
+          <div className="fact-editor-topline">
+            <strong>Detail {index + 1}</strong>
+            <button
+              aria-label={`Remove ${label} detail ${index + 1}`}
+              onClick={() =>
+                onChange(facts.filter((_, itemIndex) => itemIndex !== index))
+              }
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <TextAreaField
+            label="What should be remembered"
+            value={fact.value}
+            onChange={(fieldValue) => update(index, 'value', fieldValue)}
+          />
+          <div className="editor-grid editor-grid-tight">
+            <TextField
+              label="Category"
+              value={fact.category}
+              onChange={(fieldValue) => update(index, 'category', fieldValue)}
+            />
+            <TextField
+              label="Source"
+              value={fact.source}
+              onChange={(fieldValue) => update(index, 'source', fieldValue)}
+            />
+            <NumberField
+              label="Confidence"
+              value={fact.confidence}
+              onChange={(fieldValue) => update(index, 'confidence', fieldValue)}
+            />
+            <SelectField
+              label="Confirmed as"
+              value={fact.confirmation}
+              options={['user_confirmed', 'agent_observed', 'inferred']}
+              onChange={(fieldValue) =>
+                update(index, 'confirmation', fieldValue)
+              }
+            />
+            <SelectField
+              label="Sensitivity"
+              value={fact.sensitivity}
+              options={['normal', 'personal', 'sensitive']}
+              onChange={(fieldValue) =>
+                update(index, 'sensitivity', fieldValue)
+              }
+            />
+            <TextField
+              label="Tags, comma separated"
+              value={stringLines(fact.tags).join(', ')}
+              onChange={(fieldValue) =>
+                update(
+                  index,
+                  'tags',
+                  fieldValue
+                    .split(',')
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+                )
+              }
+            />
+            <TextField
+              label="Valid until (optional)"
+              value={fact.validUntil}
+              onChange={(fieldValue) => update(index, 'validUntil', fieldValue)}
+            />
+          </div>
+        </div>
+      ))}
+      {!facts.length && (
+        <p className="editor-collection-empty">Nothing added yet.</p>
+      )}
+    </div>
+  );
+}
+
+function ValueListEditor({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: unknown;
+  onChange: (value: Array<Record<string, unknown>>) => void;
+}) {
+  const values = recordList(value);
+  return (
+    <div className="editor-collection">
+      <div className="editor-collection-heading">
+        <span>{label}</span>
+        <button
+          onClick={() => onChange([...values, { value: '', priority: 50 }])}
+          type="button"
+        >
+          + Add value
+        </button>
+      </div>
+      {values.map((item, index) => (
+        <div
+          className="structured-editor-card"
+          key={String(item.value ?? index)}
+        >
+          <div className="editor-card-actions">
+            <strong>Value {index + 1}</strong>
+            <button
+              onClick={() =>
+                onChange(values.filter((_, itemIndex) => itemIndex !== index))
+              }
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <div className="editor-grid editor-grid-tight">
+            <TextField
+              label="Value"
+              value={item.value}
+              onChange={(fieldValue) =>
+                onChange(
+                  values.map((current, itemIndex) =>
+                    itemIndex === index
+                      ? { ...current, value: fieldValue }
+                      : current,
+                  ),
+                )
+              }
+            />
+            <NumberField
+              label="Priority"
+              value={item.priority}
+              max={100}
+              step={1}
+              onChange={(fieldValue) =>
+                onChange(
+                  values.map((current, itemIndex) =>
+                    itemIndex === index
+                      ? { ...current, priority: fieldValue }
+                      : current,
+                  ),
+                )
+              }
+            />
+            <TextAreaField
+              className="editor-wide"
+              label="What it means"
+              value={item.meaning}
+              onChange={(fieldValue) =>
+                onChange(
+                  values.map((current, itemIndex) =>
+                    itemIndex === index
+                      ? { ...current, meaning: fieldValue }
+                      : current,
+                  ),
+                )
+              }
+            />
+            <TextAreaField
+              className="editor-wide"
+              label="Tradeoff"
+              value={item.tradeoff}
+              onChange={(fieldValue) =>
+                onChange(
+                  values.map((current, itemIndex) =>
+                    itemIndex === index
+                      ? { ...current, tradeoff: fieldValue }
+                      : current,
+                  ),
+                )
+              }
+            />
+          </div>
+        </div>
+      ))}
+      {!values.length && (
+        <p className="editor-collection-empty">Nothing added yet.</p>
+      )}
+    </div>
+  );
+}
+
+function ChapterListEditor({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: unknown;
+  onChange: (value: Array<Record<string, unknown>>) => void;
+}) {
+  const chapters = recordList(value);
+  const update = (index: number, field: string, fieldValue: unknown) =>
+    onChange(
+      chapters.map((chapter, chapterIndex) =>
+        chapterIndex === index ? { ...chapter, [field]: fieldValue } : chapter,
+      ),
+    );
+  return (
+    <div className="editor-collection">
+      <div className="editor-collection-heading">
+        <span>{label}</span>
+        <button
+          onClick={() =>
+            onChange([
+              ...chapters,
+              {
+                title: '',
+                summary: '',
+                lessons: [],
+                confidence: 1,
+                confirmation: 'user_confirmed',
+              },
+            ])
+          }
+          type="button"
+        >
+          + Add chapter
+        </button>
+      </div>
+      {chapters.map((chapter, index) => (
+        <div
+          className="structured-editor-card"
+          key={String(chapter.title ?? index)}
+        >
+          <div className="editor-card-actions">
+            <strong>Chapter {index + 1}</strong>
+            <button
+              onClick={() =>
+                onChange(chapters.filter((_, itemIndex) => itemIndex !== index))
+              }
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <div className="editor-grid editor-grid-tight">
+            <TextField
+              label="Title"
+              value={chapter.title}
+              onChange={(value) => update(index, 'title', value)}
+            />
+            <TextField
+              label="Period"
+              value={chapter.period}
+              onChange={(value) => update(index, 'period', value)}
+            />
+            <TextAreaField
+              className="editor-wide"
+              label="Summary"
+              value={chapter.summary}
+              onChange={(value) => update(index, 'summary', value)}
+            />
+            <StringListEditor
+              label="Lessons"
+              value={chapter.lessons}
+              onChange={(value) => update(index, 'lessons', value)}
+            />
+            <TextField
+              label="Source"
+              value={chapter.source}
+              onChange={(value) => update(index, 'source', value)}
+            />
+            <NumberField
+              label="Confidence"
+              value={chapter.confidence}
+              onChange={(value) => update(index, 'confidence', value)}
+            />
+            <SelectField
+              label="Confirmed as"
+              value={chapter.confirmation}
+              options={['user_confirmed', 'agent_observed', 'inferred']}
+              onChange={(value) => update(index, 'confirmation', value)}
+            />
+          </div>
+        </div>
+      ))}
+      {!chapters.length && (
+        <p className="editor-collection-empty">Nothing added yet.</p>
+      )}
+    </div>
+  );
+}
+
+function RelationshipListEditor({
+  value,
+  onChange,
+}: {
+  value: Array<Record<string, unknown>>;
+  onChange: (value: Array<Record<string, unknown>>) => void;
+}) {
+  const update = (index: number, field: string, fieldValue: unknown) =>
+    onChange(
+      value.map((relationship, relationshipIndex) =>
+        relationshipIndex === index
+          ? { ...relationship, [field]: fieldValue }
+          : relationship,
+      ),
+    );
+  return (
+    <div className="editor-collection">
+      <div className="editor-collection-heading">
+        <span>People, groups, and audiences</span>
+        <button
+          onClick={() =>
+            onChange([
+              ...value,
+              {
+                id: `relationship_${Date.now()}`,
+                label: '',
+                goals: [],
+                sensitivities: [],
+                communicationPreferences: [],
+                boundaries: [],
+                aliases: [],
+                sensitivity: 'normal',
+                confirmation: 'user_confirmed',
+                confidence: 1,
+              },
+            ])
+          }
+          type="button"
+        >
+          + Add relationship
+        </button>
+      </div>
+      {value.map((relationship, index) => (
+        <div
+          className="structured-editor-card"
+          key={String(relationship.id ?? index)}
+        >
+          <div className="editor-card-actions">
+            <strong>
+              {String(relationship.label || `Relationship ${index + 1}`)}
+            </strong>
+            <button
+              onClick={() =>
+                onChange(value.filter((_, itemIndex) => itemIndex !== index))
+              }
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <div className="editor-grid editor-grid-tight">
+            <TextField
+              label="Label"
+              value={relationship.label}
+              onChange={(fieldValue) => update(index, 'label', fieldValue)}
+            />
+            <TextField
+              label="Role"
+              value={relationship.role}
+              onChange={(fieldValue) => update(index, 'role', fieldValue)}
+            />
+            <TextField
+              label="Audience"
+              value={relationship.audience}
+              onChange={(fieldValue) => update(index, 'audience', fieldValue)}
+            />
+            <TextField
+              label="Preferred cadence"
+              value={relationship.preferredCadence}
+              onChange={(fieldValue) =>
+                update(index, 'preferredCadence', fieldValue)
+              }
+            />
+            <SelectField
+              label="Trust level"
+              value={relationship.trustLevel}
+              options={['new', 'developing', 'trusted', 'strained']}
+              onChange={(fieldValue) => update(index, 'trustLevel', fieldValue)}
+            />
+            <SelectField
+              label="Sensitivity"
+              value={relationship.sensitivity}
+              options={['normal', 'personal', 'sensitive']}
+              onChange={(fieldValue) =>
+                update(index, 'sensitivity', fieldValue)
+              }
+            />
+            <SelectField
+              label="Confirmed as"
+              value={relationship.confirmation}
+              options={['user_confirmed', 'agent_observed', 'inferred']}
+              onChange={(fieldValue) =>
+                update(index, 'confirmation', fieldValue)
+              }
+            />
+            <NumberField
+              label="Confidence"
+              value={relationship.confidence}
+              onChange={(fieldValue) => update(index, 'confidence', fieldValue)}
+            />
+            <TextAreaField
+              className="editor-wide"
+              label="Context"
+              value={relationship.context}
+              onChange={(fieldValue) => update(index, 'context', fieldValue)}
+            />
+            {[
+              ['Goals', 'goals'],
+              ['Sensitivities', 'sensitivities'],
+              ['Communication preferences', 'communicationPreferences'],
+              ['Boundaries', 'boundaries'],
+              ['Aliases', 'aliases'],
+            ].map(([label, field]) => (
+              <StringListEditor
+                key={field}
+                label={label}
+                value={relationship[field]}
+                onChange={(fieldValue) => update(index, field, fieldValue)}
+              />
             ))}
           </div>
-        ) : (
-          <EmptyState
-            compact
-            title="Nothing here yet"
-            body="Add a priority when you want your agents to understand this season of your work."
+        </div>
+      ))}
+      {!value.length && (
+        <p className="editor-collection-empty">
+          No relationship context added yet.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ObjectListEditor({
+  label,
+  value,
+  fields,
+  onChange,
+}: {
+  label: string;
+  value: unknown;
+  fields: ObjectField[];
+  onChange: (value: Array<Record<string, unknown>>) => void;
+}) {
+  const items = recordList(value);
+  const update = (index: number, field: ObjectField, fieldValue: string) => {
+    const parsed: unknown =
+      field.kind === 'number'
+        ? fieldValue
+          ? Number(fieldValue)
+          : undefined
+        : field.kind === 'list'
+          ? fieldValue
+              .split('\n')
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : field.kind === 'select' && fieldValue === ''
+            ? undefined
+            : fieldValue;
+    onChange(
+      items.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field.key]: parsed } : item,
+      ),
+    );
+  };
+  return (
+    <div className="editor-collection">
+      <div className="editor-collection-heading">
+        <span>{label}</span>
+        <button
+          onClick={() =>
+            onChange([
+              ...items,
+              Object.fromEntries(
+                fields.map((field) => [
+                  field.key,
+                  field.key === 'id'
+                    ? `${label.toLowerCase().replaceAll(' ', '_')}_${Date.now()}`
+                    : field.kind === 'list'
+                      ? []
+                      : '',
+                ]),
+              ),
+            ])
+          }
+          type="button"
+        >
+          + Add item
+        </button>
+      </div>
+      {items.map((item, index) => (
+        <div className="structured-editor-card" key={String(item.id ?? index)}>
+          <div className="editor-card-actions">
+            <strong>
+              {label} {index + 1}
+            </strong>
+            <button
+              onClick={() =>
+                onChange(items.filter((_, itemIndex) => itemIndex !== index))
+              }
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <div className="editor-grid editor-grid-tight">
+            {fields.map((field) => {
+              const rawValue =
+                field.kind === 'list'
+                  ? stringLines(item[field.key]).join('\n')
+                  : item[field.key];
+              if (field.kind === 'textarea' || field.kind === 'list')
+                return (
+                  <TextAreaField
+                    key={field.key}
+                    className={field.kind === 'list' ? '' : 'editor-wide'}
+                    label={field.label}
+                    value={rawValue}
+                    onChange={(fieldValue) => update(index, field, fieldValue)}
+                  />
+                );
+              if (field.kind === 'select')
+                return (
+                  <SelectField
+                    key={field.key}
+                    label={field.label}
+                    value={rawValue}
+                    options={field.options ?? []}
+                    onChange={(fieldValue) => update(index, field, fieldValue)}
+                  />
+                );
+              if (field.kind === 'number')
+                return (
+                  <NumberField
+                    key={field.key}
+                    label={field.label}
+                    value={rawValue}
+                    onChange={(fieldValue) =>
+                      update(
+                        index,
+                        field,
+                        fieldValue === undefined ? '' : String(fieldValue),
+                      )
+                    }
+                  />
+                );
+              return (
+                <TextField
+                  key={field.key}
+                  label={field.label}
+                  value={rawValue}
+                  placeholder={field.placeholder}
+                  onChange={(fieldValue) => update(index, field, fieldValue)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      {!items.length && (
+        <p className="editor-collection-empty">Nothing added yet.</p>
+      )}
+    </div>
+  );
+}
+
+function TerminologyEditor({
+  value,
+  onChange,
+}: {
+  value: unknown;
+  onChange: (value: Record<string, string>) => void;
+}) {
+  const terminology = recordValue(value);
+  const entries = Object.entries(terminology).filter(
+    ([key, entry]) => key && typeof entry === 'string',
+  ) as Array<[string, string]>;
+  return (
+    <div className="editor-collection">
+      <div className="editor-collection-heading">
+        <span>Preferred terminology</span>
+        <button
+          onClick={() =>
+            onChange({ ...terminology, [`term_${Date.now()}`]: '' })
+          }
+          type="button"
+        >
+          + Add term
+        </button>
+      </div>
+      {entries.map(([key, entry], index) => (
+        <div className="terminology-row" key={`${key}-${index}`}>
+          <input
+            aria-label="Term"
+            onChange={(event) => {
+              const next = { ...terminology };
+              delete next[key];
+              next[event.target.value] = entry;
+              onChange(next as Record<string, string>);
+            }}
+            placeholder="Term"
+            value={key}
           />
-        )}
-      </section>
+          <input
+            aria-label="Preferred wording"
+            onChange={(event) =>
+              onChange({ ...terminology, [key]: event.target.value })
+            }
+            placeholder="Preferred wording"
+            value={entry}
+          />
+          <button
+            aria-label={`Remove ${key}`}
+            onClick={() => {
+              const next = { ...terminology };
+              delete next[key];
+              onChange(next as Record<string, string>);
+            }}
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      {!entries.length && (
+        <p className="editor-collection-empty">
+          No terminology preferences added yet.
+        </p>
+      )}
     </div>
   );
 }

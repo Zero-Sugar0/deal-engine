@@ -538,6 +538,62 @@ describe('DEAL control plane', () => {
     expect(afterAgent.credentials[0].active).toBe(true);
   });
 
+  it('updates the complete human model and validates judgment rules', async () => {
+    const updated = await app.inject({
+      method: 'PATCH',
+      url: '/v1/profile',
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: {
+        displayName: 'Full Model Owner',
+        identity: {
+          preferredName: 'Full',
+          mission: 'Build with care',
+          languages: [{ value: 'English', confidence: 0.95 }],
+        },
+        persona: {
+          tone: 'warm',
+          preferredPhrases: ['Let’s make this useful.'],
+          modes: [
+            {
+              id: 'team',
+              audience: 'team',
+              verbosity: 'concise',
+            },
+          ],
+        },
+        relational: {
+          trustSignals: [{ value: 'Be direct about uncertainty' }],
+          repairProtocol: ['Name the miss and correct it.'],
+        },
+        domain: {
+          industry: 'software',
+          terminology: { customer: 'member' },
+        },
+        judgment: {
+          askIfMissing: ['goal'],
+          confidenceThreshold: 0.8,
+        },
+        currentPriorities: ['Ship the first useful version'],
+        knownConstraints: ['Protect deep work'],
+      },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().displayName).toBe('Full Model Owner');
+    expect(updated.json().persona.modes[0].id).toBe('team');
+    expect(updated.json().relational.repairProtocol).toContain(
+      'Name the miss and correct it.',
+    );
+    expect(updated.json().judgment.confidenceThreshold).toBe(0.8);
+
+    const invalid = await app.inject({
+      method: 'PATCH',
+      url: '/v1/profile',
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: { judgment: { confidenceThreshold: 2 } },
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+
   it('exposes profile, onboarding, memory, and workflow surfaces', async () => {
     const agentProfile = await app.inject({
       method: 'GET',
