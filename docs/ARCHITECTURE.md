@@ -43,6 +43,28 @@ The only interface most agents need.
 
 Returns a scoped, signed Human Context Packet.
 
+### Agent integration boundary
+
+The TypeScript SDK exposes a provider-neutral `DealAgentRuntime` and thin
+provider-native adapters. The runtime fetches and validates a packet, renders a
+model-facing instruction projection, caches only until packet expiry, and
+provides explicit outcome/feedback methods. Adapters translate that projection
+into the host framework's existing lifecycle:
+
+| Host runtime                          | Native DEAL integration point                         |
+| ------------------------------------- | ----------------------------------------------------- |
+| LangChain v1                          | `wrapModelCall` middleware                            |
+| OpenAI Agents SDK                     | async `Agent.instructions` callback                   |
+| OpenAI Responses / Chat Completions   | `instructions` or system message                      |
+| Anthropic Messages / Claude Agent SDK | top-level `system` / `systemPrompt`                   |
+| Vercel AI SDK / AI Gateway            | Language Model Specification v4 `transformParams`     |
+| OpenRouter                            | AI SDK middleware or OpenAI-compatible system message |
+
+No adapter executes tools, stores provider credentials, or implements a second
+agent loop. The host remains responsible for tool calls, consequential-action
+checks, approvals, and external systems. See
+[`AGENT_INTEGRATIONS.md`](AGENT_INTEGRATIONS.md) for current examples.
+
 ### Persona Compiler
 
 Converts onboarding answers, connected context, documents, and corrections into a stable human persona.

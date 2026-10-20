@@ -94,6 +94,7 @@ The first runnable vertical slice is now available:
 - Deterministic policy engine under `packages/policy`
 - Memory adapter contract, local adapter, and Supermemory adapter under `packages/memory`
 - TypeScript client under `packages/sdk-ts` and a dependency-free Python client under `packages/sdk-python`
+- Provider-native TypeScript integrations for LangChain, OpenAI Agents, Claude, Vercel AI SDK/AI Gateway, and OpenRouter under `packages/sdk-ts`
 - Postgres migration with tenant isolation under `infra/db/migrations`
 - Vite trust dashboard under `apps/dashboard`
 - MCP stdio adapter under `apps/mcp`
@@ -143,6 +144,36 @@ Production controls now include:
 
 External systems and tool credentials remain owned by the host agent and are
 intentionally outside this repository’s core scope.
+
+## Attach DEAL to an existing agent
+
+DEAL is intentionally a thin context layer. The host runtime keeps its model,
+tools, execution loop, and provider credentials. Install or import the SDK and
+use the adapter native to the runtime:
+
+```ts
+import {
+  DEAL,
+  createDealAgentRuntime,
+  createDealOpenAIInstructions,
+} from '@deal/sdk-ts';
+
+const runtime = createDealAgentRuntime(
+  new DEAL({
+    baseUrl: process.env.DEAL_API_URL!,
+    apiKey: process.env.DEAL_API_KEY!,
+  }),
+);
+
+const instructions = createDealOpenAIInstructions({
+  runtime,
+  request: ({ context }) => ({ task: context.task }),
+});
+```
+
+The full integration guide, including LangChain middleware, Claude system
+prompts, AI SDK/AI Gateway middleware, OpenRouter, outcomes, and security rules
+is in [`docs/AGENT_INTEGRATIONS.md`](docs/AGENT_INTEGRATIONS.md).
 
 ## Planning docs
 

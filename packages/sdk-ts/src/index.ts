@@ -1,5 +1,8 @@
 import type { HumanContextPacket, HumanModel } from '@deal/core';
 
+export * from './agent.js';
+export * from './integrations.js';
+
 export type HumanProfile = {
   id: string;
   email: string;

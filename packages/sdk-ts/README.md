@@ -44,3 +44,34 @@ if (decision.decision === 'require_approval') {
   // A human approves in the dashboard, then the agent calls consumeApproval.
 }
 ```
+
+### Agent runtime integrations
+
+`@deal/sdk-ts` also provides provider-native adapters so DEAL can be attached to
+an existing agent without taking ownership of its tools or model loop:
+
+```ts
+import {
+  createDealAgentRuntime,
+  createDealAISDKMiddleware,
+} from '@deal/sdk-ts';
+import { gateway } from '@ai-sdk/gateway';
+import { wrapLanguageModel } from 'ai';
+
+const runtime = createDealAgentRuntime(deal);
+const model = wrapLanguageModel({
+  model: gateway(process.env.AI_GATEWAY_MODEL!),
+  middleware: [
+    createDealAISDKMiddleware({
+      runtime,
+      request: () => ({ task: 'Answer the current user request' }),
+    }),
+  ],
+});
+```
+
+Use `createDealLangChainMiddleware`, `createDealOpenAIInstructions`,
+`withDealOpenAIResponsesRequest`, `withDealClaudeMessagesRequest`, or
+`withDealOpenRouterRequest` for the other provider-native surfaces. See
+[`docs/AGENT_INTEGRATIONS.md`](../../docs/AGENT_INTEGRATIONS.md) for complete
+examples and the lifecycle/security contract.

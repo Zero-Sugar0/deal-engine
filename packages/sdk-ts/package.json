@@ -6,7 +6,9 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./agent": "./dist/agent.js",
+    "./integrations": "./dist/integrations.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
