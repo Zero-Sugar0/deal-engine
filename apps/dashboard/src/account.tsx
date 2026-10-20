@@ -1015,6 +1015,7 @@ function OverviewView({
   const [memories, setMemories] = useState<Memory[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [gateway, setGateway] = useState<AiGatewaySettings | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
@@ -1023,13 +1024,21 @@ function OverviewView({
       request<Memory[]>('/v1/memory'),
       request<Approval[]>('/v1/approvals'),
       request<AuditEvent[]>('/v1/audit'),
+      request<AiGatewaySettings>('/v1/developer/ai-gateway'),
     ])
       .then(
-        ([agentResponse, memoryResponse, approvalResponse, auditResponse]) => {
+        ([
+          agentResponse,
+          memoryResponse,
+          approvalResponse,
+          auditResponse,
+          gatewayResponse,
+        ]) => {
           setAgents(agentResponse.agents);
           setMemories(memoryResponse);
           setApprovals(approvalResponse);
           setEvents(auditResponse.slice(-5).reverse());
+          setGateway(gatewayResponse.configured ? gatewayResponse : null);
         },
       )
       .catch((error) =>
@@ -1046,6 +1055,30 @@ function OverviewView({
   );
   const values = list(profile.persona?.values);
   const priorities = profile.currentPriorities ?? [];
+  const readiness = [
+    {
+      label: 'Identity',
+      detail: 'Who you are and what you are building',
+      ready: Object.keys(profile.identity ?? {}).length > 0,
+    },
+    {
+      label: 'Voice',
+      detail: 'How your agents should sound like you',
+      ready: Object.keys(profile.persona ?? {}).length > 0,
+    },
+    {
+      label: 'Priorities',
+      detail: 'What matters to you right now',
+      ready: priorities.length > 0,
+    },
+    {
+      label: 'Boundaries',
+      detail: 'What agents should ask before assuming',
+      ready: Object.keys(profile.boundaries ?? {}).length > 0,
+    },
+  ];
+  const readySections = readiness.filter((item) => item.ready).length;
+  const coverage = Math.round((readySections / readiness.length) * 100);
   return (
     <div className="account-content">
       <section className="account-hero-card">
@@ -1101,9 +1134,9 @@ function OverviewView({
           }
         />
         <Stat
-          label="Model version"
-          value={`v${profile.modelVersion ?? 1}`}
-          note="Changes are versioned"
+          label="Context coverage"
+          value={`${coverage}%`}
+          note={`${readySections} of ${readiness.length} foundations ready`}
         />
         <Stat
           label="Waiting for you"
@@ -1115,6 +1148,58 @@ function OverviewView({
           }
           alert={pending.length > 0}
         />
+      </section>
+      <section className="account-panel overview-readiness-panel">
+        <PanelHeading
+          eyebrow="The layer between you and AI"
+          title="Your understanding, ready to travel"
+          action="Edit human model"
+          onAction={() => onNavigate('Human model')}
+        />
+        <div className="overview-readiness-grid">
+          <div className="overview-coverage">
+            <div className="overview-coverage-number">
+              <strong>{coverage}%</strong>
+              <span>context ready</span>
+            </div>
+            <div className="overview-progress">
+              <i style={{ width: `${coverage}%` }} />
+            </div>
+            <p>
+              Every completed section gives your agents a clearer sense of your
+              voice, judgment, and limits.
+            </p>
+          </div>
+          <div className="overview-readiness-list">
+            {readiness.map((item) => (
+              <div className="overview-readiness-row" key={item.label}>
+                <span className={item.ready ? 'is-ready' : ''}>
+                  {item.ready ? '✓' : '·'}
+                </span>
+                <div>
+                  <strong>{item.label}</strong>
+                  <small>{item.detail}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="overview-route-card">
+            <span className="eyebrow">Current route</span>
+            <strong>{gateway?.model ?? 'No model chosen yet'}</strong>
+            <p>
+              {gateway
+                ? 'Your comparisons use your saved Vercel AI Gateway connection.'
+                : 'Choose a Vercel AI Gateway model in Developer to start comparing.'}
+            </p>
+            <button
+              className="account-text-link"
+              onClick={() => onNavigate('Developer')}
+              type="button"
+            >
+              {gateway ? 'Change model' : 'Choose a model'} ↗
+            </button>
+          </div>
+        </div>
       </section>
       <div className="account-two-column">
         <section className="account-panel">
@@ -1276,6 +1361,114 @@ function EmptyState({
       <span>◌</span>
       <strong>{title}</strong>
       <p>{body}</p>
+    </div>
+  );
+}
+
+function GatewayModelPicker({
+  models,
+  loading,
+  errorMessage,
+  value,
+  onChange,
+  onRetry,
+}: {
+  models: AiGatewayModel[];
+  loading: boolean;
+  errorMessage: string;
+  value: string;
+  onChange: (model: string) => void;
+  onRetry: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredModels = models.filter((model) => {
+    if (!normalizedQuery) return true;
+    return [model.id, model.name, model.provider].some((field) =>
+      field.toLowerCase().includes(normalizedQuery),
+    );
+  });
+  const visibleModels = filteredModels.slice(0, 48);
+
+  return (
+    <div className="gateway-model-picker">
+      <div className="gateway-model-picker-heading">
+        <div>
+          <span className="eyebrow">Live model list</span>
+          <strong>Choose what powers your comparison</strong>
+        </div>
+        <span className="gateway-model-count">
+          {loading ? 'Loading…' : `${models.length} models`}
+        </span>
+      </div>
+      <div className="gateway-model-search-row">
+        <input
+          aria-label="Search AI Gateway models"
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search by model or provider…"
+          value={query}
+        />
+        {errorMessage && (
+          <button onClick={onRetry} type="button">
+            Try again
+          </button>
+        )}
+      </div>
+      {errorMessage ? (
+        <div className="gateway-model-error">
+          <span>{errorMessage}</span>
+          <small>
+            You can still enter an exact provider/model ID below while the list
+            is unavailable.
+          </small>
+        </div>
+      ) : loading ? (
+        <div className="gateway-model-loading">Loading current models…</div>
+      ) : visibleModels.length ? (
+        <div
+          aria-label="Available AI Gateway models"
+          className="gateway-model-list"
+          role="listbox"
+        >
+          {visibleModels.map((model) => {
+            const selected = value === model.id;
+            return (
+              <button
+                aria-selected={selected}
+                className={`gateway-model-option ${selected ? 'gateway-model-option-selected' : ''}`}
+                key={model.id}
+                onClick={() => onChange(model.id)}
+                role="option"
+                type="button"
+              >
+                <span className="gateway-model-provider">
+                  {model.provider.slice(0, 2).toUpperCase()}
+                </span>
+                <span className="gateway-model-option-copy">
+                  <strong>{model.name}</strong>
+                  <code>{model.id}</code>
+                  {model.description && <small>{model.description}</small>}
+                </span>
+                <span className="gateway-model-check">
+                  {selected ? '✓' : ''}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="gateway-model-empty">
+          No models match “{query}”. Try a provider name or clear the search.
+        </div>
+      )}
+      {!loading &&
+        !errorMessage &&
+        filteredModels.length > visibleModels.length && (
+          <small className="gateway-model-more">
+            Showing the first {visibleModels.length} matches. Search to narrow
+            the list.
+          </small>
+        )}
     </div>
   );
 }
@@ -3375,12 +3568,13 @@ function DeveloperView() {
   const [runtime, setRuntime] = useState('');
   const [gateway, setGateway] = useState<AiGatewaySettings | null>(null);
   const [gatewayModels, setGatewayModels] = useState<AiGatewayModel[]>([]);
-  const [gatewayModelQuery, setGatewayModelQuery] = useState('');
   const [gatewayApiKey, setGatewayApiKey] = useState('');
   const [gatewayModel, setGatewayModel] = useState('');
   const [gatewayEditing, setGatewayEditing] = useState(false);
   const [gatewayBusy, setGatewayBusy] = useState(false);
   const [gatewayLoading, setGatewayLoading] = useState(true);
+  const [gatewayModelsLoading, setGatewayModelsLoading] = useState(true);
+  const [gatewayModelsError, setGatewayModelsError] = useState('');
   const [gatewayMessage, setGatewayMessage] = useState('');
   const [showAgentForm, setShowAgentForm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -3397,13 +3591,24 @@ function DeveloperView() {
       if (response.configured && response.model)
         setGatewayModel(response.model);
     });
-  const loadGatewayModels = () =>
-    request<{ models: AiGatewayModel[] }>('/v1/developer/ai-gateway/models')
-      .then((response) => setGatewayModels(response.models))
-      .catch(() => {
-        // Model selection remains available through the exact provider/model
-        // field when the live catalog is temporarily unavailable.
-      });
+  async function loadGatewayModels() {
+    setGatewayModelsLoading(true);
+    setGatewayModelsError('');
+    try {
+      const response = await request<{ models: AiGatewayModel[] }>(
+        '/v1/developer/ai-gateway/models',
+      );
+      setGatewayModels(response.models);
+    } catch (error) {
+      setGatewayModelsError(
+        error instanceof Error
+          ? error.message
+          : 'The model list could not be loaded.',
+      );
+    } finally {
+      setGatewayModelsLoading(false);
+    }
+  }
   useEffect(() => {
     Promise.all([load(), loadGateway()])
       .catch((error) =>
@@ -3525,6 +3730,30 @@ function DeveloperView() {
       setGatewayBusy(false);
     }
   }
+  async function saveGatewayModel() {
+    if (!gatewayModel.trim() || !gateway || gatewayModel === gateway.model)
+      return;
+    setGatewayBusy(true);
+    setGatewayMessage('');
+    setErrorMessage('');
+    try {
+      const response = await request<AiGatewaySettings>(
+        '/v1/developer/ai-gateway',
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ model: gatewayModel.trim() }),
+        },
+      );
+      setGateway(response);
+      setGatewayMessage('Your model choice was updated.');
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Could not change the model.',
+      );
+    } finally {
+      setGatewayBusy(false);
+    }
+  }
   async function removeGateway() {
     if (
       !window.confirm(
@@ -3549,17 +3778,6 @@ function DeveloperView() {
       setGatewayBusy(false);
     }
   }
-  const visibleGatewayModels = gatewayModels
-    .filter((model) => {
-      const query = gatewayModelQuery.trim().toLowerCase();
-      return (
-        !query ||
-        model.id.toLowerCase().includes(query) ||
-        model.name.toLowerCase().includes(query) ||
-        model.provider.toLowerCase().includes(query)
-      );
-    })
-    .slice(0, 80);
   return (
     <div className="account-content">
       <section className="section-intro-row developer-intro">
@@ -3674,39 +3892,63 @@ function DeveloperView() {
           {gatewayLoading ? (
             <div className="loading-line">Checking your saved key…</div>
           ) : gateway && !gatewayEditing ? (
-            <div className="gateway-saved-card">
-              <div>
-                <span className="gateway-status-dot" />
-                <strong>Connected to Vercel AI Gateway</strong>
-                <p>
-                  {gateway.keyHint} · {gateway.model}
-                </p>
-                <small>
-                  Added {prettyDate(gateway.createdAt)} · encrypted and never
-                  displayed in full
-                </small>
+            <>
+              <div className="gateway-saved-card">
+                <div>
+                  <span className="gateway-status-dot" />
+                  <strong>Connected to Vercel AI Gateway</strong>
+                  <p>{gateway.keyHint}</p>
+                  <small>
+                    Added {prettyDate(gateway.createdAt)} · encrypted and never
+                    displayed in full
+                  </small>
+                </div>
+                <div className="gateway-actions">
+                  <SmallButton
+                    onClick={() => {
+                      setGatewayModel(gateway.model ?? '');
+                      setGatewayEditing(true);
+                      setGatewayMessage('');
+                    }}
+                    secondary
+                  >
+                    Replace key
+                  </SmallButton>
+                  <button
+                    className="danger-text"
+                    disabled={gatewayBusy}
+                    onClick={removeGateway}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
-              <div className="gateway-actions">
+              <GatewayModelPicker
+                errorMessage={gatewayModelsError}
+                loading={gatewayModelsLoading}
+                models={gatewayModels}
+                onChange={setGatewayModel}
+                onRetry={() => void loadGatewayModels()}
+                value={gatewayModel}
+              />
+              <div className="gateway-selected-model">
+                <label>
+                  Selected model
+                  <input
+                    onChange={(event) => setGatewayModel(event.target.value)}
+                    placeholder="provider/model-id"
+                    value={gatewayModel}
+                  />
+                </label>
                 <SmallButton
-                  onClick={() => {
-                    setGatewayModel(gateway.model ?? '');
-                    setGatewayEditing(true);
-                    setGatewayMessage('');
-                  }}
-                  secondary
+                  disabled={gatewayBusy || gatewayModel === gateway.model}
+                  onClick={() => void saveGatewayModel()}
                 >
-                  Replace key
+                  {gatewayBusy ? 'Saving…' : 'Save model'}
                 </SmallButton>
-                <button
-                  className="danger-text"
-                  disabled={gatewayBusy}
-                  onClick={removeGateway}
-                  type="button"
-                >
-                  Remove
-                </button>
               </div>
-            </div>
+            </>
           ) : (
             <form className="gateway-form" onSubmit={saveGateway}>
               <label>
@@ -3723,32 +3965,23 @@ function DeveloperView() {
                   It is sent over HTTPS and never shown after saving.
                 </small>
               </label>
-              <label>
-                Model
+              <GatewayModelPicker
+                errorMessage={gatewayModelsError}
+                loading={gatewayModelsLoading}
+                models={gatewayModels}
+                onChange={setGatewayModel}
+                onRetry={() => void loadGatewayModels()}
+                value={gatewayModel}
+              />
+              <label className="gateway-exact-model">
+                Model ID
                 <input
-                  onChange={(event) => setGatewayModelQuery(event.target.value)}
-                  placeholder="Filter available models"
-                  value={gatewayModelQuery}
-                />
-                <input
-                  list="deal-gateway-models"
                   onChange={(event) => setGatewayModel(event.target.value)}
                   placeholder="provider/model-id"
                   required
                   value={gatewayModel}
                 />
-                <datalist id="deal-gateway-models">
-                  {visibleGatewayModels.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name} · {model.provider}
-                    </option>
-                  ))}
-                </datalist>
-                <small>
-                  {gatewayModels.length
-                    ? `${gatewayModels.length} current language models loaded. Choose one or enter an exact provider/model ID.`
-                    : 'Enter an exact provider/model ID. The live catalog will appear when available.'}
-                </small>
+                <small>Use this when you already know an exact model ID.</small>
               </label>
               <div className="gateway-form-actions">
                 <SmallButton disabled={gatewayBusy} type="submit">

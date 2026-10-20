@@ -25,6 +25,33 @@ const app = buildServer({
   contextTtlMinutes: 15,
   skillSigner,
 });
+const modelCatalogApp = buildServer({
+  store,
+  jwtSecret: 'test-secret-that-is-long-enough',
+  fetchImpl: async () =>
+    new Response(
+      JSON.stringify({
+        data: [
+          {
+            id: 'openai/gpt-4.1-mini',
+            name: 'GPT-4.1 mini',
+            owned_by: 'openai',
+            type: 'language',
+            modalities: { input: ['text'], output: ['text'] },
+          },
+          {
+            id: 'openai/text-embedding-3-small',
+            name: 'Embedding model',
+            owned_by: 'openai',
+            type: 'embedding',
+            context_window: null,
+            max_tokens: null,
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ),
+});
 const limitedApp = buildServer({
   store,
   jwtSecret: 'test-secret-that-is-long-enough',
@@ -51,6 +78,7 @@ const externalApp = buildServer({
 
 afterAll(async () => {
   await app.close();
+  await modelCatalogApp.close();
   await limitedApp.close();
   await externalApp.close();
 });
@@ -134,6 +162,19 @@ describe('DEAL control plane', () => {
       keyHint: '••••rned',
     });
 
+    const modelUpdate = await app.inject({
+      method: 'PATCH',
+      url: '/v1/developer/ai-gateway',
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: { model: 'anthropic/claude-sonnet-4.5' },
+    });
+    expect(modelUpdate.statusCode).toBe(200);
+    expect(modelUpdate.json()).toMatchObject({
+      configured: true,
+      model: 'anthropic/claude-sonnet-4.5',
+      keyHint: '••••rned',
+    });
+
     const replacement = await app.inject({
       method: 'PUT',
       url: '/v1/developer/ai-gateway',
@@ -167,6 +208,31 @@ describe('DEAL control plane', () => {
       headers: { authorization: `Bearer ${humanToken}` },
     });
     expect(afterRemove.json()).toMatchObject({ configured: false });
+  });
+
+  it('shows language models from the live catalog without exposing credentials', async () => {
+    const unauthenticated = await modelCatalogApp.inject({
+      method: 'GET',
+      url: '/v1/developer/ai-gateway/models',
+    });
+    expect(unauthenticated.statusCode).toBe(401);
+
+    const response = await modelCatalogApp.inject({
+      method: 'GET',
+      url: '/v1/developer/ai-gateway/models',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      models: [
+        {
+          id: 'openai/gpt-4.1-mini',
+          name: 'GPT-4.1 mini',
+          provider: 'openai',
+          description: '',
+        },
+      ],
+    });
   });
 
   it('lists human-owned agents without exposing raw credentials', async () => {

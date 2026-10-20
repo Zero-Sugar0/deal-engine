@@ -64,6 +64,8 @@ export interface ServerOptions {
   store?: DealStore;
   jwtSecret?: string;
   credentialEncryptionKey?: string;
+  aiGatewayModelsUrl?: string;
+  fetchImpl?: typeof fetch;
   contextTtlMinutes?: number;
   externalAuth?: ExternalAuthProvider;
   rateLimiter?: RateLimiter;
@@ -119,14 +121,23 @@ const aiGatewayCredentialBody = z.object({
     .regex(/^[^/\s]+\/[^/\s]+$/, 'Model must use provider/model format'),
 });
 
+const aiGatewayModelUpdateBody = z.object({
+  model: z
+    .string()
+    .trim()
+    .min(3)
+    .max(200)
+    .regex(/^[^/\s]+\/[^/\s]+$/, 'Model must use provider/model format'),
+});
+
 const aiGatewayModelSchema = z.object({
   id: z.string().min(3),
   name: z.string().optional(),
   owned_by: z.string().optional(),
   description: z.string().optional(),
   type: z.string().optional(),
-  context_window: z.number().optional(),
-  max_tokens: z.number().optional(),
+  context_window: z.number().nullable().optional(),
+  max_tokens: z.number().nullable().optional(),
   modalities: z
     .object({
       input: z.array(z.string()).optional(),
@@ -1424,8 +1435,9 @@ export function buildServer(
       }
     }
     try {
-      const response = await fetch(
-        process.env.DEAL_AI_GATEWAY_MODELS_URL ??
+      const response = await (options.fetchImpl ?? fetch)(
+        options.aiGatewayModelsUrl ??
+          process.env.DEAL_AI_GATEWAY_MODELS_URL ??
           'https://ai-gateway.vercel.sh/v1/models',
         {
           headers: gatewayKey
@@ -1453,8 +1465,10 @@ export function buildServer(
           name: model.name ?? model.id,
           provider: model.owned_by ?? model.id.split('/')[0],
           description: model.description ?? '',
-          contextWindow: model.context_window,
-          maxTokens: model.max_tokens,
+          ...(model.context_window == null
+            ? {}
+            : { contextWindow: model.context_window }),
+          ...(model.max_tokens == null ? {} : { maxTokens: model.max_tokens }),
         }))
         .sort((left, right) =>
           `${left.provider}/${left.name}`.localeCompare(
@@ -1505,6 +1519,41 @@ export function buildServer(
         provider: saved.provider,
         model: saved.model,
         keyHint: saved.keyHint,
+      },
+    });
+    return {
+      configured: true,
+      provider: saved.provider,
+      model: saved.model,
+      keyHint: saved.keyHint,
+      createdAt: saved.createdAt,
+      updatedAt: saved.updatedAt,
+    };
+  });
+
+  app.patch('/v1/developer/ai-gateway', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const body = parse(aiGatewayModelUpdateBody, request.body);
+    const human = store.humans.get(credential.humanId);
+    if (!human) throw error(404, 'Human not found');
+    const saved = store.getActiveAiGatewayCredential(human.id);
+    if (!saved)
+      throw error(409, 'Save an AI Gateway key before choosing a model');
+    saved.model = body.model;
+    saved.updatedAt = new Date().toISOString();
+    store.recordAudit({
+      humanId: human.id,
+      organizationId: human.organizationId,
+      eventType: 'ai_gateway.model_updated',
+      payload: {
+        credentialId: saved.id,
+        provider: saved.provider,
+        model: saved.model,
       },
     });
     return {

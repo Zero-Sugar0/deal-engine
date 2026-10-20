@@ -116,6 +116,21 @@ paths:
       responses:
         '200': { description: Saved connection metadata without the raw key }
         '400': { description: Invalid key or model format }
+    patch:
+      summary: Change the authenticated person's selected AI Gateway model
+      description: Updates the model without requiring the person to enter their saved key again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model]
+              properties:
+                model: { type: string, example: openai/gpt-4.1-mini }
+      responses:
+        '200': { description: Updated connection metadata without the raw key }
+        '409': { description: No saved AI Gateway key exists }
     delete:
       summary: Remove the authenticated person's saved AI Gateway key
       responses:
