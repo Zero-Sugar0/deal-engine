@@ -11,6 +11,7 @@ import {
 } from '@deal/memory';
 import {
   DealStore,
+  hashToken,
   hashPayload,
   type Agent,
   type Approval,
@@ -780,6 +781,50 @@ export class PostgresDealStore extends DealStore {
   ): Promise<void> {
     await this.ready;
     if (this.humans.size) {
+      if (process.env.DEAL_REFRESH_SEEDED_CREDENTIALS === 'true') {
+        const seededHuman = [...this.humans.values()].find(
+          (human) => human.email === 'founder@example.com',
+        );
+        if (seededHuman) {
+          const seededAgent = [...this.agents.values()].find(
+            (agent) => agent.ownerHumanId === seededHuman.id,
+          );
+          const agentCredential = [...this.credentials.values()].find(
+            (credential) =>
+              credential.kind === 'agent' &&
+              credential.humanId === seededHuman.id &&
+              credential.agentId === seededAgent?.id,
+          );
+          const humanCredential = [...this.credentials.values()].find(
+            (credential) =>
+              credential.kind === 'human' &&
+              credential.humanId === seededHuman.id,
+          );
+          if (agentCredential) {
+            agentCredential.tokenHash = hashToken(agentToken);
+            agentCredential.revokedAt = undefined;
+          } else if (seededAgent) {
+            this.issueCredential(
+              {
+                kind: 'agent',
+                humanId: seededHuman.id,
+                agentId: seededAgent.id,
+              },
+              agentToken,
+            );
+          }
+          if (humanCredential) {
+            humanCredential.tokenHash = hashToken(humanToken);
+            humanCredential.revokedAt = undefined;
+          } else {
+            this.issueCredential(
+              { kind: 'human', humanId: seededHuman.id },
+              humanToken,
+            );
+          }
+          await this.persist();
+        }
+      }
       for (const delegation of this.delegations.values()) {
         if (
           delegation.profileId === 'growth_operator_v1' &&
