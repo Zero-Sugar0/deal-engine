@@ -1,0 +1,24 @@
+# Notes and local scratch
+*.note
+*.notes
+notes/
+.notes/
+*.md.note
+
+# OS and editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Dependencies and build
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+build/
+*.log
