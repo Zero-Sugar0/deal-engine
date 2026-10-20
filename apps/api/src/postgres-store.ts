@@ -1049,6 +1049,11 @@ export class PostgresDealStore extends DealStore {
     this.delegations.set(delegation.id, delegation);
     this.issueCredential({ kind: 'agent', humanId, agentId }, agentToken);
     this.issueCredential({ kind: 'human', humanId }, humanToken);
+
+    // The Postgres memory adapter writes directly to memory_records. Persist
+    // the owning organization and human first so first-run seeding satisfies
+    // the database foreign keys before the first memory is inserted.
+    await this.persist();
     await this.memories.add({
       humanId,
       organizationId,
