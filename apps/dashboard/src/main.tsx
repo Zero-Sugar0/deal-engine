@@ -1239,8 +1239,8 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
           </p>
           <div className="auth-preview">
             <Notch variant="chat" />
-            <strong>context ready</strong>
-            <span>identity · memory · judgment</span>
+            <strong>ready to help</strong>
+            <span>voice · choices · boundaries</span>
           </div>
         </div>
       </div>
