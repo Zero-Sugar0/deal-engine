@@ -43,10 +43,15 @@ export type HumanProfileUpdate = {
   knownConstraints?: string[];
 };
 
+/** The hosted DEAL API used when a self-hosted base URL is not supplied. */
+export const DEAL_DEFAULT_API_URL = 'https://api.deal.engine';
+
 export interface DEALOptions {
-  baseUrl: string;
   apiKey: string;
+  /** Optional for self-hosted DEAL installations. Hosted users only need an API key. */
+  baseUrl?: string;
   fetch?: typeof fetch;
+  timeoutMs?: number;
 }
 
 export interface ContextRequest {
@@ -109,29 +114,53 @@ export interface WorkflowRun {
 
 export class DEAL {
   private readonly requestFetch: typeof fetch;
+  private readonly baseUrl: string;
+  private readonly timeoutMs: number;
 
-  constructor(private readonly options: DEALOptions) {
+  constructor(input: string | DEALOptions) {
+    const options = typeof input === 'string' ? { apiKey: input } : input;
+    if (!options.apiKey.trim()) throw new Error('DEAL API key is required');
+    this.options = options;
+    this.baseUrl = (
+      options.baseUrl ??
+      readEnvironmentApiUrl() ??
+      DEAL_DEFAULT_API_URL
+    ).replace(/\/$/, '');
+    this.timeoutMs = options.timeoutMs ?? 15_000;
     this.requestFetch = options.fetch ?? fetch;
   }
 
+  private readonly options: DEALOptions;
+
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await this.requestFetch(
-      `${this.options.baseUrl.replace(/\/$/, '')}${path}`,
-      {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    let response: Response;
+    try {
+      response = await this.requestFetch(`${this.baseUrl}${path}`, {
         ...init,
+        signal: init.signal ?? controller.signal,
         headers: {
           authorization: `Bearer ${this.options.apiKey}`,
           'content-type': 'application/json',
           ...(init.headers ?? {}),
         },
-      },
-    );
-    const body = (await response.json()) as T & { error?: string };
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    let body: (T & { error?: string }) | undefined;
+    try {
+      body = (await response.json()) as T & { error?: string };
+    } catch {
+      body = undefined;
+    }
     if (!response.ok)
       throw new Error(
-        body.error ?? `DEAL request failed with ${response.status}`,
+        body?.error ?? `DEAL request failed with ${response.status}`,
       );
-    return body;
+    return body as T;
   }
 
   async getContext(input: ContextRequest): Promise<{
@@ -354,4 +383,22 @@ export class DEAL {
       body: JSON.stringify(input),
     });
   }
+}
+
+function readEnvironmentApiUrl(): string | undefined {
+  const processLike = (
+    globalThis as typeof globalThis & {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process;
+  const value = processLike?.env?.DEAL_API_URL;
+  return value?.trim() || undefined;
+}
+
+/** Construct a hosted client without repeating the API endpoint in application code. */
+export function createDealClient(
+  apiKey: string,
+  options: Omit<DEALOptions, 'apiKey'> = {},
+): DEAL {
+  return new DEAL({ ...options, apiKey });
 }

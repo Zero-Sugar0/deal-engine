@@ -158,18 +158,23 @@ import {
   createDealOpenAIInstructions,
 } from '@deal/sdk-ts';
 
-const runtime = createDealAgentRuntime(
-  new DEAL({
-    baseUrl: process.env.DEAL_API_URL!,
-    apiKey: process.env.DEAL_API_KEY!,
-  }),
-);
+// Hosted DEAL: the SDK has the API endpoint built in. Keep this key server-side.
+const runtime = createDealAgentRuntime(process.env.DEAL_API_KEY!);
 
 const instructions = createDealOpenAIInstructions({
   runtime,
-  request: ({ context }) => ({ task: context.task }),
+  request: ({ context }) => ({
+    task: context.task,
+    conversationId: context.conversationId,
+    channel: 'openai_agents',
+  }),
 });
 ```
+
+For LangChain, AI SDK, Claude, OpenAI Responses, and OpenRouter, the adapters
+can infer the task from the current chat messages. A custom `request` function
+is only needed when an application has its own run-context shape. Self-hosted
+installations can still pass `{ apiKey, baseUrl }` to `DEAL`.
 
 The full integration guide, including LangChain middleware, Claude system
 prompts, AI SDK/AI Gateway middleware, OpenRouter, outcomes, and security rules

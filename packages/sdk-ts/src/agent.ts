@@ -1,6 +1,7 @@
 import { HumanContextPacketSchema } from '@deal/core';
 import type { HumanContextPacket } from '@deal/core';
-import type { ContextRequest, DEAL } from './index.js';
+import { DEAL } from './index.js';
+import type { ContextRequest, DEALOptions } from './index.js';
 
 export type ContextEnvelope = {
   packetId: string;
@@ -35,6 +36,11 @@ export interface DealAgentRuntimeOptions {
   now?: () => Date;
 }
 
+export type DealChatInput = Omit<ContextRequest, 'task'> & {
+  messages: readonly unknown[];
+  task?: string;
+};
+
 function stableValue(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableValue).join(',')}]`;
@@ -61,6 +67,32 @@ function recordLines(
   values: readonly Record<string, unknown>[] | undefined,
 ): string {
   return (values ?? []).map((value) => `- ${valueText(value)}`).join('\n');
+}
+
+/** Extract the latest human-authored message for automatic chat context. */
+export function extractLatestUserText(messages: readonly unknown[]): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || typeof message !== 'object') continue;
+    const role = (message as { role?: unknown }).role;
+    if (role !== 'user' && role !== 'human') continue;
+    const content = (message as { content?: unknown }).content;
+    if (typeof content === 'string' && content.trim()) return content.trim();
+    if (Array.isArray(content)) {
+      const text = content
+        .map((part) => {
+          if (typeof part === 'string') return part;
+          if (part && typeof part === 'object' && 'text' in part)
+            return String((part as { text: unknown }).text);
+          return '';
+        })
+        .filter(Boolean)
+        .join('\n')
+        .trim();
+      if (text) return text;
+    }
+  }
+  return '';
 }
 
 /**
@@ -291,9 +323,15 @@ export class DealAgentRuntime {
     this.now = options.now ?? (() => new Date());
   }
 
-  async prepare(input: ContextRequest): Promise<PreparedDealContext> {
+  async prepare(
+    input: ContextRequest,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<PreparedDealContext> {
     const key = stableValue(input);
-    const cached = this.cacheEnabled ? this.cache.get(key) : undefined;
+    const cached =
+      this.cacheEnabled && !options.forceRefresh
+        ? this.cache.get(key)
+        : undefined;
     const now = this.now().getTime();
     if (cached && cached.expiresAt > now) return cached.prepared;
 
@@ -311,6 +349,24 @@ export class DealAgentRuntime {
       });
     }
     return prepared;
+  }
+
+  /**
+   * Prepare context directly from a provider chat message list. This is the
+   * low-friction path for integrations: the latest user turn becomes the
+   * scoped task and conversation metadata is sent to DEAL automatically.
+   */
+  async prepareChat(
+    input: DealChatInput,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<PreparedDealContext> {
+    const { messages, task, ...context } = input;
+    const resolvedTask = task?.trim() || extractLatestUserText(messages);
+    if (!resolvedTask)
+      throw new Error(
+        'DEAL chat context requires a task or at least one user message',
+      );
+    return this.prepare({ ...context, task: resolvedTask }, options);
   }
 
   async reportOutcome(input: {
@@ -336,8 +392,11 @@ export class DealAgentRuntime {
 }
 
 export function createDealAgentRuntime(
-  client: DealClientPort | DEAL,
+  client: DealClientPort | DEAL | string | DEALOptions,
   options?: DealAgentRuntimeOptions,
 ): DealAgentRuntime {
-  return new DealAgentRuntime(client, options);
+  if (typeof client === 'string')
+    return new DealAgentRuntime(new DEAL(client), options);
+  if ('getContext' in client) return new DealAgentRuntime(client, options);
+  return new DealAgentRuntime(new DEAL(client), options);
 }

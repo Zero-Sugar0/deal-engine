@@ -3,13 +3,15 @@
 The SDK is the typed client for the control-plane API. MCP and dashboard clients use the
 same API contracts rather than duplicating policy logic.
 
+```bash
+pnpm add @deal/sdk-ts
+```
+
 ```ts
 import { DEAL } from '@deal/sdk-ts';
 
-const deal = new DEAL({
-  baseUrl: process.env.DEAL_API_URL ?? 'http://localhost:3000',
-  apiKey: process.env.DEAL_API_KEY!,
-});
+// Hosted DEAL: only the API key is required. Never expose it to browser code.
+const deal = new DEAL(process.env.DEAL_API_KEY!);
 
 const context = await deal.getContext({
   task: 'Prepare release notes for v2.4',
@@ -64,14 +66,27 @@ const model = wrapLanguageModel({
   middleware: [
     createDealAISDKMiddleware({
       runtime,
-      request: () => ({ task: 'Answer the current user request' }),
+      context: {
+        channel: 'ai_sdk',
+        conversationId: process.env.CONVERSATION_ID,
+      },
     }),
   ],
 });
 ```
+
+On each model call the middleware extracts the latest user message, requests a
+short-lived signed context packet, validates it, and injects the human's
+identity, communication style, values, boundaries, relationship guidance,
+decision style, relevant memory evidence, and delegated behavior into the
+provider's native system-instruction boundary. The host agent still owns its
+model, tools, execution loop, approvals, and provider credentials.
 
 Use `createDealLangChainMiddleware`, `createDealOpenAIInstructions`,
 `withDealOpenAIResponsesRequest`, `withDealClaudeMessagesRequest`, or
 `withDealOpenRouterRequest` for the other provider-native surfaces. See
 [`docs/AGENT_INTEGRATIONS.md`](../../docs/AGENT_INTEGRATIONS.md) for complete
 examples and the lifecycle/security contract.
+
+The hosted default endpoint is `DEAL_DEFAULT_API_URL`. Self-hosted users can
+override it with `new DEAL({ apiKey, baseUrl })` or `DEAL_API_URL`.

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { HumanContextPacket } from '@deal/core';
 import {
+  DEAL,
+  DEAL_DEFAULT_API_URL,
   createDealAISDKMiddleware,
   createDealAgentRuntime,
   createDealClaudeAgentOptions,
@@ -195,6 +197,28 @@ function makeRuntime() {
 }
 
 describe('agent integrations', () => {
+  it('supports API-key-only clients with a hosted default endpoint', async () => {
+    let calledUrl = '';
+    let authorization = '';
+    const deal = new DEAL({
+      apiKey: 'deal_test_key',
+      fetch: async (input, init) => {
+        calledUrl = String(input);
+        authorization = String(
+          (init?.headers as Record<string, string>).authorization,
+        );
+        return new Response(JSON.stringify({ human: {}, delegations: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    });
+
+    await deal.getProfile();
+    expect(calledUrl).toBe(`${DEAL_DEFAULT_API_URL}/v1/profile`);
+    expect(authorization).toBe('Bearer deal_test_key');
+  });
+
   it('renders rich human context and marks memory as untrusted evidence', async () => {
     const { runtime } = makeRuntime();
     const prepared = await runtime.prepare({
@@ -300,5 +324,29 @@ describe('agent integrations', () => {
       'system',
     );
     expect(JSON.stringify(transformed.prompt)).toContain('HUMAN IDENTITY');
+  });
+
+  it('infers the current chat task when no request mapper is supplied', async () => {
+    const { runtime, getContext } = makeRuntime();
+    const middleware = createDealAISDKMiddleware({
+      runtime,
+      context: { channel: 'ai_sdk', conversationId: 'conversation_1' },
+    });
+
+    await middleware.transformParams({
+      params: {
+        prompt: [
+          { role: 'user', content: 'Earlier question' },
+          { role: 'assistant', content: 'Earlier answer' },
+          { role: 'user', content: 'Use my direct, warm voice here.' },
+        ],
+      },
+    });
+
+    expect(getContext).toHaveBeenCalledWith({
+      channel: 'ai_sdk',
+      conversationId: 'conversation_1',
+      task: 'Use my direct, warm voice here.',
+    });
   });
 });

@@ -1,5 +1,9 @@
 import type { ContextRequest } from './index.js';
-import type { DealAgentRuntime, PreparedDealContext } from './agent.js';
+import {
+  extractLatestUserText,
+  type DealAgentRuntime,
+  type PreparedDealContext,
+} from './agent.js';
 
 export type DealRequestBuilder<TInput> = (
   input: TInput,
@@ -7,7 +11,10 @@ export type DealRequestBuilder<TInput> = (
 
 export type DealIntegrationOptions<TInput> = {
   runtime: DealAgentRuntime;
-  request: DealRequestBuilder<TInput>;
+  /** Optional custom mapping for applications with their own run context. */
+  request?: DealRequestBuilder<TInput>;
+  /** Defaults used when the adapter can infer the task from the chat input. */
+  context?: Partial<ContextRequest>;
   baseInstructions?: string | ((prepared: PreparedDealContext) => string);
 };
 
@@ -34,17 +41,40 @@ function textFromContent(content: unknown): string {
   return '';
 }
 
-function lastUserText(messages: readonly unknown[]): string {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (!message || typeof message !== 'object') continue;
-    const role = (message as { role?: unknown }).role;
-    if (role === 'user' || role === 'human') {
-      const text = textFromContent((message as { content?: unknown }).content);
-      if (text) return text;
-    }
-  }
+function taskFromInput(input: unknown): string {
+  if (typeof input === 'string') return input.trim();
+  if (Array.isArray(input)) return extractLatestUserText(input);
+  if (!input || typeof input !== 'object') return '';
+
+  const value = input as Record<string, unknown>;
+  if (typeof value.task === 'string' && value.task.trim())
+    return value.task.trim();
+  if (Array.isArray(value.messages))
+    return extractLatestUserText(value.messages);
+  if (Array.isArray(value.prompt)) return extractLatestUserText(value.prompt);
+  if (typeof value.prompt === 'string') return value.prompt.trim();
+  if (typeof value.input === 'string') return value.input.trim();
+  if (Array.isArray(value.input)) return extractLatestUserText(value.input);
+  if (value.context && typeof value.context === 'object')
+    return taskFromInput(value.context);
   return '';
+}
+
+async function prepareDealContext<TInput>(
+  input: TInput,
+  options: DealIntegrationOptions<TInput>,
+): Promise<PreparedDealContext> {
+  const request = options.request
+    ? await options.request(input)
+    : ({
+        ...options.context,
+        task: options.context?.task?.trim() || taskFromInput(input),
+      } as ContextRequest);
+  if (!request.task?.trim())
+    throw new Error(
+      'DEAL integration requires a task, a context.task default, or a user message',
+    );
+  return options.runtime.prepare(request);
 }
 
 function resolveBase<TInput>(
@@ -78,9 +108,7 @@ export function createDealLangChainMiddleware<TContext = unknown>(
       request: LangChainModelRequest<TContext>,
       handler: LangChainModelHandler,
     ) => {
-      const prepared = await options.runtime.prepare(
-        await options.request(request),
-      );
+      const prepared = await prepareDealContext(request, options);
       const base = resolveBase(options.baseInstructions, prepared);
       const existingSystemMessage =
         request.systemMessage && typeof request.systemMessage === 'object'
@@ -123,9 +151,7 @@ export function createDealOpenAIInstructions<TContext = unknown>(
   options: OpenAIDynamicInstructionOptions<TContext>,
 ): (runContext: OpenAIRunContext<TContext>, agent: unknown) => Promise<string> {
   return async (runContext) => {
-    const prepared = await options.runtime.prepare(
-      await options.request(runContext),
-    );
+    const prepared = await prepareDealContext(runContext, options);
     return combineInstructions(
       resolveBase(options.baseInstructions, prepared),
       prepared.systemInstruction,
@@ -148,9 +174,7 @@ async function prepareOpenAIChatRequest<TRequest extends OpenAIChatRequest>(
   request: TRequest,
   options: DealIntegrationOptions<TRequest>,
 ): Promise<OpenAIChatRequest> {
-  const prepared = await options.runtime.prepare(
-    await options.request(request),
-  );
+  const prepared = await prepareDealContext(request, options);
   const base = resolveBase(options.baseInstructions, prepared);
   const system = combineInstructions(base, prepared.systemInstruction);
   const existing = request.messages.find(
@@ -199,9 +223,7 @@ export async function withDealOpenAIResponsesRequest<
   request: TRequest,
   options: DealIntegrationOptions<TRequest>,
 ): Promise<TRequest> {
-  const prepared = await options.runtime.prepare(
-    await options.request(request),
-  );
+  const prepared = await prepareDealContext(request, options);
   const base = resolveBase(options.baseInstructions, prepared);
   return {
     ...request,
@@ -241,9 +263,7 @@ export async function withDealClaudeMessagesRequest<
   request: TRequest,
   options: DealIntegrationOptions<TRequest>,
 ): Promise<TRequest> {
-  const prepared = await options.runtime.prepare(
-    await options.request(request),
-  );
+  const prepared = await prepareDealContext(request, options);
   const base = resolveBase(options.baseInstructions, prepared);
   const system = combineInstructions(
     claudeSystemText(request.system),
@@ -263,9 +283,7 @@ export async function createDealClaudeAgentOptions<
   baseOptions: TOptions,
   options: DealIntegrationOptions<TOptions>,
 ): Promise<TOptions & { systemPrompt: string }> {
-  const prepared = await options.runtime.prepare(
-    await options.request(baseOptions),
-  );
+  const prepared = await prepareDealContext(baseOptions, options);
   const base = resolveBase(options.baseInstructions, prepared);
   const existingSystemPrompt = (baseOptions as Record<string, unknown>)
     .systemPrompt;
@@ -329,9 +347,7 @@ export function createDealAISDKMiddleware(
   return {
     specificationVersion: 'v4',
     transformParams: async ({ params }) => {
-      const prepared = await options.runtime.prepare(
-        await options.request(params),
-      );
+      const prepared = await prepareDealContext(params, options);
       const base = resolveBase(options.baseInstructions, prepared);
       return {
         ...params,
@@ -349,7 +365,7 @@ export function taskFromMessages(input: {
   messages?: readonly unknown[];
   prompt?: readonly unknown[] | string;
 }): string {
-  if (input.messages) return lastUserText(input.messages);
+  if (input.messages) return extractLatestUserText(input.messages);
   if (typeof input.prompt === 'string') return input.prompt;
-  return lastUserText(input.prompt ?? []);
+  return extractLatestUserText(input.prompt ?? []);
 }

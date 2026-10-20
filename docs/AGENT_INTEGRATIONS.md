@@ -17,17 +17,21 @@ host agent runtime
 
 The TypeScript SDK exposes one stable runtime and thin native adapters:
 
+```bash
+pnpm add @deal/sdk-ts
+```
+
 ```ts
 import { DEAL, createDealAgentRuntime } from '@deal/sdk-ts';
 
-const deal = new DEAL({
-  baseUrl: process.env.DEAL_API_URL!,
-  apiKey: process.env.DEAL_API_KEY!,
-});
+// Hosted DEAL: an API key is sufficient. The URL is built into the SDK.
+const deal = new DEAL(process.env.DEAL_API_KEY!);
 
 const runtime = createDealAgentRuntime(deal);
-const prepared = await runtime.prepare({
-  task: 'Draft a thoughtful reply to the customer',
+const prepared = await runtime.prepareChat({
+  messages: [
+    { role: 'user', content: 'Draft a thoughtful reply to the customer' },
+  ],
   conversationId: 'conversation_123',
   channel: 'support',
   audience: 'customer',
@@ -41,6 +45,33 @@ The runtime caches a packet only until its signed expiry. Call
 `runtime.clearCache()` when the host application receives a human correction or
 changes the active task.
 
+## What happens during a chat turn
+
+```text
+user message
+    │
+    ▼
+adapter extracts the current task + conversation metadata
+    │
+    ▼
+DEAL /v1/context retrieves the structured human model and relevant memory
+    │
+    ▼
+signed packet is validated and rendered as scoped system instructions
+    │
+    ▼
+provider receives its normal request plus DEAL context
+    │
+    ▼
+host agent responds and continues to own tools, execution, and approvals
+```
+
+This happens at the model boundary for every scoped turn. DEAL does not pretend
+to be the model and it does not replace the host agent's conversation state. A
+`conversationId` lets the API include the latest stored turns and open loops;
+the host can report outcomes and corrections so the human model improves over
+time.
+
 ## LangChain JavaScript
 
 LangChain v1 uses `createAgent` and middleware hooks. DEAL uses
@@ -50,31 +81,33 @@ the context into the conversation state.
 ```ts
 import { createAgent } from 'langchain';
 import {
-  DEAL,
   createDealAgentRuntime,
   createDealLangChainMiddleware,
   taskFromMessages,
 } from '@deal/sdk-ts';
 
-const runtime = createDealAgentRuntime(
-  new DEAL({
-    baseUrl: process.env.DEAL_API_URL!,
-    apiKey: process.env.DEAL_API_KEY!,
-  }),
-);
+const runtime = createDealAgentRuntime(process.env.DEAL_API_KEY!);
 
 const dealMiddleware = createDealLangChainMiddleware({
   runtime,
+  context: {
+    channel: 'langchain',
+    conversationId: 'conversation_123',
+  },
+  baseInstructions: 'Use the host application tools only when appropriate.',
+});
+
+// The middleware infers the task from request.messages. If your application
+// uses a custom LangChain runtime context, provide a request mapper instead:
+const customDealMiddleware = createDealLangChainMiddleware({
+  runtime,
   request: (request) => {
-    const context = request.runtime?.context as
-      { task?: string; conversationId?: string } | undefined;
+    const context = request.runtime?.context as { task?: string } | undefined;
     return {
       task: context?.task ?? taskFromMessages(request),
-      conversationId: context?.conversationId,
       channel: 'langchain',
     };
   },
-  baseInstructions: 'Use the host application tools only when appropriate.',
 });
 
 const agent = createAgent({
@@ -106,12 +139,7 @@ type AppContext = {
   conversationId?: string;
 };
 
-const runtime = createDealAgentRuntime(
-  new DEAL({
-    baseUrl: process.env.DEAL_API_URL!,
-    apiKey: process.env.DEAL_API_KEY!,
-  }),
-);
+const runtime = createDealAgentRuntime(process.env.DEAL_API_KEY!);
 
 const agent = new Agent<AppContext>({
   name: 'DEAL-aware assistant',
@@ -142,7 +170,7 @@ const request = await withDealOpenAIResponsesRequest(
   { model: process.env.OPENAI_MODEL!, input: userInput },
   {
     runtime,
-    request: () => ({ task: userInput, channel: 'openai_responses' }),
+    context: { channel: 'openai_responses' },
   },
 );
 const response = await new OpenAI().responses.create(request);
@@ -171,12 +199,7 @@ import {
   withDealClaudeMessagesRequest,
 } from '@deal/sdk-ts';
 
-const runtime = createDealAgentRuntime(
-  new DEAL({
-    baseUrl: process.env.DEAL_API_URL!,
-    apiKey: process.env.DEAL_API_KEY!,
-  }),
-);
+const runtime = createDealAgentRuntime(process.env.DEAL_API_KEY!);
 
 const request = await withDealClaudeMessagesRequest(
   {
@@ -187,7 +210,7 @@ const request = await withDealClaudeMessagesRequest(
   },
   {
     runtime,
-    request: () => ({ task: userInput, channel: 'claude_messages' }),
+    context: { channel: 'claude_messages' },
   },
 );
 
@@ -213,12 +236,7 @@ import {
   createDealAISDKMiddleware,
 } from '@deal/sdk-ts';
 
-const runtime = createDealAgentRuntime(
-  new DEAL({
-    baseUrl: process.env.DEAL_API_URL!,
-    apiKey: process.env.DEAL_API_KEY!,
-  }),
-);
+const runtime = createDealAgentRuntime(process.env.DEAL_API_KEY!);
 
 const model = wrapLanguageModel({
   // Use an exact provider/model ID returned by the AI Gateway /v1/models API.
@@ -226,11 +244,7 @@ const model = wrapLanguageModel({
   middleware: [
     createDealAISDKMiddleware({
       runtime,
-      request: (params) => ({
-        task: 'Answer the current user request',
-        channel: 'ai_sdk',
-        taskMetadata: { prompt: params.prompt },
-      }),
+      context: { channel: 'ai_sdk' },
     }),
   ],
 });
@@ -259,14 +273,14 @@ import {
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY!,
 });
-const runtime = createDealAgentRuntime(deal);
+const runtime = createDealAgentRuntime(process.env.DEAL_API_KEY!);
 
 const model = wrapLanguageModel({
   model: openrouter.chat(process.env.OPENROUTER_MODEL!),
   middleware: [
     createDealAISDKMiddleware({
       runtime,
-      request: () => ({ task: userInput, channel: 'openrouter' }),
+      context: { channel: 'openrouter' },
     }),
   ],
 });
