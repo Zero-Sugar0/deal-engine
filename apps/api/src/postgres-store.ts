@@ -538,7 +538,7 @@ export class PostgresDealStore extends DealStore {
           continue;
         const human = this.humans.get(credential.humanId)!;
         await client.query(
-          `INSERT INTO credentials(id, organization_id, token_hash, kind, human_id, agent_id, expires_at, revoked_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO UPDATE SET expires_at=EXCLUDED.expires_at, revoked_at=EXCLUDED.revoked_at`,
+          `INSERT INTO credentials(id, organization_id, token_hash, kind, human_id, agent_id, expires_at, revoked_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO UPDATE SET token_hash=EXCLUDED.token_hash, expires_at=EXCLUDED.expires_at, revoked_at=EXCLUDED.revoked_at`,
           [
             credential.id,
             human.organizationId,
