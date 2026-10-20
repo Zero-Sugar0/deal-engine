@@ -1,10 +1,13 @@
 import {
   type FormEvent,
   type ReactNode,
+  useRef,
   useEffect,
   useMemo,
   useState,
 } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { authClient, dealApiUrl, getDealSessionToken } from './auth-client';
 
 type Navigate = (path: string) => void;
@@ -80,6 +83,29 @@ type AuditEvent = {
   eventType: string;
   payload: Record<string, unknown>;
   occurredAt: string;
+};
+
+type ComparisonResponse = {
+  task: string;
+  model: string;
+  raw: {
+    text: string;
+    finishReason: string;
+    usage: unknown;
+  };
+  humanized: {
+    text: string;
+    finishReason: string;
+    usage: unknown;
+  };
+  context: {
+    packetId: string;
+    expiresAt: string;
+    policyVersion: string;
+    professionalProfile?: string;
+    memoryReferences: number;
+    agentId: string;
+  };
 };
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -362,6 +388,7 @@ export function OnboardingPage({ onNavigate }: { onNavigate: Navigate }) {
 
 const navItems = [
   ['Overview', '◌'],
+  ['Try it', '✦'],
   ['Human model', '◈'],
   ['Memory', '⌁'],
   ['Developer', '◇'],
@@ -469,6 +496,7 @@ export function AccountExperience({ onNavigate }: { onNavigate: Navigate }) {
         {active === 'Overview' && (
           <OverviewView profile={profile} onNavigate={setActive} />
         )}
+        {active === 'Try it' && <TryItView />}
         {active === 'Human model' && (
           <HumanModelView profile={profile} setProfile={setProfile} />
         )}
@@ -477,6 +505,334 @@ export function AccountExperience({ onNavigate }: { onNavigate: Navigate }) {
         {active === 'Approvals' && <ApprovalsView onChanged={loadShell} />}
       </main>
     </div>
+  );
+}
+
+type ImageAttachment = {
+  name: string;
+  mediaType: string;
+  data: string;
+};
+
+function TryItView() {
+  const [task, setTask] = useState('');
+  const [attachment, setAttachment] = useState<ImageAttachment>();
+  const [runs, setRuns] = useState<ComparisonResponse[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const fileInput = useRef<HTMLInputElement>(null);
+  const activeRun = runs[0];
+
+  useEffect(() => {
+    request<{ agents: Agent[] }>('/v1/agents')
+      .then(({ agents: availableAgents }) => {
+        const activeAgents = availableAgents.filter(
+          (agent) => agent.status === 'active',
+        );
+        setAgents(activeAgents);
+        setSelectedAgentId(activeAgents[0]?.id ?? '');
+      })
+      .catch((error) => {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : 'Could not load your connected agent.',
+        );
+      });
+  }, []);
+
+  async function compare(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    const trimmedTask = task.trim();
+    if (!trimmedTask || busy) return;
+    setBusy(true);
+    setErrorMessage('');
+    try {
+      const result = await request<ComparisonResponse>(
+        '/v1/experiments/compare',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            task: trimmedTask,
+            agentId: selectedAgentId || undefined,
+            image: attachment
+              ? {
+                  name: attachment.name,
+                  mediaType: attachment.mediaType,
+                  data: attachment.data,
+                }
+              : undefined,
+          }),
+        },
+      );
+      setRuns((current) => [result, ...current].slice(0, 8));
+      setTask('');
+      setAttachment(undefined);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'The comparison could not be completed.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function chooseImage(file?: File) {
+    if (!file) return;
+    const supportedTypes = [
+      'image/png',
+      'image/jpeg',
+      'image/webp',
+      'image/gif',
+    ];
+    if (!supportedTypes.includes(file.type)) {
+      setErrorMessage('Choose a PNG, JPEG, WebP, or GIF image.');
+      return;
+    }
+    if (file.size > 5_000_000) {
+      setErrorMessage('Images must be smaller than 5 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') return;
+      setAttachment({
+        name: file.name,
+        mediaType: file.type,
+        data: reader.result,
+      });
+      setErrorMessage('');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <div className="account-content try-it-content">
+      <section className="try-it-intro">
+        <div>
+          <span className="eyebrow">A small experiment</span>
+          <h2>
+            See the difference
+            <br />
+            <em>understanding makes.</em>
+          </h2>
+          <p>
+            Ask the same question twice: once with a plain model, and once with
+            your human model guiding the answer. The difference is the point.
+          </p>
+        </div>
+        <div className="try-it-trust-note">
+          <span className="try-it-live-dot" />
+          <div>
+            <strong>Private by design</strong>
+            <small>
+              Your model stays on DEAL. Only the task reaches your model
+              provider.
+            </small>
+          </div>
+        </div>
+      </section>
+
+      <section className="try-surface">
+        <div className="try-agent-bar">
+          <span className="eyebrow">Testing with</span>
+          <select
+            aria-label="Choose an agent"
+            disabled={!agents.length}
+            onChange={(event) => setSelectedAgentId(event.target.value)}
+            value={selectedAgentId}
+          >
+            {agents.length ? (
+              agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))
+            ) : (
+              <option value="">No connected agent yet</option>
+            )}
+          </select>
+          <span className="try-agent-status">
+            <i /> {agents.length ? 'Ready' : 'Connect one in Developer'}
+          </span>
+        </div>
+        {!activeRun ? (
+          <div className="try-empty-state">
+            <div className="try-empty-mark">✦</div>
+            <span className="eyebrow">Start with something real</span>
+            <h3>Give your agent a moment that needs judgment.</h3>
+            <p>
+              Try a decision, a reply, a plan, or anything where your voice and
+              priorities should change the answer.
+            </p>
+            <div className="try-suggestions">
+              {[
+                'Help me decide what to focus on this week.',
+                'Draft a thoughtful reply to a difficult message.',
+                'Explain this idea simply, with the tradeoffs included.',
+              ].map((suggestion) => (
+                <button
+                  key={suggestion}
+                  onClick={() => setTask(suggestion)}
+                  type="button"
+                >
+                  {suggestion} <span>↗</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="try-results">
+            <div className="try-question">
+              <span className="try-question-avatar">{initials('You')}</span>
+              <p>{activeRun.task}</p>
+            </div>
+            <div className="try-response-grid">
+              <ComparisonCard
+                label="Plain answer"
+                description="The model on its own"
+                response={activeRun.raw.text}
+                tone="plain"
+              />
+              <ComparisonCard
+                label="With your understanding"
+                description="The same model with DEAL context"
+                response={activeRun.humanized.text}
+                tone="humanized"
+                context={activeRun.context}
+              />
+            </div>
+            <div className="try-run-meta">
+              <span>Model · {activeRun.model}</span>
+              <span>
+                Profile ·{' '}
+                {activeRun.context.professionalProfile ?? 'Generalist'}
+              </span>
+              <span>
+                {activeRun.context.memoryReferences} memories considered
+              </span>
+              <span>Packet · {activeRun.context.packetId.slice(0, 12)}…</span>
+            </div>
+            {runs.length > 1 && (
+              <div className="try-history">
+                <span className="eyebrow">Earlier questions</span>
+                {runs.slice(1).map((run) => (
+                  <button
+                    key={run.context.packetId}
+                    onClick={() =>
+                      setRuns((current) => [
+                        run,
+                        ...current.filter(
+                          (item) =>
+                            item.context.packetId !== run.context.packetId,
+                        ),
+                      ])
+                    }
+                    type="button"
+                  >
+                    {run.task}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="account-error try-error">{errorMessage}</div>
+        )}
+        {attachment && (
+          <div className="try-attachment">
+            <img src={attachment.data} alt="" />
+            <span>{attachment.name}</span>
+            <button
+              aria-label="Remove image"
+              onClick={() => setAttachment(undefined)}
+              type="button"
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <form className="try-composer" onSubmit={compare}>
+          <input
+            accept="image/*"
+            className="visually-hidden"
+            onChange={(event) => chooseImage(event.target.files?.[0])}
+            ref={fileInput}
+            type="file"
+          />
+          <button
+            aria-label="Attach an image"
+            className="try-plus"
+            onClick={() => fileInput.current?.click()}
+            type="button"
+          >
+            +
+          </button>
+          <textarea
+            aria-label="Ask your agent"
+            onChange={(event) => setTask(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                void compare();
+              }
+            }}
+            placeholder="Ask your agent…"
+            rows={2}
+            value={task}
+          />
+          <button
+            aria-label="Compare answers"
+            className="try-send"
+            disabled={!task.trim() || busy}
+            type="submit"
+          >
+            {busy ? <span className="try-spinner" /> : '↑'}
+          </button>
+        </form>
+        <small className="try-composer-note">
+          Enter to compare · Shift + Enter for a new line
+        </small>
+      </section>
+    </div>
+  );
+}
+
+function ComparisonCard({
+  label,
+  description,
+  response,
+  tone,
+  context,
+}: {
+  label: string;
+  description: string;
+  response: string;
+  tone: 'plain' | 'humanized';
+  context?: ComparisonResponse['context'];
+}) {
+  return (
+    <article className={`try-response-card try-response-${tone}`}>
+      <div className="try-response-heading">
+        <div>
+          <span className="try-response-kicker">
+            <i /> {tone === 'humanized' ? 'DEAL active' : 'No context'}
+          </span>
+          <h3>{label}</h3>
+          <p>{description}</p>
+        </div>
+        {context && <span className="try-response-badge">Humanized</span>}
+      </div>
+      <div className="try-markdown">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{response}</ReactMarkdown>
+      </div>
+    </article>
   );
 }
 

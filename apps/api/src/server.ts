@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { fromNodeHeaders } from 'better-auth/node';
+import { generateText } from 'ai';
 import {
   BehavioralContractSchema,
   BiographySchema,
@@ -26,7 +27,15 @@ import type { HumanModel, ProfileFact, SkillRegistryEntry } from '@deal/core';
 import { evaluatePolicy, type PolicyRule } from '@deal/policy';
 import { jwtVerify, SignJWT } from 'jose';
 import { z } from 'zod';
-import { DealStore, hashPayload, hashToken, type Credential } from './store.js';
+import {
+  DealStore,
+  hashPayload,
+  hashToken,
+  type Agent,
+  type Credential,
+  type Delegation,
+  type Human,
+} from './store.js';
 import type { ExternalAuthProvider } from './external-auth.js';
 import { MetricsRegistry } from './observability.js';
 import { InMemoryRateLimiter, type RateLimiter } from './rate-limit.js';
@@ -44,6 +53,7 @@ import type { WorkflowStep } from './store.js';
 import { SkillSigner } from './skill-signing.js';
 import type { DealAuth } from './auth.js';
 import { betterAuthIssuer } from './auth.js';
+import { renderDealContext } from '@deal/sdk';
 
 export interface ServerOptions {
   store?: DealStore;
@@ -79,6 +89,18 @@ const policyBody = z.object({
   confidence: z.number().min(0).max(1).optional(),
   sensitiveFields: z.array(z.string()).optional(),
   contextPacketId: z.string(),
+});
+
+const comparisonBody = z.object({
+  task: z.string().trim().min(1).max(12_000),
+  agentId: z.string().optional(),
+  image: z
+    .object({
+      name: z.string().trim().min(1).max(160),
+      mediaType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
+      data: z.string().max(7_500_000),
+    })
+    .optional(),
 });
 
 function error(
@@ -408,6 +430,242 @@ function scopeHumanModel(
   };
 }
 
+async function compileDashboardContext(input: {
+  store: DealStore;
+  human: Human;
+  agent: Agent;
+  delegation: Delegation;
+  task: string;
+  contextTtlMinutes: number;
+}) {
+  const { store, human, agent, delegation, task, contextTtlMinutes } = input;
+  const includeSensitiveContext = delegation.authority.mayRead.includes(
+    'sensitive_context_read',
+  );
+
+  const identity = IdentityProfileSchema.parse(human.identity ?? {});
+  const persona = PersonaSchema.parse(human.persona ?? {});
+  const selfConcept = SelfConceptSchema.parse(human.selfConcept ?? {});
+  const biography = BiographySchema.parse(human.biography ?? {});
+  const relationships = (human.relationships ?? []).map((relationship) =>
+    RelationshipContextSchema.parse(relationship),
+  );
+  const relational = RelationalProfileSchema.parse(human.relational ?? {});
+  const boundaries = BoundaryProfileSchema.parse(human.boundaries ?? {});
+  const domain = DomainContextSchema.parse(human.domain ?? {});
+  const decision = DecisionStyleSchema.parse(human.decision ?? {});
+  const behavior = BehavioralContractSchema.parse(human.behavior ?? {});
+  const judgment = JudgmentRulesSchema.parse(human.judgment ?? {});
+  const selectedProfessionId =
+    delegation.profileId ?? domain.profession ?? 'generalist_assistant_v1';
+  const selectedProfession =
+    getProfessionProfile(selectedProfessionId) ??
+    getProfessionProfile('generalist_assistant_v1');
+  const professionalContext = selectedProfession
+    ? {
+        profileId: selectedProfessionId,
+        profileVersion: selectedProfession.version,
+        title: selectedProfession.title,
+        category: selectedProfession.category,
+        role: human.role || selectedProfession.title,
+        industry: domain.industry,
+        specialization: domain.specialization,
+        seniority: domain.seniority,
+        jurisdictions: domain.jurisdictions,
+        objective: selectedProfession.objective,
+        responsibilities: selectedProfession.responsibilities,
+        knowledgeAreas: selectedProfession.knowledgeAreas,
+        operatingPatterns: selectedProfession.operatingPatterns,
+        communicationPatterns: selectedProfession.communicationPatterns,
+        decisionPatterns: selectedProfession.decisionPatterns,
+        failureModes: selectedProfession.failureModes,
+        escalationTriggers: selectedProfession.escalationTriggers,
+        safetyBoundaries: selectedProfession.safetyBoundaries,
+        sensitiveDataClasses: selectedProfession.sensitiveDataClasses,
+        regulated: selectedProfession.regulated,
+        licenseRequiredFor: selectedProfession.licenseRequiredFor,
+        restrictedActions: selectedProfession.restrictedActions,
+        approvalActions: selectedProfession.approvalActions,
+        requiredContext: selectedProfession.requiredContext,
+        missingContext: missingProfessionalContext(
+          selectedProfession.requiredContext,
+          {
+            ...domain,
+            role: human.role,
+            communicationStyle: persona.communicationStyle,
+            goal: task,
+            constraints: human.knownConstraints,
+          },
+        ),
+        humanFacts: visibleFacts(
+          biography.domainExpertise,
+          includeSensitiveContext,
+        ),
+        source: selectedProfession.source,
+      }
+    : undefined;
+
+  const baselineHits = await store.memories.search({
+    humanId: human.id,
+    organizationId: human.organizationId,
+    limit: 24,
+  });
+  const criticalHits = await store.memories.search({
+    humanId: human.id,
+    organizationId: human.organizationId,
+    kinds: ['identity', 'preference', 'boundary', 'correction'],
+    limit: 100,
+  });
+  const taskHits = await store.memories.search({
+    humanId: human.id,
+    organizationId: human.organizationId,
+    query: task,
+    limit: 24,
+  });
+  const hitMap = new Map(
+    [...criticalHits, ...baselineHits, ...taskHits].map((hit) => [hit.id, hit]),
+  );
+  const hits = [...hitMap.values()]
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        right.createdAt.localeCompare(left.createdAt),
+    )
+    .slice(0, 32);
+  const memory: MemoryContext = {
+    preferences: hits
+      .filter((hit) => hit.kind === 'preference')
+      .map((hit) => memoryText(hit.content)),
+    corrections: hits
+      .filter((hit) => hit.kind === 'correction' || hit.kind === 'boundary')
+      .map((hit) => memoryText(hit.content)),
+    episodes: hits
+      .filter((hit) => hit.kind === 'episode')
+      .map((hit) => memoryText(hit.content)),
+    outcomes: hits
+      .filter((hit) => hit.kind === 'outcome')
+      .map((hit) =>
+        typeof hit.content === 'string' ? { value: hit.content } : hit.content,
+      ),
+    references: hits.map((hit) => ({
+      id: hit.id,
+      kind: hit.kind,
+      source: hit.source,
+      confidence: hit.confidence,
+      confirmation: hit.confirmation,
+      priority: hit.priority,
+      sensitivity: hit.sensitivity,
+      validUntil: hit.validUntil,
+    })),
+    items: hits.map((hit) => ({
+      id: hit.id,
+      kind: hit.kind,
+      content: hit.content,
+      source: hit.source,
+      confidence: hit.confidence,
+      confirmation: hit.confirmation,
+      priority: hit.priority,
+      sensitivity: hit.sensitivity,
+      createdAt: hit.createdAt,
+    })),
+  };
+  const grounding: Grounding = {
+    precedence: [
+      'explicit_correction',
+      'explicit_preference',
+      'active_boundary',
+      'recent_outcome',
+      'structured_profile',
+      'inferred_memory',
+    ],
+    conflicts: [],
+    uncertainties: hits
+      .filter(
+        (hit) =>
+          hit.confirmation === 'inferred' ||
+          (hit.confidence !== undefined && hit.confidence < 0.7),
+      )
+      .map((hit) => `Memory ${hit.id} is not fully confirmed`),
+    instructions: [
+      'Treat explicit corrections as authoritative over older memories',
+      'Do not present inferred memories as facts',
+      'Preserve the human’s communication preferences while remaining truthful about agent identity',
+    ],
+  };
+  const rawHumanModel: HumanModel = {
+    version: human.modelVersion ?? 1,
+    identity,
+    persona,
+    selfConcept,
+    biography,
+    relationships,
+    relational,
+    boundaries,
+    domain,
+    decision,
+    behavior,
+    responseGuidance: {
+      style: [],
+      prioritize: [],
+      avoid: [],
+      whenUncertain: behavior.whenUncertain,
+      whenDisagreeing: behavior.whenDisagreeing,
+      whenWrong: behavior.whenWrong,
+      identityDisclosure: behavior.discloseAgentIdentity
+        ? 'Be truthful that you are an AI agent acting with delegated context.'
+        : 'Do not volunteer agent identity unless asked, but never impersonate a human or make false claims.',
+      identitySummary: [],
+      relationshipGuidance: [],
+      emotionalGuidance: [],
+      decisionGuidance: [],
+      refusalStyle: behavior.refusalStyle,
+      preserveHumanVoice: behavior.preserveHumanVoice,
+    },
+    currentPriorities: human.currentPriorities ?? [],
+    knownConstraints: human.knownConstraints ?? [],
+  };
+  const scopedHumanModel = scopeHumanModel(
+    HumanModelSchema.parse(rawHumanModel),
+    includeSensitiveContext,
+  );
+  if (scopedHumanModel.redactions.length) {
+    grounding.instructions.push(
+      'Sensitive profile facts were withheld because this delegation does not include sensitive_context_read',
+    );
+  }
+  const packet = compileHumanContextPacket({
+    human,
+    agent: {
+      id: agent.id,
+      runtime: agent.runtime,
+      delegationId: delegation.id,
+    },
+    task,
+    persona,
+    domain,
+    memory,
+    authority: delegation.authority,
+    judgment,
+    professional: professionalContext,
+    humanModel: scopedHumanModel.model,
+    interaction: {
+      taskMetadata: { surface: 'dashboard_compare' },
+      channel: 'dashboard',
+      audience: human.displayName,
+      openLoops: [],
+      recentTurns: [],
+    },
+    grounding,
+    redactions: scopedHumanModel.redactions,
+    policyVersion: delegation.profileId ?? 'default_v1',
+    ttlMinutes: contextTtlMinutes,
+    memoryReferences: memory.references,
+    skills: [],
+    skillAttestations: [],
+  });
+  return { packet, memoryCount: hits.length };
+}
+
 const workflowTransitions: Partial<Record<WorkflowStep, WorkflowStep>> = {
   intake: 'research',
   research: 'qualify',
@@ -459,7 +717,7 @@ export function buildServer(
     });
   const app = Fastify({
     logger: process.env.NODE_ENV === 'test' ? false : true,
-    bodyLimit: 1_048_576,
+    bodyLimit: Number(process.env.DEAL_BODY_LIMIT_BYTES ?? 8_388_608),
     genReqId: (request) => {
       const incoming = request.headers['x-request-id'];
       return typeof incoming === 'string' &&
@@ -1142,6 +1400,160 @@ export function buildServer(
       delegations: [...store.delegations.values()].filter(
         (item) => item.humanId === human.id && !item.revokedAt,
       ),
+    };
+  });
+
+  app.post('/v1/experiments/compare', async (request, reply) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const body = parse(comparisonBody, request.body);
+    if (body.image && !body.image.data.startsWith('data:image/'))
+      throw error(400, 'Image data must be a data URL');
+
+    const model = process.env.AI_GATEWAY_MODEL?.trim();
+    const gatewayKey = process.env.AI_GATEWAY_API_KEY?.trim();
+    if (!model || !gatewayKey)
+      return reply.code(503).send({
+        error:
+          'AI comparison is not configured. Set AI_GATEWAY_API_KEY and AI_GATEWAY_MODEL on the API.',
+        requestId: request.id,
+      });
+
+    const human = store.humans.get(credential.humanId);
+    if (!human) throw error(404, 'Human not found');
+    const requestedAgent = body.agentId
+      ? store.agents.get(body.agentId)
+      : [...store.agents.values()].find(
+          (item) => item.ownerHumanId === human.id && item.status === 'active',
+        );
+    if (!requestedAgent || requestedAgent.ownerHumanId !== human.id)
+      throw error(404, 'Connect an agent before running a comparison');
+    if (requestedAgent.status !== 'active')
+      throw error(409, 'This agent is paused');
+    const delegation = store.getDelegationForAgent(requestedAgent.id, human.id);
+    if (!delegation) throw error(409, 'This agent has no active permission');
+
+    const { packet, memoryCount } = await compileDashboardContext({
+      store,
+      human,
+      agent: requestedAgent,
+      delegation,
+      task: body.task,
+      contextTtlMinutes,
+    });
+    const signature = await new SignJWT(
+      packet as unknown as Record<string, unknown>,
+    )
+      .setProtectedHeader({ alg: 'HS256', typ: 'DEAL-CTX' })
+      .setSubject(packet.packetId)
+      .setAudience(requestedAgent.id)
+      .setIssuedAt(Math.floor(new Date(packet.issuedAt).getTime() / 1000))
+      .setExpirationTime(
+        Math.floor(new Date(packet.expiresAt).getTime() / 1000),
+      )
+      .sign(keyFromSecret(jwtSecret));
+    store.contexts.set(packet.packetId, {
+      packet,
+      signature,
+      humanId: human.id,
+      agentId: requestedAgent.id,
+      createdAt: packet.issuedAt,
+    });
+
+    const maxOutputTokens = process.env.AI_GATEWAY_MAX_OUTPUT_TOKENS
+      ? Number(process.env.AI_GATEWAY_MAX_OUTPUT_TOKENS)
+      : undefined;
+    const temperature = process.env.AI_GATEWAY_TEMPERATURE
+      ? Number(process.env.AI_GATEWAY_TEMPERATURE)
+      : undefined;
+    const generationOptions = {
+      model,
+      ...(Number.isFinite(maxOutputTokens) && maxOutputTokens! > 0
+        ? { maxOutputTokens }
+        : {}),
+      ...(Number.isFinite(temperature) && temperature! >= 0
+        ? { temperature }
+        : {}),
+    };
+
+    const run = (system?: string) =>
+      body.image
+        ? generateText({
+            ...generationOptions,
+            ...(system ? { system } : {}),
+            messages: [
+              {
+                role: 'user' as const,
+                content: [
+                  { type: 'text' as const, text: body.task },
+                  {
+                    type: 'file' as const,
+                    data: body.image.data,
+                    mediaType: body.image.mediaType,
+                    filename: body.image.name,
+                  },
+                ],
+              },
+            ],
+          })
+        : generateText({
+            ...generationOptions,
+            ...(system ? { system } : {}),
+            prompt: body.task,
+          });
+
+    let rawResult: Awaited<ReturnType<typeof generateText>>;
+    let humanizedResult: Awaited<ReturnType<typeof generateText>>;
+    try {
+      [rawResult, humanizedResult] = await Promise.all([
+        run(),
+        run(renderDealContext(packet)),
+      ]);
+    } catch (cause) {
+      request.log.error({ err: cause, model }, 'AI comparison failed');
+      return reply.code(502).send({
+        error: 'The configured model could not complete this comparison.',
+        requestId: request.id,
+      });
+    }
+
+    store.recordAudit({
+      humanId: human.id,
+      organizationId: human.organizationId,
+      agentId: requestedAgent.id,
+      eventType: 'experiment.compared',
+      payload: {
+        packetId: packet.packetId,
+        model,
+        memoryCount,
+        hasImage: Boolean(body.image),
+      },
+    });
+    return {
+      task: body.task,
+      model,
+      raw: {
+        text: rawResult.text,
+        finishReason: rawResult.finishReason,
+        usage: rawResult.usage,
+      },
+      humanized: {
+        text: humanizedResult.text,
+        finishReason: humanizedResult.finishReason,
+        usage: humanizedResult.usage,
+      },
+      context: {
+        packetId: packet.packetId,
+        expiresAt: packet.expiresAt,
+        policyVersion: packet.policyVersion,
+        professionalProfile: packet.professional.profileId,
+        memoryReferences: memoryCount,
+        agentId: requestedAgent.id,
+      },
     };
   });
 

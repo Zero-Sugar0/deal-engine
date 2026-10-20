@@ -146,6 +146,25 @@ Production controls now include:
 - Optional Supermemory v4 hybrid retrieval, mirrored after canonical Postgres
   writes and re-validated against Postgres before results reach an agent.
 
+The dashboard also includes a `Try it` area for testing the humanization layer
+without opening a terminal. It sends one authenticated request to
+`POST /v1/experiments/compare`; the API compiles the same scoped context packet
+used by connected agents, then runs a plain generation and a context-guided
+generation through the configured Vercel AI Gateway model. Responses render as
+safe GitHub-Flavored Markdown, and the composer accepts one image attachment.
+Configure these values on the API only:
+
+```bash
+AI_GATEWAY_API_KEY=your-vercel-ai-gateway-key
+AI_GATEWAY_MODEL=provider/model-id
+AI_GATEWAY_MAX_OUTPUT_TOKENS=500
+AI_GATEWAY_TEMPERATURE=0
+```
+
+The browser never receives the gateway key. The dashboard uses the Better Auth
+session, and the API returns only the two answers plus non-sensitive comparison
+metadata.
+
 External systems and tool credentials remain owned by the host agent and are
 intentionally outside this repository’s core scope.
 

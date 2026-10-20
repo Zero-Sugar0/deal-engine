@@ -70,6 +70,26 @@ paths:
           }
       responses:
         '200': { description: Context packet and signature }
+  /v1/experiments/compare:
+    post:
+      summary: Compare a plain model answer with an answer guided by the human model
+      description: Runs both generations server-side through the configured Vercel AI Gateway model. The gateway key never reaches the dashboard.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComparisonRequest'
+      responses:
+        '200':
+          description: Plain and humanized Markdown responses with context metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComparisonResponse'
+        '401': { description: Human session or credential required }
+        '503': { description: AI Gateway model and key are not configured }
+        '502': { description: The configured model failed to respond }
   /v1/skills/keys:
     get:
       summary: Get public keys used to verify organization skill attestations
@@ -437,6 +457,52 @@ components:
         packetId: { type: string, format: uuid }
         packet: { type: object, additionalProperties: true }
         signature: { type: string }
+    ComparisonRequest:
+      type: object
+      required: [task]
+      properties:
+        task:
+          type: string
+          minLength: 1
+          maxLength: 12000
+        agentId: { type: string }
+        image:
+          type: object
+          required: [name, mediaType, data]
+          properties:
+            name: { type: string, maxLength: 160 }
+            mediaType:
+              type: string
+              enum: [image/png, image/jpeg, image/webp, image/gif]
+            data:
+              type: string
+              description: Image data URL; limited to 7.5 MB before transport encoding.
+    ComparisonResponse:
+      type: object
+      required: [task, model, raw, humanized, context]
+      properties:
+        task: { type: string }
+        model: { type: string }
+        raw: { $ref: '#/components/schemas/GenerationResponse' }
+        humanized: { $ref: '#/components/schemas/GenerationResponse' }
+        context:
+          type: object
+          required:
+            [packetId, expiresAt, policyVersion, memoryReferences, agentId]
+          properties:
+            packetId: { type: string, format: uuid }
+            expiresAt: { type: string, format: date-time }
+            policyVersion: { type: string }
+            professionalProfile: { type: string }
+            memoryReferences: { type: integer, minimum: 0 }
+            agentId: { type: string, format: uuid }
+    GenerationResponse:
+      type: object
+      required: [text, finishReason, usage]
+      properties:
+        text: { type: string }
+        finishReason: { type: string }
+        usage: { type: object, additionalProperties: true }
     SkillDescriptor:
       type: object
       required: [name, description]

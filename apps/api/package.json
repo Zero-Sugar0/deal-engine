@@ -17,6 +17,8 @@
     "@deal/core": "workspace:*",
     "@deal/memory": "workspace:*",
     "@deal/policy": "workspace:*",
+    "@deal/sdk": "workspace:*",
+    "ai": "7.0.146",
     "better-auth": "1.7.12",
     "fastify": "^5.2.0",
     "jose": "^6.0.0",

@@ -66,6 +66,33 @@ describe('DEAL control plane', () => {
     expect(metrics.headers['x-request-id']).toBeTypeOf('string');
   });
 
+  it('keeps dashboard comparisons behind human auth and explicit AI configuration', async () => {
+    const previousModel = process.env.AI_GATEWAY_MODEL;
+    delete process.env.AI_GATEWAY_MODEL;
+    try {
+      const unauthenticated = await app.inject({
+        method: 'POST',
+        url: '/v1/experiments/compare',
+        payload: { task: 'Compare this answer' },
+      });
+      expect(unauthenticated.statusCode).toBe(401);
+
+      const missingConfiguration = await app.inject({
+        method: 'POST',
+        url: '/v1/experiments/compare',
+        headers: { authorization: `Bearer ${humanToken}` },
+        payload: { task: 'Compare this answer' },
+      });
+      expect(missingConfiguration.statusCode).toBe(503);
+      expect(missingConfiguration.json().error).toContain(
+        'AI comparison is not configured',
+      );
+    } finally {
+      if (previousModel) process.env.AI_GATEWAY_MODEL = previousModel;
+      else delete process.env.AI_GATEWAY_MODEL;
+    }
+  });
+
   it('lists human-owned agents without exposing raw credentials', async () => {
     const response = await app.inject({
       method: 'GET',
