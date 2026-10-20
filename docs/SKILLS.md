@@ -97,12 +97,43 @@ consequential tool action and use exact approval binding when required.
   identity without changing delegation authority.
 - Python SDK — supports the same `skills` field and hosted API-key-only setup.
 
-## Next production layer
+## Organization skill registry
 
-The next optional capability is an organization skill registry: signed skill
-artifacts, version pinning, review status, allowed sources, and revocation. It
-should distribute and attest skills, not execute them. Execution remains inside
-the host's sandbox or agent runtime.
+DEAL now includes a durable organization registry for skills. It is a trust and
+distribution layer, not a script runner:
+
+- `POST /v1/skills` registers a content-hashed artifact manifest as a draft or
+  pending review.
+- `POST /v1/skills/:id/submit` submits a draft for review.
+- `POST /v1/skills/:id/review` rejects or approves it. Approval signs the
+  immutable descriptor and manifest with the configured Ed25519 key.
+- `GET /v1/skills` and `GET /v1/skills/:name/:version` distribute registry
+  metadata. Agent credentials can only see approved, non-revoked versions.
+- `POST /v1/skills/:id/revoke` immediately prevents future context packets from
+  using that version. Existing signatures remain auditable but do not override
+  revocation.
+- `GET /v1/skills/keys` exposes the public verification key; the private key is
+  never returned by the API.
+
+Organization skills in `POST /v1/context` must include an exact `version` and
+`contentHash`. DEAL resolves the request against the caller's organization,
+replaces the request metadata with the registered descriptor, and attaches a
+`skills.attestations[]` record to the signed context packet. A host can verify
+the compact Ed25519 signature against the public key and then load the actual
+`SKILL.md`, references, assets, or scripts in its own sandbox.
+
+The registry stores file hashes and optional immutable artifact locations; it
+does not fetch, inspect, import, or execute scripts. The host agent remains
+responsible for sandboxing and execution policy. DEAL authority and revocation
+always win over skill instructions.
+
+Set these production secrets before approving skills:
+
+```text
+DEAL_SKILL_SIGNING_KEY_ID=deal-skill-key-1
+DEAL_SKILL_SIGNING_PRIVATE_KEY=<Ed25519 PKCS#8 PEM>
+DEAL_SKILL_SIGNING_PUBLIC_KEY=<Ed25519 SPKI PEM>
+```
 
 ## References
 

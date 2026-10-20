@@ -18,6 +18,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: ./node_modules/.bin/tsc -p packages/core/tsconfig.json
+      - run: ./node_modules/.bin/tsc -p packages/skills/tsconfig.json
       - run: ./node_modules/.bin/tsc -p packages/policy/tsconfig.json
       - run: ./node_modules/.bin/tsc -p packages/memory/tsconfig.json
       - run: ./node_modules/.bin/tsc -p packages/sdk/tsconfig.json
@@ -25,5 +26,7 @@ jobs:
       - run: ./node_modules/.bin/tsc -p apps/api/tsconfig.json
       - run: ./node_modules/.bin/tsc -p apps/mcp/tsconfig.json
       - run: pnpm --filter @deal/dashboard build
+      - run: pnpm format:check
+      - run: git diff --check
       - run: ./node_modules/.bin/vitest run
       - run: python -m compileall packages/sdk-python/deal_sdk

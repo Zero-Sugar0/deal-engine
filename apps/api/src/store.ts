@@ -14,10 +14,13 @@ import type {
   RelationshipContext,
   RelationalProfile,
   SelfConcept,
+  SkillRegistryEntry as CoreSkillRegistryEntry,
 } from '@deal/core';
 import { InMemoryAdapter } from '@deal/memory';
 import type { MemoryAdapter } from '@deal/memory';
 import type { PolicyResult, PolicyRule } from '@deal/policy';
+
+export type SkillRegistryEntry = CoreSkillRegistryEntry;
 
 export interface Human {
   id: string;
@@ -218,6 +221,7 @@ export class DealStore {
   readonly conversationTurns = new Map<string, ConversationTurn[]>();
   readonly feedback = new Map<string, ContextFeedback>();
   readonly externalIdentities = new Map<string, ExternalIdentity>();
+  readonly skillRegistry = new Map<string, SkillRegistryEntry>();
   readonly forgottenMemoryIds = new Set<string>();
 
   constructor(memoryAdapter: MemoryAdapter = new InMemoryAdapter()) {
@@ -269,6 +273,24 @@ export class DealStore {
     subject: string,
   ): ExternalIdentity | undefined {
     return this.externalIdentities.get(`${issuer}\n${subject}`);
+  }
+
+  static skillKey(
+    organizationId: string,
+    name: string,
+    version: string,
+  ): string {
+    return `${organizationId}\n${name}\n${version}`;
+  }
+
+  findSkill(
+    organizationId: string,
+    name: string,
+    version: string,
+  ): SkillRegistryEntry | undefined {
+    return this.skillRegistry.get(
+      DealStore.skillKey(organizationId, name, version),
+    );
   }
 
   linkExternalIdentity(

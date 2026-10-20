@@ -2,10 +2,21 @@ import type {
   HumanContextPacket,
   HumanModel,
   ProfessionProfile,
+  SkillArtifactFile,
+  SkillRegistryEntry,
+  SkillReviewStatus,
   SkillDescriptorInput,
 } from '@deal/core';
 
-export type { SkillDescriptor, SkillDescriptorInput } from '@deal/core';
+export type {
+  SkillArtifactFile,
+  SkillArtifactManifest,
+  SkillAttestation,
+  SkillDescriptor,
+  SkillDescriptorInput,
+  SkillRegistryEntry,
+  SkillReviewStatus,
+} from '@deal/core';
 
 export * from './agent.js';
 export * from './integrations.js';
@@ -72,6 +83,21 @@ export interface ContextRequest {
   userIntent?: string;
   /** Active host-agent skills; descriptors never grant authority. */
   skills?: SkillDescriptorInput[];
+}
+
+export interface SkillRegistryCreateInput {
+  name: string;
+  description: string;
+  version: string;
+  contentHash: string;
+  license?: string;
+  compatibility?: string;
+  metadata?: Record<string, string>;
+  artifactUri?: string;
+  entrypoint?: string;
+  files: SkillArtifactFile[];
+  bundleHash?: string;
+  reviewStatus?: 'draft' | 'pending_review';
 }
 
 export interface Conversation {
@@ -208,6 +234,63 @@ export class deal {
   async getProfession(professionId: string): Promise<ProfessionProfile> {
     return this.request(`/v1/professions/${encodeURIComponent(professionId)}`, {
       method: 'GET',
+    });
+  }
+
+  async listSkills(
+    input: { name?: string; status?: SkillReviewStatus } = {},
+  ): Promise<SkillRegistryEntry[]> {
+    const params = new URLSearchParams();
+    if (input.name) params.set('name', input.name);
+    if (input.status) params.set('status', input.status);
+    const query = params.toString();
+    return this.request(`/v1/skills${query ? `?${query}` : ''}`);
+  }
+
+  async getSkill(name: string, version: string): Promise<SkillRegistryEntry> {
+    return this.request(
+      `/v1/skills/${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
+    );
+  }
+
+  async getSkillSigningKeys(): Promise<{
+    keys: Array<{ keyId: string; algorithm: string; publicKeyPem?: string }>;
+  }> {
+    return this.request('/v1/skills/keys');
+  }
+
+  async registerSkill(
+    input: SkillRegistryCreateInput,
+  ): Promise<SkillRegistryEntry> {
+    return this.request('/v1/skills', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async submitSkill(skillId: string): Promise<SkillRegistryEntry> {
+    return this.request(`/v1/skills/${encodeURIComponent(skillId)}/submit`, {
+      method: 'POST',
+    });
+  }
+
+  async reviewSkill(
+    skillId: string,
+    input: { decision: 'approved' | 'rejected'; note?: string },
+  ): Promise<SkillRegistryEntry> {
+    return this.request(`/v1/skills/${encodeURIComponent(skillId)}/review`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async revokeSkill(
+    skillId: string,
+    reason: string,
+  ): Promise<SkillRegistryEntry> {
+    return this.request(`/v1/skills/${encodeURIComponent(skillId)}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
     });
   }
 

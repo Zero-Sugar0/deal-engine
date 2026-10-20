@@ -4,6 +4,7 @@ import { DealStore } from './store.js';
 import { PostgresRateLimiter } from './rate-limit.js';
 import { externalAuthFromEnvironment } from './external-auth.js';
 import { HttpEmbeddingProvider, SupermemoryAdapter } from '@deal/memory';
+import { SkillSigner } from './skill-signing.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 const agentToken = process.env.DEAL_API_KEY ?? 'local-agent-key';
@@ -33,6 +34,11 @@ const semanticAdapter = process.env.SUPERMEMORY_API_KEY
       timeoutMs: Number(process.env.SUPERMEMORY_TIMEOUT_MS ?? 10_000),
     })
   : undefined;
+const skillSigner = new SkillSigner({
+  privateKeyPem: process.env.DEAL_SKILL_SIGNING_PRIVATE_KEY,
+  publicKeyPem: process.env.DEAL_SKILL_SIGNING_PUBLIC_KEY,
+  keyId: process.env.DEAL_SKILL_SIGNING_KEY_ID,
+});
 const store = process.env.DATABASE_URL
   ? new PostgresDealStore(process.env.DATABASE_URL, {
       embeddingProvider,
@@ -50,6 +56,7 @@ const app = buildServer({
     store instanceof PostgresDealStore
       ? new PostgresRateLimiter(store.pool)
       : undefined,
+  skillSigner,
 });
 const port = Number(process.env.PORT ?? process.env.DEAL_PORT ?? 3000);
 

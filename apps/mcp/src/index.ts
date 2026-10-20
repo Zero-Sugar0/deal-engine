@@ -70,6 +70,28 @@ const tools = [
     },
   },
   {
+    name: 'deal_list_skills',
+    description:
+      'List organization skills that are available to this credential. Agents only receive approved, non-revoked versions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        status: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'deal_get_skill',
+    description:
+      'Fetch one exact, version-pinned organization skill registry entry and its attestation metadata.',
+    inputSchema: {
+      type: 'object',
+      properties: { name: { type: 'string' }, version: { type: 'string' } },
+      required: ['name', 'version'],
+    },
+  },
+  {
     name: 'deal_request_approval',
     description:
       'Create a human approval request bound to an exact action payload.',
@@ -264,6 +286,16 @@ async function handle(message: JsonRpcRequest): Promise<void> {
         >;
         const routes: Record<string, string> = {
           deal_get_context: '/v1/context',
+          deal_list_skills: `/v1/skills${
+            args.name || args.status
+              ? `?${new URLSearchParams(
+                  Object.entries(args)
+                    .filter(([key]) => key === 'name' || key === 'status')
+                    .map(([key, value]) => [key, String(value)]),
+                ).toString()}`
+              : ''
+          }`,
+          deal_get_skill: `/v1/skills/${encodeURIComponent(String(args.name ?? ''))}/${encodeURIComponent(String(args.version ?? ''))}`,
           deal_check_permission: '/v1/policy/evaluate',
           deal_request_approval: '/v1/approvals',
           deal_consume_approval: `/v1/approvals/${String(args.approvalId ?? '')}/consume`,
@@ -279,7 +311,13 @@ async function handle(message: JsonRpcRequest): Promise<void> {
         if (!routes[name]) throw new Error(`Unknown DEAL tool: ${name}`);
         const payload =
           name === 'deal_consume_approval' ? { payload: args.payload } : args;
-        const result = await callApi(routes[name], payload);
+        const result = await callApi(
+          routes[name],
+          payload,
+          name === 'deal_list_skills' || name === 'deal_get_skill'
+            ? 'GET'
+            : 'POST',
+        );
         return reply(message.id, {
           content: [{ type: 'text', text: JSON.stringify(result) }],
         });

@@ -23,6 +23,7 @@ import {
   type Credential,
   type Delegation,
   type Human,
+  type SkillRegistryEntry,
   type WorkflowRun,
   type ExternalIdentity,
 } from './store.js';
@@ -101,23 +102,32 @@ export class PostgresDealStore extends DealStore {
 
   private async initialize(): Promise<void> {
     const configuredPath = process.env.DEAL_MIGRATION_PATH;
-    const migrationPath =
-      configuredPath ??
-      path.join(process.cwd(), 'infra/db/migrations/001_initial.sql');
-    let migration: string;
-    try {
-      migration = await readFile(migrationPath, 'utf8');
-    } catch (cause) {
-      if (configuredPath) throw cause;
-      migration = await readFile(
-        path.resolve(
-          path.dirname(fileURLToPath(import.meta.url)),
-          '../../../infra/db/migrations/001_initial.sql',
-        ),
-        'utf8',
-      );
+    const defaultMigrationDirectory = path.join(
+      process.cwd(),
+      'infra/db/migrations',
+    );
+    const fallbackMigrationDirectory = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '../../../infra/db/migrations',
+    );
+    const migrationPaths = configuredPath
+      ? [configuredPath]
+      : ['001_initial.sql', '002_skill_registry.sql'].map((file) =>
+          path.join(defaultMigrationDirectory, file),
+        );
+    for (const migrationPath of migrationPaths) {
+      let migration: string;
+      try {
+        migration = await readFile(migrationPath, 'utf8');
+      } catch (cause) {
+        if (configuredPath) throw cause;
+        migration = await readFile(
+          path.join(fallbackMigrationDirectory, path.basename(migrationPath)),
+          'utf8',
+        );
+      }
+      await this.pool.query(migration);
     }
-    await this.pool.query(migration);
     await this.hydrate();
   }
 
@@ -134,6 +144,7 @@ export class PostgresDealStore extends DealStore {
     this.conversationTurns.clear();
     this.feedback.clear();
     this.externalIdentities.clear();
+    this.skillRegistry.clear();
     const [
       humans,
       agents,
@@ -147,6 +158,7 @@ export class PostgresDealStore extends DealStore {
       conversations,
       conversationTurns,
       feedback,
+      skills,
     ] = await Promise.all([
       this.pool.query(
         'SELECT id, email, display_name, organization_id, role, identity, persona, self_concept, biography, relationships, relational, boundaries, domain, decision, behavior, current_priorities, known_constraints, model_version, judgment FROM humans',
@@ -183,6 +195,9 @@ export class PostgresDealStore extends DealStore {
       ),
       this.pool.query(
         'SELECT id, human_id, agent_id, context_packet_id, rating, correction, what_worked, what_to_change, created_at FROM context_feedback ORDER BY created_at ASC',
+      ),
+      this.pool.query(
+        'SELECT id, organization_id, name, version, descriptor, manifest, review_status, created_by, created_at, updated_at, reviewed_by, reviewed_at, review_note, revoked_by, revoked_at, revocation_reason, signature, signing_key_id, signing_public_key, signed_at FROM skill_registry ORDER BY name ASC, version ASC',
       ),
     ]);
 
@@ -368,6 +383,34 @@ export class PostgresDealStore extends DealStore {
       };
       this.feedback.set(item.id, item);
     }
+    for (const row of skills.rows) {
+      const entry: SkillRegistryEntry = {
+        id: row.id,
+        organizationId: row.organization_id,
+        name: row.name,
+        version: row.version,
+        descriptor: row.descriptor,
+        manifest: row.manifest,
+        reviewStatus: row.review_status,
+        createdBy: row.created_by,
+        createdAt: iso(row.created_at)!,
+        updatedAt: iso(row.updated_at)!,
+        reviewedBy: row.reviewed_by ?? undefined,
+        reviewedAt: iso(row.reviewed_at),
+        reviewNote: row.review_note ?? undefined,
+        revokedBy: row.revoked_by ?? undefined,
+        revokedAt: iso(row.revoked_at),
+        revocationReason: row.revocation_reason ?? undefined,
+        signature: row.signature ?? undefined,
+        signingKeyId: row.signing_key_id ?? undefined,
+        signingPublicKey: row.signing_public_key ?? undefined,
+        signedAt: iso(row.signed_at),
+      };
+      this.skillRegistry.set(
+        DealStore.skillKey(entry.organizationId, entry.name, entry.version),
+        entry,
+      );
+    }
     const identities = await this.pool.query(
       'SELECT id, organization_id, human_id, issuer, subject, email, claims, created_at, updated_at FROM external_identities',
     );
@@ -404,6 +447,7 @@ export class PostgresDealStore extends DealStore {
         conversationTurns: snapshotMap(this.conversationTurns),
         feedback: snapshotMap(this.feedback),
         externalIdentities: snapshotMap(this.externalIdentities),
+        skillRegistry: snapshotMap(this.skillRegistry),
       },
       auditLength: this.audits.length,
     };
@@ -723,6 +767,44 @@ export class PostgresDealStore extends DealStore {
             item.whatWorked ?? null,
             item.whatToChange ?? null,
             item.createdAt,
+          ],
+        );
+      }
+      for (const entry of this.skillRegistry.values()) {
+        if (
+          !changed(
+            snapshot,
+            'skillRegistry',
+            DealStore.skillKey(entry.organizationId, entry.name, entry.version),
+            entry,
+          )
+        )
+          continue;
+        await client.query(
+          `INSERT INTO skill_registry(id, organization_id, name, version, descriptor, manifest, review_status, created_by, created_at, updated_at, reviewed_by, reviewed_at, review_note, revoked_by, revoked_at, revocation_reason, signature, signing_key_id, signing_public_key, signed_at)
+           VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+           ON CONFLICT(id) DO UPDATE SET descriptor=EXCLUDED.descriptor, manifest=EXCLUDED.manifest, review_status=EXCLUDED.review_status, updated_at=EXCLUDED.updated_at, reviewed_by=EXCLUDED.reviewed_by, reviewed_at=EXCLUDED.reviewed_at, review_note=EXCLUDED.review_note, revoked_by=EXCLUDED.revoked_by, revoked_at=EXCLUDED.revoked_at, revocation_reason=EXCLUDED.revocation_reason, signature=EXCLUDED.signature, signing_key_id=EXCLUDED.signing_key_id, signing_public_key=EXCLUDED.signing_public_key, signed_at=EXCLUDED.signed_at`,
+          [
+            entry.id,
+            entry.organizationId,
+            entry.name,
+            entry.version,
+            json(entry.descriptor),
+            json(entry.manifest),
+            entry.reviewStatus,
+            entry.createdBy,
+            entry.createdAt,
+            entry.updatedAt,
+            entry.reviewedBy ?? null,
+            entry.reviewedAt ?? null,
+            entry.reviewNote ?? null,
+            entry.revokedBy ?? null,
+            entry.revokedAt ?? null,
+            entry.revocationReason ?? null,
+            entry.signature ?? null,
+            entry.signingKeyId ?? null,
+            entry.signingPublicKey ?? null,
+            entry.signedAt ?? null,
           ],
         );
       }

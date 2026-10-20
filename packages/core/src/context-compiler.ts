@@ -22,6 +22,7 @@ import type {
   Persona,
   ProfessionalContext,
   ResponseGuidance,
+  SkillAttestation,
   SkillDescriptorInput,
 } from './schema.js';
 
@@ -53,6 +54,7 @@ export interface CompileContextInput {
   grounding?: Grounding;
   professional?: ProfessionalContext;
   skills?: SkillDescriptorInput[];
+  skillAttestations?: SkillAttestation[];
 }
 
 export function hashTask(task: string): string {
@@ -380,6 +382,7 @@ export function compileHumanContextPacket(
     active: (input.skills ?? []).map((skill) =>
       SkillDescriptorSchema.parse(skill),
     ),
+    attestations: input.skillAttestations ?? [],
   });
 
   return {

@@ -32,6 +32,9 @@ curl -X POST http://localhost:3000/v1/context \
 DATABASE_URL=postgres://...
 SUPERMEMORY_API_KEY=
 DEAL_JWT_SECRET=
+DEAL_SKILL_SIGNING_KEY_ID=deal-skill-key-1
+DEAL_SKILL_SIGNING_PRIVATE_KEY=
+DEAL_SKILL_SIGNING_PUBLIC_KEY=
 MCP_SERVER_URL=
 ```
 
@@ -54,6 +57,10 @@ MCP_SERVER_URL=
 - `POST /v1/credentials/:id/revoke`
 - `POST /v1/delegations`
 - `POST /v1/delegations/:id/revoke`
+- `GET /v1/skills`
+- `POST /v1/skills`
+- `POST /v1/skills/:id/review`
+- `POST /v1/skills/:id/revoke`
 - `GET /v1/profiles`
 - `PATCH /v1/profile`
 - `POST /v1/onboarding`

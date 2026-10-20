@@ -14,6 +14,10 @@ calendar, or OAuth connector credentials.
   unless the deployment explicitly provides a private test certificate.
 - `DEAL_JWT_SECRET`: at least 32 random characters. It signs context and action
   packets.
+- `DEAL_SKILL_SIGNING_PRIVATE_KEY` and `DEAL_SKILL_SIGNING_PUBLIC_KEY`: Ed25519
+  PKCS#8/SPKI PEM secrets used to attest approved organization skills. Keep the
+  private key only in the API secret store and rotate with a new
+  `DEAL_SKILL_SIGNING_KEY_ID`.
 - `DEAL_DASHBOARD_ORIGIN`: explicit browser origin in production.
 - `DEAL_METRICS_TOKEN`: set this when `/metrics` is exposed outside a private
   network.

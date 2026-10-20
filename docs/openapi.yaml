@@ -70,6 +70,84 @@ paths:
           }
       responses:
         '200': { description: Context packet and signature }
+  /v1/skills/keys:
+    get:
+      summary: Get public keys used to verify organization skill attestations
+      security: []
+      responses: { '200': { description: Public Ed25519 verification keys } }
+  /v1/skills:
+    get:
+      summary: List organization skill registry entries
+      parameters:
+        - { name: name, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+      responses: { '200': { description: Skill registry entries } }
+    post:
+      summary: Register a version-pinned skill artifact manifest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SkillRegistryCreate' }
+      responses: { '200': { description: Registered skill entry } }
+  /v1/skills/{name}/{version}:
+    get:
+      summary: Fetch an exact organization skill version
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+        - { name: version, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Skill registry entry } }
+  /v1/skills/{skillId}/submit:
+    post:
+      summary: Submit a draft skill for review
+      parameters:
+        - {
+            name: skillId,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      responses: { '200': { description: Pending review entry } }
+  /v1/skills/{skillId}/review:
+    post:
+      summary: Approve or reject a pending skill; approval signs its manifest
+      parameters:
+        - {
+            name: skillId,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approved, rejected] }
+                note: { type: string }
+      responses: { '200': { description: Reviewed skill entry } }
+  /v1/skills/{skillId}/revoke:
+    post:
+      summary: Revoke an approved skill version
+      parameters:
+        - {
+            name: skillId,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties: { reason: { type: string } }
+      responses: { '200': { description: Revoked skill entry } }
   /v1/context/feedback:
     get:
       summary: List context feedback for the human
@@ -372,6 +450,61 @@ components:
         license: { type: string, maxLength: 256 }
         compatibility: { type: string, maxLength: 500 }
         metadata: { type: object, additionalProperties: { type: string } }
+    SkillArtifactFile:
+      type: object
+      required: [path, kind, sha256]
+      properties:
+        path: { type: string }
+        kind: { type: string, enum: [skill, reference, script, asset] }
+        sha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+        sizeBytes: { type: integer, minimum: 0 }
+    SkillRegistryCreate:
+      type: object
+      required: [name, description, version, contentHash, files]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        version: { type: string }
+        contentHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+        license: { type: string }
+        compatibility: { type: string }
+        metadata: { type: object, additionalProperties: { type: string } }
+        artifactUri: { type: string }
+        entrypoint: { type: string, default: SKILL.md }
+        files:
+          {
+            type: array,
+            maxItems: 256,
+            items: { $ref: '#/components/schemas/SkillArtifactFile' },
+          }
+        bundleHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+        reviewStatus: { type: string, enum: [draft, pending_review] }
+    SkillAttestation:
+      type: object
+      required:
+        [
+          registryId,
+          organizationId,
+          name,
+          version,
+          contentHash,
+          bundleHash,
+          reviewStatus,
+          signature,
+          signingKeyId,
+          signedAt,
+        ]
+      properties:
+        registryId: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        name: { type: string }
+        version: { type: string }
+        contentHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+        bundleHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+        reviewStatus: { type: string, enum: [approved] }
+        signature: { type: string }
+        signingKeyId: { type: string }
+        signedAt: { type: string, format: date-time }
     ProfessionProfile:
       type: object
       required: [id, version, title, category, summary, objective]

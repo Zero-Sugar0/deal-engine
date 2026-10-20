@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Mapping
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 DEFAULT_API_URL = "https://deal-engine.up.railway.app"
@@ -87,6 +88,43 @@ class DEALClient:
 
     def get_context_packet(self, packet_id: str) -> dict[str, Any]:
         return self._request(f"/v1/context/{packet_id}", method="GET")
+
+    def list_skills(
+        self, name: str | None = None, status: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = urlencode(
+            {key: value for key, value in {"name": name, "status": status}.items() if value}
+        )
+        return self._request(f"/v1/skills{'?' + query if query else ''}", method="GET")
+
+    def get_skill(self, name: str, version: str) -> dict[str, Any]:
+        return self._request(
+            f"/v1/skills/{quote(name, safe='')}/{quote(version, safe='')}", method="GET"
+        )
+
+    def get_skill_signing_keys(self) -> dict[str, Any]:
+        return self._request("/v1/skills/keys", method="GET")
+
+    def register_skill(self, skill: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("/v1/skills", dict(skill))
+
+    def submit_skill(self, skill_id: str) -> dict[str, Any]:
+        return self._request(f"/v1/skills/{quote(skill_id, safe='')}/submit", {})
+
+    def review_skill(
+        self, skill_id: str, decision: str, note: str | None = None
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"decision": decision}
+        if note is not None:
+            body["note"] = note
+        return self._request(
+            f"/v1/skills/{quote(skill_id, safe='')}/review", body
+        )
+
+    def revoke_skill(self, skill_id: str, reason: str) -> dict[str, Any]:
+        return self._request(
+            f"/v1/skills/{quote(skill_id, safe='')}/revoke", {"reason": reason}
+        )
 
     def get_profile(self) -> dict[str, Any]:
         """Return the complete human model and active agent delegations."""

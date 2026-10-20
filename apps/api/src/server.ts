@@ -13,10 +13,15 @@ import {
   RelationshipContextSchema,
   RelationalProfileSchema,
   SelfConceptSchema,
+  SkillArtifactFileSchema,
+  SkillArtifactManifestSchema,
+  SkillAttestationSchema,
   SkillDescriptorSchema,
+  SkillRegistryEntrySchema,
+  SkillReviewStatusSchema,
 } from '@deal/core';
 import type { Grounding, InteractionContext, MemoryContext } from '@deal/core';
-import type { HumanModel, ProfileFact } from '@deal/core';
+import type { HumanModel, ProfileFact, SkillRegistryEntry } from '@deal/core';
 import { evaluatePolicy, type PolicyRule } from '@deal/policy';
 import { jwtVerify, SignJWT } from 'jose';
 import { z } from 'zod';
@@ -35,6 +40,7 @@ import {
   searchProfessionProfiles,
 } from './professions.js';
 import type { WorkflowStep } from './store.js';
+import { SkillSigner } from './skill-signing.js';
 
 export interface ServerOptions {
   store?: DealStore;
@@ -45,6 +51,7 @@ export interface ServerOptions {
   metrics?: MetricsRegistry;
   rateLimitPerMinute?: number;
   contextRateLimitPerMinute?: number;
+  skillSigner?: SkillSigner;
 }
 
 const contextBody = z.object({
@@ -112,6 +119,49 @@ function professionalPolicyRules(professional: {
       reason: `Action '${action}' requires human approval for the selected professional profile`,
     })),
   ];
+}
+
+function normalizeArtifactPath(value: string): string {
+  const normalized = value.replaceAll('\\', '/');
+  if (
+    normalized.startsWith('/') ||
+    normalized.includes('\0') ||
+    normalized.split('/').some((part) => part === '..' || part === '')
+  )
+    throw error(400, `Invalid skill artifact path: ${value}`);
+  return normalized;
+}
+
+function skillAttestation(entry: SkillRegistryEntry) {
+  if (!entry.signature || !entry.signingKeyId || !entry.signedAt)
+    throw error(503, 'Approved skill is missing a signing attestation');
+  return SkillAttestationSchema.parse({
+    registryId: entry.id,
+    organizationId: entry.organizationId,
+    name: entry.name,
+    version: entry.version,
+    contentHash: entry.descriptor.contentHash,
+    bundleHash: entry.manifest.bundleHash,
+    reviewStatus: 'approved',
+    signature: entry.signature,
+    signingKeyId: entry.signingKeyId,
+    signedAt: entry.signedAt,
+  });
+}
+
+function signingPayloadForSkill(entry: SkillRegistryEntry) {
+  if (!entry.descriptor.contentHash)
+    throw error(503, 'Registered skill is missing its content hash');
+  return {
+    registryId: entry.id,
+    organizationId: entry.organizationId,
+    name: entry.name,
+    version: entry.version,
+    contentHash: entry.descriptor.contentHash,
+    bundleHash: entry.manifest.bundleHash,
+    descriptor: entry.descriptor,
+    manifest: entry.manifest,
+  };
 }
 
 function bearer(request: FastifyRequest): string {
@@ -358,6 +408,13 @@ export function buildServer(
   const contextRateLimit =
     options.contextRateLimitPerMinute ??
     Number(process.env.DEAL_CONTEXT_RATE_LIMIT_PER_MINUTE ?? 30);
+  const skillSigner =
+    options.skillSigner ??
+    new SkillSigner({
+      privateKeyPem: process.env.DEAL_SKILL_SIGNING_PRIVATE_KEY,
+      publicKeyPem: process.env.DEAL_SKILL_SIGNING_PUBLIC_KEY,
+      keyId: process.env.DEAL_SKILL_SIGNING_KEY_ID,
+    });
   const app = Fastify({
     logger: process.env.NODE_ENV === 'test' ? false : true,
     bodyLimit: 1_048_576,
@@ -716,6 +773,310 @@ export function buildServer(
     const profile = getProfessionProfile(params.professionId);
     if (!profile) throw error(404, 'Profession profile not found');
     return profile;
+  });
+
+  app.get('/v1/skills/keys', async (_request, reply) => {
+    if (!skillSigner.configured)
+      throw error(503, 'Skill signing keys are not configured');
+    const publicKeys = new Map<string, string>();
+    if (skillSigner.publicKeyPem)
+      publicKeys.set(skillSigner.keyId, skillSigner.publicKeyPem);
+    for (const entry of store.skillRegistry.values()) {
+      if (entry.signingKeyId && entry.signingPublicKey)
+        publicKeys.set(entry.signingKeyId, entry.signingPublicKey);
+    }
+    return reply.send({
+      keys: [...publicKeys.entries()].map(([keyId, publicKeyPem]) => ({
+        keyId,
+        algorithm: skillSigner.algorithm,
+        publicKeyPem,
+      })),
+    });
+  });
+
+  app.get('/v1/skills', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      undefined,
+      options.externalAuth,
+    );
+    const human = store.humans.get(credential.humanId);
+    if (!human) throw error(404, 'Human not found');
+    const query = request.query as {
+      name?: string;
+      status?: string;
+    };
+    const requestedStatus = query.status
+      ? parse(SkillReviewStatusSchema, query.status)
+      : undefined;
+    return [...store.skillRegistry.values()]
+      .filter((entry) => entry.organizationId === human.organizationId)
+      .filter((entry) => !query.name || entry.name === query.name)
+      .filter((entry) =>
+        credential.kind === 'agent'
+          ? entry.reviewStatus === 'approved' && !entry.revokedAt
+          : !requestedStatus || entry.reviewStatus === requestedStatus,
+      )
+      .sort(
+        (left, right) =>
+          left.name.localeCompare(right.name) ||
+          right.version.localeCompare(left.version),
+      );
+  });
+
+  app.get('/v1/skills/:name/:version', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      undefined,
+      options.externalAuth,
+    );
+    const human = store.humans.get(credential.humanId);
+    if (!human) throw error(404, 'Human not found');
+    const params = request.params as { name: string; version: string };
+    const entry = store.findSkill(
+      human.organizationId,
+      params.name,
+      params.version,
+    );
+    if (
+      !entry ||
+      (credential.kind === 'agent' &&
+        (entry.reviewStatus !== 'approved' || Boolean(entry.revokedAt)))
+    )
+      throw error(404, 'Skill version not found');
+    return entry;
+  });
+
+  app.post('/v1/skills', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const body = parse(
+      z.object({
+        name: z.string(),
+        description: z.string().min(1).max(1024),
+        version: z.string().min(1).max(128),
+        contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+        license: z.string().max(256).optional(),
+        compatibility: z.string().max(500).optional(),
+        metadata: z.record(z.string()).default({}),
+        artifactUri: z.string().min(1).max(2048).optional(),
+        entrypoint: z.string().min(1).max(512).default('SKILL.md'),
+        files: z.array(SkillArtifactFileSchema).max(256),
+        bundleHash: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/)
+          .optional(),
+        reviewStatus: z.enum(['draft', 'pending_review']).default('draft'),
+      }),
+      request.body,
+    );
+    const human = store.humans.get(credential.humanId);
+    if (!human) throw error(404, 'Human not found');
+    const descriptor = SkillDescriptorSchema.parse({
+      name: body.name,
+      description: body.description,
+      version: body.version,
+      contentHash: body.contentHash,
+      source: 'organization',
+      license: body.license,
+      compatibility: body.compatibility,
+      metadata: body.metadata,
+    });
+    const entrypoint = body.entrypoint ?? 'SKILL.md';
+    const files = body.files.map((file) => ({
+      ...file,
+      path: normalizeArtifactPath(file.path),
+    }));
+    const entrypointFile = files.find((file) => file.path === entrypoint);
+    if (!entrypointFile || entrypointFile.kind !== 'skill')
+      throw error(400, 'Skill manifest must include a skill entrypoint file');
+    if (entrypointFile.sha256 !== descriptor.contentHash)
+      throw error(400, 'Entrypoint hash must match the skill content hash');
+    const computedBundleHash = hashPayload({
+      descriptor,
+      artifact: { artifactUri: body.artifactUri, entrypoint, files },
+    });
+    if (body.bundleHash && body.bundleHash !== computedBundleHash)
+      throw error(
+        400,
+        'Provided bundle hash does not match the artifact manifest',
+      );
+    const bundleHash = computedBundleHash;
+    const manifest = SkillArtifactManifestSchema.parse({
+      artifactUri: body.artifactUri,
+      entrypoint: normalizeArtifactPath(entrypoint),
+      files,
+      bundleHash,
+    });
+    const key = DealStore.skillKey(
+      human.organizationId,
+      descriptor.name,
+      descriptor.version!,
+    );
+    if (store.skillRegistry.has(key))
+      throw error(409, 'That skill version is already registered');
+    const now = new Date().toISOString();
+    const entry = SkillRegistryEntrySchema.parse({
+      id: crypto.randomUUID(),
+      organizationId: human.organizationId,
+      name: descriptor.name,
+      version: descriptor.version,
+      descriptor,
+      manifest,
+      reviewStatus: body.reviewStatus,
+      createdBy: human.id,
+      createdAt: now,
+      updatedAt: now,
+    });
+    store.skillRegistry.set(key, entry);
+    store.recordAudit({
+      humanId: human.id,
+      organizationId: human.organizationId,
+      eventType: 'skill.registered',
+      payload: {
+        registryId: entry.id,
+        name: entry.name,
+        version: entry.version,
+        reviewStatus: entry.reviewStatus,
+        bundleHash: entry.manifest.bundleHash,
+      },
+    });
+    return entry;
+  });
+
+  app.post('/v1/skills/:skillId/submit', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const human = store.humans.get(credential.humanId);
+    const params = request.params as { skillId: string };
+    const entry = [...store.skillRegistry.values()].find(
+      (item) => item.id === params.skillId,
+    );
+    if (!human || !entry || entry.organizationId !== human.organizationId)
+      throw error(404, 'Skill not found');
+    if (!['draft', 'rejected'].includes(entry.reviewStatus))
+      throw error(409, 'Only draft or rejected skills can be submitted');
+    entry.reviewStatus = 'pending_review';
+    entry.updatedAt = new Date().toISOString();
+    entry.reviewedBy = undefined;
+    entry.reviewedAt = undefined;
+    entry.reviewNote = undefined;
+    store.recordAudit({
+      humanId: human.id,
+      organizationId: human.organizationId,
+      eventType: 'skill.submitted',
+      payload: {
+        registryId: entry.id,
+        name: entry.name,
+        version: entry.version,
+      },
+    });
+    return entry;
+  });
+
+  app.post('/v1/skills/:skillId/review', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const body = parse(
+      z.object({
+        decision: z.enum(['approved', 'rejected']),
+        note: z.string().max(4000).optional(),
+      }),
+      request.body,
+    );
+    const human = store.humans.get(credential.humanId);
+    const params = request.params as { skillId: string };
+    const entry = [...store.skillRegistry.values()].find(
+      (item) => item.id === params.skillId,
+    );
+    if (!human || !entry || entry.organizationId !== human.organizationId)
+      throw error(404, 'Skill not found');
+    if (entry.reviewStatus !== 'pending_review')
+      throw error(409, 'Only pending skills can be reviewed');
+    if (body.decision === 'approved') {
+      if (!skillSigner.configured)
+        throw error(503, 'Skill signing keys are not configured');
+      entry.signature = await skillSigner.sign(signingPayloadForSkill(entry));
+      entry.signingKeyId = skillSigner.keyId;
+      entry.signingPublicKey = skillSigner.publicKeyPem;
+      entry.signedAt = new Date().toISOString();
+      entry.reviewStatus = 'approved';
+    } else {
+      entry.reviewStatus = 'rejected';
+      entry.signature = undefined;
+      entry.signingKeyId = undefined;
+      entry.signingPublicKey = undefined;
+      entry.signedAt = undefined;
+    }
+    entry.reviewedBy = human.id;
+    entry.reviewedAt = new Date().toISOString();
+    entry.reviewNote = body.note;
+    entry.updatedAt = entry.reviewedAt;
+    store.recordAudit({
+      humanId: human.id,
+      organizationId: human.organizationId,
+      eventType: `skill.${body.decision}`,
+      payload: {
+        registryId: entry.id,
+        name: entry.name,
+        version: entry.version,
+        signingKeyId: entry.signingKeyId,
+      },
+    });
+    return entry;
+  });
+
+  app.post('/v1/skills/:skillId/revoke', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const body = parse(
+      z.object({ reason: z.string().min(1).max(4000) }),
+      request.body,
+    );
+    const human = store.humans.get(credential.humanId);
+    const params = request.params as { skillId: string };
+    const entry = [...store.skillRegistry.values()].find(
+      (item) => item.id === params.skillId,
+    );
+    if (!human || !entry || entry.organizationId !== human.organizationId)
+      throw error(404, 'Skill not found');
+    if (entry.reviewStatus !== 'approved')
+      throw error(409, 'Only approved skills can be revoked');
+    entry.reviewStatus = 'revoked';
+    entry.revokedBy = human.id;
+    entry.revokedAt = new Date().toISOString();
+    entry.revocationReason = body.reason;
+    entry.updatedAt = entry.revokedAt;
+    store.recordAudit({
+      humanId: human.id,
+      organizationId: human.organizationId,
+      eventType: 'skill.revoked',
+      payload: {
+        registryId: entry.id,
+        name: entry.name,
+        version: entry.version,
+        reason: body.reason,
+      },
+    });
+    return entry;
   });
 
   app.patch('/v1/profile', async (request) => {
@@ -1413,6 +1774,63 @@ export function buildServer(
       'sensitive_context_read',
     );
 
+    const resolvedSkillResults = await Promise.all(
+      (body.skills ?? []).map(async (skill) => {
+        if (skill.source !== 'organization')
+          return {
+            descriptor: SkillDescriptorSchema.parse(skill),
+            attestation: undefined,
+          };
+        if (!skill.version || !skill.contentHash)
+          throw error(
+            400,
+            `Organization skill '${skill.name}' must pin an exact version and content hash`,
+          );
+        const registered = store.findSkill(
+          human.organizationId,
+          skill.name,
+          skill.version,
+        );
+        if (
+          !registered ||
+          registered.reviewStatus !== 'approved' ||
+          Boolean(registered.revokedAt)
+        )
+          throw error(
+            409,
+            `Organization skill '${skill.name}@${skill.version}' is not approved or has been revoked`,
+          );
+        if (registered.descriptor.contentHash !== skill.contentHash)
+          throw error(
+            409,
+            `Organization skill '${skill.name}@${skill.version}' content hash does not match the registry`,
+          );
+        const attestation = skillAttestation(registered);
+        if (
+          !registered.signingPublicKey ||
+          !(await skillSigner.verify(
+            attestation.signature,
+            signingPayloadForSkill(registered),
+            {
+              publicKeyPem: registered.signingPublicKey,
+              keyId: attestation.signingKeyId,
+            },
+          ))
+        )
+          throw error(
+            503,
+            'Organization skill attestation could not be verified',
+          );
+        return { descriptor: registered.descriptor, attestation };
+      }),
+    );
+    const attestedSkills = resolvedSkillResults.flatMap((result) =>
+      result.attestation ? [result.attestation] : [],
+    );
+    const resolvedSkills = resolvedSkillResults.map(
+      (result) => result.descriptor,
+    );
+
     // Normalize profiles loaded from older migrations before they enter a
     // packet. This keeps the packet contract stable during rolling upgrades.
     const identity = IdentityProfileSchema.parse(human.identity ?? {});
@@ -1671,7 +2089,8 @@ export function buildServer(
       policyVersion: delegation.profileId ?? 'default_v1',
       ttlMinutes: contextTtlMinutes,
       memoryReferences: memory.references,
-      skills: body.skills?.map((skill) => SkillDescriptorSchema.parse(skill)),
+      skills: resolvedSkills,
+      skillAttestations: attestedSkills,
     });
     const signature = await new SignJWT(
       packet as unknown as Record<string, unknown>,
@@ -1705,6 +2124,12 @@ export function buildServer(
           version: skill.version,
           contentHash: skill.contentHash,
           source: skill.source,
+        })),
+        skillAttestations: packet.skills.attestations.map((attestation) => ({
+          registryId: attestation.registryId,
+          name: attestation.name,
+          version: attestation.version,
+          signingKeyId: attestation.signingKeyId,
         })),
       },
     });

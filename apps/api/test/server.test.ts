@@ -1,16 +1,29 @@
 import { afterAll, describe, expect, it } from 'vitest';
+import { generateKeyPairSync } from 'node:crypto';
 import { buildServer } from '../src/server.js';
 import { DealStore } from '../src/store.js';
 import { InMemoryRateLimiter } from '../src/rate-limit.js';
+import { SkillSigner } from '../src/skill-signing.js';
 
 const agentToken = 'test-agent-token';
 const humanToken = 'test-human-token';
 const store = new DealStore();
 await store.seedDemo(agentToken, humanToken);
+const skillKeys = generateKeyPairSync('ed25519');
+const skillSigner = new SkillSigner({
+  privateKeyPem: skillKeys.privateKey
+    .export({ format: 'pem', type: 'pkcs8' })
+    .toString(),
+  publicKeyPem: skillKeys.publicKey
+    .export({ format: 'pem', type: 'spki' })
+    .toString(),
+  keyId: 'test-skill-key',
+});
 const app = buildServer({
   store,
   jwtSecret: 'test-secret-that-is-long-enough',
   contextTtlMinutes: 15,
+  skillSigner,
 });
 const limitedApp = buildServer({
   store,
@@ -131,6 +144,133 @@ describe('DEAL control plane', () => {
       },
     });
     expect(policyResponse.json().decision).toBe('require_approval');
+  });
+
+  it('registers, attests, pins, distributes, and revokes organization skills', async () => {
+    const registeredResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/skills',
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: {
+        name: 'expense-review',
+        description: 'Review expense reports using the organization playbook.',
+        version: '1.0.0',
+        contentHash: 'b'.repeat(64),
+        files: [
+          {
+            path: 'SKILL.md',
+            kind: 'skill',
+            sha256: 'b'.repeat(64),
+          },
+          {
+            path: 'references/policy.md',
+            kind: 'reference',
+            sha256: 'c'.repeat(64),
+          },
+        ],
+      },
+    });
+    expect(registeredResponse.statusCode).toBe(200);
+    const registered = registeredResponse.json();
+    expect(registered.reviewStatus).toBe('draft');
+
+    const submitted = await app.inject({
+      method: 'POST',
+      url: `/v1/skills/${registered.id}/submit`,
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    expect(submitted.json().reviewStatus).toBe('pending_review');
+
+    const approvedResponse = await app.inject({
+      method: 'POST',
+      url: `/v1/skills/${registered.id}/review`,
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: { decision: 'approved', note: 'Reviewed by the organization.' },
+    });
+    expect(approvedResponse.statusCode).toBe(200);
+    const approved = approvedResponse.json();
+    expect(approved.signature).toBeTypeOf('string');
+    expect(approved.signingKeyId).toBe('test-skill-key');
+    expect(
+      await skillSigner.verify(approved.signature, {
+        registryId: approved.id,
+        organizationId: approved.organizationId,
+        name: approved.name,
+        version: approved.version,
+        contentHash: approved.descriptor.contentHash,
+        bundleHash: approved.manifest.bundleHash,
+        descriptor: approved.descriptor,
+        manifest: approved.manifest,
+      }),
+    ).toBe(true);
+
+    const agentCatalog = await app.inject({
+      method: 'GET',
+      url: '/v1/skills',
+      headers: { authorization: `Bearer ${agentToken}` },
+    });
+    expect(agentCatalog.statusCode).toBe(200);
+    expect(
+      agentCatalog
+        .json()
+        .some((item: { id: string }) => item.id === registered.id),
+    ).toBe(true);
+
+    const contextResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/context',
+      headers: { authorization: `Bearer ${agentToken}` },
+      payload: {
+        task: 'Review this expense report',
+        skills: [
+          {
+            name: 'expense-review',
+            description:
+              'Client supplied description must not override registry metadata.',
+            version: '1.0.0',
+            contentHash: 'b'.repeat(64),
+            source: 'organization',
+          },
+        ],
+      },
+    });
+    expect(contextResponse.statusCode).toBe(200);
+    const context = contextResponse.json();
+    expect(context.packet.skills.active[0].description).toBe(
+      'Review expense reports using the organization playbook.',
+    );
+    expect(context.packet.skills.attestations[0].registryId).toBe(
+      registered.id,
+    );
+    expect(context.packet.skills.attestations[0].reviewStatus).toBe('approved');
+
+    const revokedResponse = await app.inject({
+      method: 'POST',
+      url: `/v1/skills/${registered.id}/revoke`,
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: { reason: 'Policy changed; replace with the next version.' },
+    });
+    expect(revokedResponse.json().reviewStatus).toBe('revoked');
+
+    const blockedContext = await app.inject({
+      method: 'POST',
+      url: '/v1/context',
+      headers: { authorization: `Bearer ${agentToken}` },
+      payload: {
+        task: 'Review this expense report',
+        skills: [
+          {
+            name: 'expense-review',
+            description:
+              'Review expense reports using the organization playbook.',
+            version: '1.0.0',
+            contentHash: 'b'.repeat(64),
+            source: 'organization',
+          },
+        ],
+      },
+    });
+    expect(blockedContext.statusCode).toBe(409);
   });
 
   it('supports an approval decision and audit trail', async () => {

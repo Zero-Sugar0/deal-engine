@@ -38,3 +38,16 @@ decision = client.check_permission(
 The skill remains owned by the host agent. DEAL receives its descriptor for
 provenance and context composition; it does not execute skill scripts or let a
 skill change authority, boundaries, or approval rules.
+
+Organization-owned skills can be discovered by exact version and reviewed by a
+human credential:
+
+```python
+skills = client.list_skills()
+entry = client.get_skill("decision-review", "1.0.0")
+client.submit_skill(entry["id"])
+client.review_skill(entry["id"], "approved")
+```
+
+Agent credentials only receive approved, non-revoked entries. Context requests
+must still include the exact skill version and `contentHash`.

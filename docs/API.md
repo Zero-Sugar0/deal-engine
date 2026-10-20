@@ -81,7 +81,8 @@ Content-Type: application/json
         "deal_human_context",
         "skill_instructions",
         "skill_resources"
-      ]
+      ],
+      "attestations": []
     },
     "humanModel": {},
     "behavior": {},
@@ -136,6 +137,27 @@ DEAL authority and boundaries
 This lets a customer-support skill change the workflow while the human's voice,
 privacy rules, approval requirements, and corrections remain stable across
 Claude, Codex, LangChain, OpenAI, Vercel AI, OpenRouter, and custom runtimes.
+
+## Organization skill registry
+
+Organizations can register and review a skill artifact without giving DEAL any
+ability to execute it:
+
+```http
+POST /v1/skills
+POST /v1/skills/{skill_id}/submit
+POST /v1/skills/{skill_id}/review
+GET  /v1/skills/{name}/{version}
+POST /v1/skills/{skill_id}/revoke
+GET  /v1/skills/keys
+```
+
+Registration requires the `SKILL.md` content hash and a file manifest. Approval
+creates an Ed25519 signature over the descriptor and manifest. An organization
+skill sent to `/v1/context` must pin both `version` and `contentHash`; DEAL
+resolves it to the organization's approved registry entry and adds a signed
+`skills.attestations[]` record. Revoked versions are rejected on new context
+requests even though their historical signatures remain available for audit.
 
 ## Professional profiles
 
