@@ -88,6 +88,13 @@ function error(
   return Object.assign(new Error(message), { statusCode });
 }
 
+function dashboardOrigins(): string[] {
+  return (process.env.DEAL_DASHBOARD_ORIGIN ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
 function missingProfessionalContext(
   requiredContext: string[],
   context: Record<string, unknown>,
@@ -484,11 +491,14 @@ export function buildServer(
       Date.now();
   });
   app.addHook('onRequest', async (request, reply) => {
-    const configuredOrigin = process.env.DEAL_DASHBOARD_ORIGIN;
+    const configuredOrigins = dashboardOrigins();
     const requestOrigin = request.headers.origin;
     const origin =
-      configuredOrigin ??
-      (typeof requestOrigin === 'string' ? requestOrigin : '*');
+      typeof requestOrigin === 'string' &&
+      (configuredOrigins.length === 0 ||
+        configuredOrigins.includes(requestOrigin))
+        ? requestOrigin
+        : (configuredOrigins[0] ?? '*');
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
     reply.header('Referrer-Policy', 'no-referrer');

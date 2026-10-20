@@ -12,9 +12,10 @@ cd apps/dashboard
 ../../node_modules/.bin/vite
 ```
 
-Open `http://localhost:5173`. The dashboard is configured to use the hosted deal API
-without exposing infrastructure configuration in the user interface. Set
-`VITE_DEAL_API_URL` only when using a self-hosted or local API.
+Open `http://localhost:5173`. In production, the dashboard uses same-origin
+rewrites for authentication and API requests, so users never configure a URL.
+Set `VITE_DEAL_API_URL` only for local development or a self-hosted deployment
+without an equivalent proxy.
 
 Routes:
 

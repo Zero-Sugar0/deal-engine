@@ -1,4 +1,22 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    {
+      "source": "/api/auth/:path*",
+      "destination": "https://deal-engine.up.railway.app/api/auth/:path*"
+    },
+    {
+      "source": "/v1/:path*",
+      "destination": "https://deal-engine.up.railway.app/v1/:path*"
+    },
+    {
+      "source": "/healthz",
+      "destination": "https://deal-engine.up.railway.app/healthz"
+    },
+    {
+      "source": "/readyz",
+      "destination": "https://deal-engine.up.railway.app/readyz"
+    },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }

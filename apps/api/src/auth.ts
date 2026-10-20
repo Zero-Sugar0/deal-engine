@@ -20,9 +20,13 @@ const baseURL =
   `http://localhost:${process.env.DEAL_PORT ?? '3000'}`;
 
 function configuredOrigins(): string[] {
+  const dashboardOrigins = (process.env.DEAL_DASHBOARD_ORIGIN ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   return [
     baseURL,
-    process.env.DEAL_DASHBOARD_ORIGIN,
+    ...dashboardOrigins,
     ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? '')
       .split(',')
       .map((origin) => origin.trim())
