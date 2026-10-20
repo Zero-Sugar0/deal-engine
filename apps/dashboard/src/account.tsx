@@ -57,6 +57,15 @@ type Agent = {
   }>;
 };
 
+type AiGatewaySettings = {
+  configured: boolean;
+  provider: 'vercel_ai_gateway';
+  model?: string;
+  keyHint?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 type Memory = {
   id: string;
   kind: string;
@@ -3200,11 +3209,19 @@ function MemoryView() {
 
 function DeveloperView() {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [developerTab, setDeveloperTab] = useState<'deal' | 'byok'>('deal');
   const [selectedAgent, setSelectedAgent] = useState('');
   const [keyName, setKeyName] = useState('');
   const [newKey, setNewKey] = useState('');
   const [agentName, setAgentName] = useState('');
   const [runtime, setRuntime] = useState('');
+  const [gateway, setGateway] = useState<AiGatewaySettings | null>(null);
+  const [gatewayApiKey, setGatewayApiKey] = useState('');
+  const [gatewayModel, setGatewayModel] = useState('');
+  const [gatewayEditing, setGatewayEditing] = useState(false);
+  const [gatewayBusy, setGatewayBusy] = useState(false);
+  const [gatewayLoading, setGatewayLoading] = useState(true);
+  const [gatewayMessage, setGatewayMessage] = useState('');
   const [showAgentForm, setShowAgentForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -3214,14 +3231,22 @@ function DeveloperView() {
       if (!selectedAgent && response.agents[0])
         setSelectedAgent(response.agents[0].id);
     });
+  const loadGateway = () =>
+    request<AiGatewaySettings>('/v1/developer/ai-gateway').then((response) => {
+      setGateway(response.configured ? response : null);
+      if (response.configured && response.model)
+        setGatewayModel(response.model);
+    });
   useEffect(() => {
-    load().catch((error) =>
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Could not load your connections.',
-      ),
-    );
+    Promise.all([load(), loadGateway()])
+      .catch((error) =>
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : 'Could not load your developer settings.',
+        ),
+      )
+      .finally(() => setGatewayLoading(false));
   }, []);
   const activeAgent =
     agents.find((agent) => agent.id === selectedAgent) ?? agents[0];
@@ -3304,6 +3329,58 @@ function DeveloperView() {
   async function copy() {
     await navigator.clipboard.writeText(newKey);
   }
+  async function saveGateway(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setGatewayBusy(true);
+    setGatewayMessage('');
+    setErrorMessage('');
+    try {
+      const response = await request<AiGatewaySettings>(
+        '/v1/developer/ai-gateway',
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            apiKey: gatewayApiKey,
+            model: gatewayModel.trim(),
+          }),
+        },
+      );
+      setGateway(response);
+      setGatewayApiKey('');
+      setGatewayEditing(false);
+      setGatewayMessage('Saved securely. Your key will not be shown again.');
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Could not save your key.',
+      );
+    } finally {
+      setGatewayBusy(false);
+    }
+  }
+  async function removeGateway() {
+    if (
+      !window.confirm(
+        'Remove this AI Gateway key? Dashboard comparisons will use the server default, if one is configured.',
+      )
+    )
+      return;
+    setGatewayBusy(true);
+    setErrorMessage('');
+    try {
+      await request('/v1/developer/ai-gateway', { method: 'DELETE' });
+      setGateway(null);
+      setGatewayApiKey('');
+      setGatewayModel('');
+      setGatewayEditing(false);
+      setGatewayMessage('Your saved key was removed.');
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Could not remove your key.',
+      );
+    } finally {
+      setGatewayBusy(false);
+    }
+  }
   return (
     <div className="account-content">
       <section className="section-intro-row developer-intro">
@@ -3379,7 +3456,134 @@ function DeveloperView() {
         </form>
       )}
       {errorMessage && <div className="account-error">{errorMessage}</div>}
-      {agents.length ? (
+      <div
+        className="developer-tabs"
+        role="tablist"
+        aria-label="Developer keys"
+      >
+        <button
+          className={developerTab === 'deal' ? 'developer-tab-active' : ''}
+          onClick={() => setDeveloperTab('deal')}
+          role="tab"
+          aria-selected={developerTab === 'deal'}
+          type="button"
+        >
+          deal API keys
+          <small>Connect an agent</small>
+        </button>
+        <button
+          className={developerTab === 'byok' ? 'developer-tab-active' : ''}
+          onClick={() => setDeveloperTab('byok')}
+          role="tab"
+          aria-selected={developerTab === 'byok'}
+          type="button"
+        >
+          bring your own key
+          <small>Use your AI Gateway</small>
+        </button>
+      </div>
+      {developerTab === 'byok' ? (
+        <section className="account-panel gateway-panel">
+          <PanelHeading
+            eyebrow="Your AI Gateway"
+            title="Choose the model behind your comparisons"
+          />
+          <p className="gateway-copy">
+            Add your Vercel AI Gateway key once. deal encrypts it on the server,
+            keeps it masked, and uses it only for your dashboard tests.
+          </p>
+          {gatewayLoading ? (
+            <div className="loading-line">Checking your saved key…</div>
+          ) : gateway && !gatewayEditing ? (
+            <div className="gateway-saved-card">
+              <div>
+                <span className="gateway-status-dot" />
+                <strong>Connected to Vercel AI Gateway</strong>
+                <p>
+                  {gateway.keyHint} · {gateway.model}
+                </p>
+                <small>
+                  Added {prettyDate(gateway.createdAt)} · encrypted and never
+                  displayed in full
+                </small>
+              </div>
+              <div className="gateway-actions">
+                <SmallButton
+                  onClick={() => {
+                    setGatewayModel(gateway.model ?? '');
+                    setGatewayEditing(true);
+                    setGatewayMessage('');
+                  }}
+                  secondary
+                >
+                  Replace key
+                </SmallButton>
+                <button
+                  className="danger-text"
+                  disabled={gatewayBusy}
+                  onClick={removeGateway}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form className="gateway-form" onSubmit={saveGateway}>
+              <label>
+                AI Gateway API key
+                <input
+                  autoComplete="off"
+                  onChange={(event) => setGatewayApiKey(event.target.value)}
+                  placeholder="Paste your key"
+                  required
+                  type="password"
+                  value={gatewayApiKey}
+                />
+                <small>
+                  It is sent over HTTPS and never shown after saving.
+                </small>
+              </label>
+              <label>
+                Model
+                <input
+                  onChange={(event) => setGatewayModel(event.target.value)}
+                  placeholder="provider/model-id"
+                  required
+                  value={gatewayModel}
+                />
+                <small>
+                  Use the model name supported by your gateway account.
+                </small>
+              </label>
+              <div className="gateway-form-actions">
+                <SmallButton disabled={gatewayBusy} type="submit">
+                  {gatewayBusy
+                    ? 'Saving…'
+                    : gateway
+                      ? 'Save replacement'
+                      : 'Save key'}
+                </SmallButton>
+                {gateway && (
+                  <SmallButton
+                    onClick={() => {
+                      setGatewayEditing(false);
+                      setGatewayApiKey('');
+                      setGatewayMessage('');
+                    }}
+                    secondary
+                  >
+                    Cancel
+                  </SmallButton>
+                )}
+              </div>
+            </form>
+          )}
+          {gatewayMessage && (
+            <p className="gateway-success">{gatewayMessage}</p>
+          )}
+        </section>
+      ) : agents.length ? (
         <>
           <section className="account-panel key-create-panel">
             <PanelHeading

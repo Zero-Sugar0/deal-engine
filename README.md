@@ -161,6 +161,13 @@ AI_GATEWAY_MAX_OUTPUT_TOKENS=500
 AI_GATEWAY_TEMPERATURE=0
 ```
 
+The API can also use per-person Bring Your Own Key (BYOK) credentials saved
+from the Developer page. Those credentials are encrypted at rest with
+`DEAL_CREDENTIAL_ENCRYPTION_KEY`, never returned after saving, and take
+precedence over the server-wide `AI_GATEWAY_API_KEY` and
+`AI_GATEWAY_MODEL`. The server-wide values remain a useful fallback for local
+development and shared deployments.
+
 The browser never receives the gateway key. The dashboard uses the Better Auth
 session, and the API returns only the two answers plus non-sensitive comparison
 metadata.

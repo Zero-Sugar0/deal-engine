@@ -14,6 +14,11 @@ calendar, or OAuth connector credentials.
   unless the deployment explicitly provides a private test certificate.
 - `DEAL_JWT_SECRET`: at least 32 random characters. It signs context and action
   packets.
+- `DEAL_CREDENTIAL_ENCRYPTION_KEY`: at least 32 random characters, separate
+  from the JWT secret. It encrypts per-person AI Gateway keys saved through the
+  Developer page. Keep it stable across all API instances and back it up with
+  the rest of the deployment secrets; changing it makes existing saved keys
+  unreadable until users replace them.
 - `DEAL_SKILL_SIGNING_PRIVATE_KEY` and `DEAL_SKILL_SIGNING_PUBLIC_KEY`: Ed25519
   PKCS#8/SPKI PEM secrets used to attest approved organization skills. Keep the
   private key only in the API secret store and rotate with a new

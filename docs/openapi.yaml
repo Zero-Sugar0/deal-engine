@@ -73,7 +73,7 @@ paths:
   /v1/experiments/compare:
     post:
       summary: Compare a plain model answer with an answer guided by the human model
-      description: Runs both generations server-side through the configured Vercel AI Gateway model. The gateway key never reaches the dashboard.
+      description: Runs both generations server-side through the authenticated person's saved Vercel AI Gateway model when present, otherwise the server-wide fallback. The gateway key never reaches the dashboard.
       requestBody:
         required: true
         content:
@@ -88,8 +88,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/ComparisonResponse'
         '401': { description: Human session or credential required }
-        '503': { description: AI Gateway model and key are not configured }
+        '503':
+          {
+            description: No saved or server-wide AI Gateway model and key are configured,
+          }
         '502': { description: The configured model failed to respond }
+  /v1/developer/ai-gateway:
+    get:
+      summary: Read the authenticated person's AI Gateway connection metadata
+      description: Returns only a masked key hint. The provider key is never returned.
+      responses:
+        '200':
+          description: Connection metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiGatewayCredentialResponse'
+    put:
+      summary: Save or replace the authenticated person's AI Gateway key
+      description: The key is encrypted at rest and used for that person's dashboard comparisons.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiGatewayCredentialRequest'
+      responses:
+        '200': { description: Saved connection metadata without the raw key }
+        '400': { description: Invalid key or model format }
+    delete:
+      summary: Remove the authenticated person's saved AI Gateway key
+      responses:
+        '200': { description: Revocation result }
   /v1/skills/keys:
     get:
       summary: Get public keys used to verify organization skill attestations
@@ -503,6 +533,33 @@ components:
         text: { type: string }
         finishReason: { type: string }
         usage: { type: object, additionalProperties: true }
+    AiGatewayCredentialRequest:
+      type: object
+      required: [apiKey, model]
+      properties:
+        apiKey:
+          type: string
+          minLength: 10
+          maxLength: 512
+          writeOnly: true
+        model:
+          type: string
+          minLength: 3
+          maxLength: 200
+          pattern: '^[^/\s]+/[^/\s]+$'
+          example: openai/gpt-4.1-mini
+    AiGatewayCredentialResponse:
+      type: object
+      required: [configured, provider]
+      properties:
+        configured: { type: boolean }
+        provider: { type: string, enum: [vercel_ai_gateway] }
+        model: { type: string }
+        keyHint:
+          type: string
+          description: Masked final characters only; never the provider key.
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     SkillDescriptor:
       type: object
       required: [name, description]

@@ -15,6 +15,7 @@ import {
   hashPayload,
   type Agent,
   type Approval,
+  type AiGatewayCredential,
   type AuditEvent,
   type ContextRecord,
   type ContextFeedback,
@@ -117,6 +118,7 @@ export class PostgresDealStore extends DealStore {
           '002_skill_registry.sql',
           '003_better_auth.sql',
           '004_account_onboarding_and_credentials.sql',
+          '005_ai_gateway_credentials.sql',
         ].map((file) => path.join(defaultMigrationDirectory, file));
     for (const migrationPath of migrationPaths) {
       let migration: string;
@@ -139,6 +141,7 @@ export class PostgresDealStore extends DealStore {
     this.agents.clear();
     this.delegations.clear();
     this.credentials.clear();
+    this.aiGatewayCredentials.clear();
     this.contexts.clear();
     this.approvals.clear();
     this.audits.length = 0;
@@ -153,6 +156,7 @@ export class PostgresDealStore extends DealStore {
       agents,
       delegations,
       credentials,
+      aiGatewayCredentials,
       contexts,
       approvals,
       audits,
@@ -174,6 +178,9 @@ export class PostgresDealStore extends DealStore {
       ),
       this.pool.query(
         'SELECT id, token_hash, kind, human_id, agent_id, name, created_at, expires_at, revoked_at FROM credentials',
+      ),
+      this.pool.query(
+        'SELECT id, human_id, provider, encrypted_api_key, key_hint, model, created_at, updated_at, revoked_at FROM ai_gateway_credentials',
       ),
       this.pool.query(
         'SELECT id, human_id, agent_id, packet, signature, created_at FROM context_packets',
@@ -266,6 +273,20 @@ export class PostgresDealStore extends DealStore {
         revokedAt: iso(row.revoked_at),
       };
       this.credentials.set(credential.id, credential);
+    }
+    for (const row of aiGatewayCredentials.rows) {
+      const credential: AiGatewayCredential = {
+        id: row.id,
+        humanId: row.human_id,
+        provider: row.provider,
+        encryptedApiKey: row.encrypted_api_key,
+        keyHint: row.key_hint,
+        model: row.model,
+        createdAt: iso(row.created_at)!,
+        updatedAt: iso(row.updated_at)!,
+        revokedAt: iso(row.revoked_at),
+      };
+      this.aiGatewayCredentials.set(credential.id, credential);
     }
     for (const row of contexts.rows) {
       const context: ContextRecord = {
@@ -446,6 +467,7 @@ export class PostgresDealStore extends DealStore {
         agents: snapshotMap(this.agents),
         delegations: snapshotMap(this.delegations),
         credentials: snapshotMap(this.credentials),
+        aiGatewayCredentials: snapshotMap(this.aiGatewayCredentials),
         contexts: snapshotMap(this.contexts),
         approvals: snapshotMap(this.approvals),
         workflows: snapshotMap(this.workflows),
@@ -600,6 +622,31 @@ export class PostgresDealStore extends DealStore {
             credential.name ?? null,
             credential.createdAt ?? new Date().toISOString(),
             credential.expiresAt ?? null,
+            credential.revokedAt ?? null,
+          ],
+        );
+      }
+      for (const credential of this.aiGatewayCredentials.values()) {
+        if (
+          !changed(snapshot, 'aiGatewayCredentials', credential.id, credential)
+        )
+          continue;
+        const human = this.humans.get(credential.humanId);
+        if (!human) continue;
+        await client.query(
+          `INSERT INTO ai_gateway_credentials(id, organization_id, human_id, provider, encrypted_api_key, key_hint, model, created_at, updated_at, revoked_at)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           ON CONFLICT(id) DO UPDATE SET encrypted_api_key=EXCLUDED.encrypted_api_key, key_hint=EXCLUDED.key_hint, model=EXCLUDED.model, updated_at=EXCLUDED.updated_at, revoked_at=EXCLUDED.revoked_at`,
+          [
+            credential.id,
+            human.organizationId,
+            credential.humanId,
+            credential.provider,
+            credential.encryptedApiKey,
+            credential.keyHint,
+            credential.model,
+            credential.createdAt,
+            credential.updatedAt,
             credential.revokedAt ?? null,
           ],
         );

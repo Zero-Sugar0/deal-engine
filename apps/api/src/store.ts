@@ -84,6 +84,18 @@ export interface Credential {
   revokedAt?: string;
 }
 
+export interface AiGatewayCredential {
+  id: string;
+  humanId: string;
+  provider: 'vercel_ai_gateway';
+  encryptedApiKey: string;
+  keyHint: string;
+  model: string;
+  createdAt: string;
+  updatedAt: string;
+  revokedAt?: string;
+}
+
 export interface ContextRecord {
   packet: HumanContextPacket;
   signature: string;
@@ -223,6 +235,7 @@ export class DealStore {
   readonly agents = new Map<string, Agent>();
   readonly delegations = new Map<string, Delegation>();
   readonly credentials = new Map<string, Credential>();
+  readonly aiGatewayCredentials = new Map<string, AiGatewayCredential>();
   readonly contexts = new Map<string, ContextRecord>();
   readonly approvals = new Map<string, Approval>();
   readonly audits: AuditEvent[] = [];
@@ -277,6 +290,16 @@ export class DealStore {
     if (credential?.expiresAt && new Date(credential.expiresAt) <= new Date())
       return undefined;
     return credential;
+  }
+
+  getActiveAiGatewayCredential(
+    humanId: string,
+  ): AiGatewayCredential | undefined {
+    return [...this.aiGatewayCredentials.values()]
+      .filter(
+        (credential) => credential.humanId === humanId && !credential.revokedAt,
+      )
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
   }
 
   findExternalIdentity(

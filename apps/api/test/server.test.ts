@@ -93,6 +93,82 @@ describe('DEAL control plane', () => {
     }
   });
 
+  it('saves, masks, replaces, and revokes per-person AI Gateway keys', async () => {
+    const apiKey = 'vgw_test_key_that_must_never_be_returned';
+    const unauthenticated = await app.inject({
+      method: 'GET',
+      url: '/v1/developer/ai-gateway',
+    });
+    expect(unauthenticated.statusCode).toBe(401);
+
+    const save = await app.inject({
+      method: 'PUT',
+      url: '/v1/developer/ai-gateway',
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: { apiKey, model: 'openai/gpt-4.1-mini' },
+    });
+    expect(save.statusCode).toBe(200);
+    expect(save.json()).toMatchObject({
+      configured: true,
+      model: 'openai/gpt-4.1-mini',
+      keyHint: '••••rned',
+    });
+    expect(save.json().apiKey).toBeUndefined();
+    expect(save.json().encryptedApiKey).toBeUndefined();
+
+    const saved = [...store.aiGatewayCredentials.values()].find(
+      (item) => item.humanId === 'human_demo' && !item.revokedAt,
+    );
+    expect(saved).toBeDefined();
+    expect(saved?.encryptedApiKey).not.toContain(apiKey);
+    expect(saved?.keyHint).toBe('••••rned');
+
+    const loaded = await app.inject({
+      method: 'GET',
+      url: '/v1/developer/ai-gateway',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    expect(loaded.json()).toMatchObject({
+      configured: true,
+      model: 'openai/gpt-4.1-mini',
+      keyHint: '••••rned',
+    });
+
+    const replacement = await app.inject({
+      method: 'PUT',
+      url: '/v1/developer/ai-gateway',
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: {
+        apiKey: 'vgw_replacement_key_that_stays_private',
+        model: 'anthropic/claude-sonnet-4.5',
+      },
+    });
+    expect(replacement.statusCode).toBe(200);
+    expect(replacement.json()).toMatchObject({
+      model: 'anthropic/claude-sonnet-4.5',
+      keyHint: '••••vate',
+    });
+    expect(
+      [...store.aiGatewayCredentials.values()].filter(
+        (item) => item.humanId === 'human_demo' && !item.revokedAt,
+      ),
+    ).toHaveLength(1);
+
+    const remove = await app.inject({
+      method: 'DELETE',
+      url: '/v1/developer/ai-gateway',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    expect(remove.statusCode).toBe(200);
+    expect(remove.json()).toEqual({ revoked: true });
+    const afterRemove = await app.inject({
+      method: 'GET',
+      url: '/v1/developer/ai-gateway',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    expect(afterRemove.json()).toMatchObject({ configured: false });
+  });
+
   it('lists human-owned agents without exposing raw credentials', async () => {
     const response = await app.inject({
       method: 'GET',

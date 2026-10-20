@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { fromNodeHeaders } from 'better-auth/node';
-import { generateText } from 'ai';
+import { createGateway, generateText } from 'ai';
 import {
   BehavioralContractSchema,
   BiographySchema,
@@ -36,6 +36,11 @@ import {
   type Delegation,
   type Human,
 } from './store.js';
+import {
+  credentialKeyHint,
+  decryptSecret,
+  encryptSecret,
+} from './secret-storage.js';
 import type { ExternalAuthProvider } from './external-auth.js';
 import { MetricsRegistry } from './observability.js';
 import { InMemoryRateLimiter, type RateLimiter } from './rate-limit.js';
@@ -58,6 +63,7 @@ import { renderDealContext } from '@deal/sdk';
 export interface ServerOptions {
   store?: DealStore;
   jwtSecret?: string;
+  credentialEncryptionKey?: string;
   contextTtlMinutes?: number;
   externalAuth?: ExternalAuthProvider;
   rateLimiter?: RateLimiter;
@@ -101,6 +107,16 @@ const comparisonBody = z.object({
       data: z.string().max(7_500_000),
     })
     .optional(),
+});
+
+const aiGatewayCredentialBody = z.object({
+  apiKey: z.string().trim().min(10).max(512),
+  model: z
+    .string()
+    .trim()
+    .min(3)
+    .max(200)
+    .regex(/^[^/\s]+\/[^/\s]+$/, 'Model must use provider/model format'),
 });
 
 function error(
@@ -692,6 +708,20 @@ export function buildServer(
       'DEAL_JWT_SECRET must be configured with at least 32 characters in production',
     );
   const jwtSecret = configuredJwtSecret ?? 'dev-secret-change-me-at-least-32';
+  const configuredCredentialKey =
+    options.credentialEncryptionKey ??
+    process.env.DEAL_CREDENTIAL_ENCRYPTION_KEY;
+  if (
+    process.env.NODE_ENV === 'production' &&
+    (!configuredCredentialKey || configuredCredentialKey.length < 32)
+  )
+    throw new Error(
+      'DEAL_CREDENTIAL_ENCRYPTION_KEY must be configured with at least 32 characters in production',
+    );
+  // Development can safely derive this from the JWT secret to keep local setup
+  // simple. Production must use a dedicated secret so rotating JWT signing does
+  // not make stored provider keys unreadable.
+  const credentialEncryptionKey = configuredCredentialKey ?? jwtSecret;
   if (
     process.env.NODE_ENV === 'production' &&
     !process.env.DEAL_DASHBOARD_ORIGIN
@@ -1325,6 +1355,97 @@ export function buildServer(
     return { credentialId: target.id, revoked: true };
   });
 
+  app.get('/v1/developer/ai-gateway', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const saved = store.getActiveAiGatewayCredential(credential.humanId);
+    if (!saved)
+      return {
+        configured: false,
+        provider: 'vercel_ai_gateway' as const,
+      };
+    return {
+      configured: true,
+      provider: saved.provider,
+      model: saved.model,
+      keyHint: saved.keyHint,
+      createdAt: saved.createdAt,
+      updatedAt: saved.updatedAt,
+    };
+  });
+
+  app.put('/v1/developer/ai-gateway', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const body = parse(aiGatewayCredentialBody, request.body);
+    const human = store.humans.get(credential.humanId);
+    if (!human) throw error(404, 'Human not found');
+    const now = new Date().toISOString();
+    for (const saved of store.aiGatewayCredentials.values()) {
+      if (saved.humanId === human.id && !saved.revokedAt) saved.revokedAt = now;
+    }
+    const saved = {
+      id: crypto.randomUUID(),
+      humanId: human.id,
+      provider: 'vercel_ai_gateway' as const,
+      encryptedApiKey: encryptSecret(body.apiKey, credentialEncryptionKey),
+      keyHint: credentialKeyHint(body.apiKey),
+      model: body.model,
+      createdAt: now,
+      updatedAt: now,
+    };
+    store.aiGatewayCredentials.set(saved.id, saved);
+    store.recordAudit({
+      humanId: human.id,
+      organizationId: human.organizationId,
+      eventType: 'ai_gateway.credential_saved',
+      payload: {
+        credentialId: saved.id,
+        provider: saved.provider,
+        model: saved.model,
+        keyHint: saved.keyHint,
+      },
+    });
+    return {
+      configured: true,
+      provider: saved.provider,
+      model: saved.model,
+      keyHint: saved.keyHint,
+      createdAt: saved.createdAt,
+      updatedAt: saved.updatedAt,
+    };
+  });
+
+  app.delete('/v1/developer/ai-gateway', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const human = store.humans.get(credential.humanId);
+    if (!human) throw error(404, 'Human not found');
+    const saved = store.getActiveAiGatewayCredential(human.id);
+    if (saved) {
+      saved.revokedAt = new Date().toISOString();
+      store.recordAudit({
+        humanId: human.id,
+        organizationId: human.organizationId,
+        eventType: 'ai_gateway.credential_revoked',
+        payload: { credentialId: saved.id, provider: saved.provider },
+      });
+    }
+    return { revoked: Boolean(saved) };
+  });
+
   app.post('/v1/delegations', async (request) => {
     const credential = await requireCredential(
       store,
@@ -1414,17 +1535,38 @@ export function buildServer(
     if (body.image && !body.image.data.startsWith('data:image/'))
       throw error(400, 'Image data must be a data URL');
 
-    const model = process.env.AI_GATEWAY_MODEL?.trim();
-    const gatewayKey = process.env.AI_GATEWAY_API_KEY?.trim();
+    const human = store.humans.get(credential.humanId);
+    if (!human) throw error(404, 'Human not found');
+    const savedGatewayCredential = store.getActiveAiGatewayCredential(human.id);
+    let model = process.env.AI_GATEWAY_MODEL?.trim();
+    let gatewayKey = process.env.AI_GATEWAY_API_KEY?.trim();
+    let credentialSource: 'saved' | 'server' = 'server';
+    if (savedGatewayCredential) {
+      try {
+        gatewayKey = decryptSecret(
+          savedGatewayCredential.encryptedApiKey,
+          credentialEncryptionKey,
+        );
+      } catch (cause) {
+        request.log.error(
+          { err: cause, humanId: human.id },
+          'Saved AI gateway credential could not be decrypted',
+        );
+        return reply.code(503).send({
+          error:
+            'Your saved AI key is temporarily unavailable. Replace it on the Developer page or contact support.',
+          requestId: request.id,
+        });
+      }
+      model = savedGatewayCredential.model;
+      credentialSource = 'saved';
+    }
     if (!model || !gatewayKey)
       return reply.code(503).send({
         error:
-          'AI comparison is not configured. Set AI_GATEWAY_API_KEY and AI_GATEWAY_MODEL on the API.',
+          'AI comparison is not configured. Add your AI Gateway key on the Developer page or configure AI_GATEWAY_API_KEY and AI_GATEWAY_MODEL on the API.',
         requestId: request.id,
       });
-
-    const human = store.humans.get(credential.humanId);
-    if (!human) throw error(404, 'Human not found');
     const requestedAgent = body.agentId
       ? store.agents.get(body.agentId)
       : [...store.agents.values()].find(
@@ -1470,8 +1612,12 @@ export function buildServer(
     const temperature = process.env.AI_GATEWAY_TEMPERATURE
       ? Number(process.env.AI_GATEWAY_TEMPERATURE)
       : undefined;
+    const userGateway =
+      credentialSource === 'saved' && gatewayKey
+        ? createGateway({ apiKey: gatewayKey })
+        : undefined;
     const generationOptions = {
-      model,
+      model: userGateway ? userGateway.languageModel(model) : model,
       ...(Number.isFinite(maxOutputTokens) && maxOutputTokens! > 0
         ? { maxOutputTokens }
         : {}),
@@ -1529,6 +1675,7 @@ export function buildServer(
       payload: {
         packetId: packet.packetId,
         model,
+        credentialSource,
         memoryCount,
         hasImage: Boolean(body.image),
       },
