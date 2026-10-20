@@ -13,8 +13,6 @@ import { authClient, dealApiUrl } from './auth-client';
 
 type Route = '/' | '/about' | '/sign-in' | '/sign-up' | '/app';
 
-const dashboardTokenKey = 'deal_human_token';
-
 type DashboardAgent = {
   id: string;
   name: string;
@@ -1326,35 +1324,26 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
 
 function DashboardPage() {
   const [active, setActive] = useState('Overview');
-  const [token, setToken] = useState<string | null>(() =>
-    sessionStorage.getItem(dashboardTokenKey),
-  );
   const [profile, setProfile] = useState<DashboardProfile['human']>();
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const navItems = ['Overview', 'Human model', 'Memory', 'Agents', 'Approvals'];
 
   useEffect(() => {
     if (sessionPending) return;
-    if (!token && !session) {
+    if (!session) {
       navigate('/sign-in');
       return;
     }
-    dashboardRequest<DashboardProfile>(token, '/v1/profile')
+    dashboardRequest<DashboardProfile>(null, '/v1/profile')
       .then((response) => setProfile(response.human))
       .catch(() => {
-        if (token) {
-          sessionStorage.removeItem(dashboardTokenKey);
-          setToken(null);
-        }
         navigate('/sign-in');
       });
-  }, [session, sessionPending, token]);
+  }, [session, sessionPending]);
 
-  if (sessionPending || (!token && !session)) return null;
+  if (sessionPending || !session) return null;
 
   async function signOut() {
-    sessionStorage.removeItem(dashboardTokenKey);
-    setToken(null);
     await authClient.signOut();
     navigate('/sign-in');
   }
@@ -1413,7 +1402,7 @@ function DashboardPage() {
         {active === 'Overview' ? (
           <Overview />
         ) : active === 'Agents' ? (
-          <AgentsView token={token} />
+          <AgentsView />
         ) : (
           <PlaceholderView title={active} />
         )}
@@ -1422,7 +1411,7 @@ function DashboardPage() {
   );
 }
 
-function AgentsView({ token }: { token: string }) {
+function AgentsView() {
   const [agents, setAgents] = useState<DashboardAgent[]>([]);
   const [name, setName] = useState('');
   const [runtime, setRuntime] = useState('vercel-ai-sdk');
@@ -1432,7 +1421,7 @@ function AgentsView({ token }: { token: string }) {
 
   async function loadAgents() {
     const response = await dashboardRequest<{ agents: DashboardAgent[] }>(
-      token,
+      null,
       '/v1/agents',
     );
     setAgents(response.agents);
@@ -1444,7 +1433,7 @@ function AgentsView({ token }: { token: string }) {
         error instanceof Error ? error.message : 'Could not load agents.',
       );
     });
-  }, [token]);
+  }, []);
 
   async function createAgent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1454,7 +1443,7 @@ function AgentsView({ token }: { token: string }) {
       const response = await dashboardRequest<{
         agent: CreatedAgent;
         apiKey: string;
-      }>(token, '/v1/agents', {
+      }>(null, '/v1/agents', {
         method: 'POST',
         body: JSON.stringify({ name, runtime }),
       });
@@ -1484,7 +1473,7 @@ function AgentsView({ token }: { token: string }) {
     setErrorMessage('');
     try {
       const response = await dashboardRequest<{ apiKey: string }>(
-        token,
+        null,
         `/v1/agents/${agent.id}/credentials/rotate`,
         { method: 'POST', body: JSON.stringify({}) },
       );
@@ -1506,7 +1495,7 @@ function AgentsView({ token }: { token: string }) {
     setBusy(true);
     setErrorMessage('');
     try {
-      await dashboardRequest(token, `/v1/credentials/${credential.id}/revoke`, {
+      await dashboardRequest(null, `/v1/credentials/${credential.id}/revoke`, {
         method: 'POST',
         body: JSON.stringify({}),
       });
