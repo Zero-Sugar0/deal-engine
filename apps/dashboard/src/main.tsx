@@ -10,7 +10,7 @@ import Cursor from '@lobehub/icons/es/Cursor/components/Mono.js';
 import './styles.css';
 import './refinements.css';
 
-type Route = '/' | '/sign-in' | '/sign-up' | '/app';
+type Route = '/' | '/about' | '/sign-in' | '/sign-up' | '/app';
 
 const integrations = [
   'OpenAI',
@@ -239,7 +239,12 @@ function useRoute(): Route {
     window.addEventListener('popstate', update);
     return () => window.removeEventListener('popstate', update);
   }, []);
-  if (path === '/sign-in' || path === '/sign-up' || path === '/app')
+  if (
+    path === '/about' ||
+    path === '/sign-in' ||
+    path === '/sign-up' ||
+    path === '/app'
+  )
     return path;
   return '/';
 }
@@ -330,6 +335,66 @@ function Atmosphere({
   );
 }
 
+function HomeSectionLink({
+  id,
+  children,
+}: {
+  id: string;
+  children: ReactNode;
+}) {
+  return (
+    <a
+      href={`/#${id}`}
+      onClick={(event) => {
+        if (window.location.pathname === '/') return;
+        event.preventDefault();
+        navigate('/');
+        window.setTimeout(() => {
+          document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+        }, 0);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
+function PublicFooter() {
+  return (
+    <footer className="footer container">
+      <div className="footer-top">
+        <Logo />
+        <div className="footer-links">
+          <HomeSectionLink id="features">Product</HomeSectionLink>
+          <HomeSectionLink id="how-it-works">How it works</HomeSectionLink>
+          <a
+            href="/about"
+            onClick={(event) => {
+              event.preventDefault();
+              navigate('/about');
+            }}
+          >
+            About
+          </a>
+          <HomeSectionLink id="faq">Faq</HomeSectionLink>
+          <a href="https://github.com/zester4/deal-engine">Github</a>
+        </div>
+        <span className="footer-note">
+          Human context for the agents you already use.
+        </span>
+      </div>
+      <div className="footer-bottom">
+        <span>© 2026 deal</span>
+        <span>Built for thoughtful agents and the people they represent.</span>
+        <div>
+          <a href="#">Privacy</a>
+          <a href="#">Terms</a>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
 function HomePage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   return (
@@ -344,9 +409,14 @@ function HomePage() {
               try the workspace <Arrow />
             </button>
           </div>
-          <Button secondary onClick={() => navigate('/sign-in')}>
-            Enter workspace <Arrow />
-          </Button>
+          <div className="nav-actions">
+            <button className="nav-link" onClick={() => navigate('/about')}>
+              About
+            </button>
+            <Button secondary onClick={() => navigate('/sign-in')}>
+              Enter workspace <Arrow />
+            </Button>
+          </div>
         </header>
         <section className="hero container">
           <div className="hero-copy">
@@ -714,30 +784,319 @@ function HomePage() {
           </small>
         </section>
       </Atmosphere>
-      <footer className="footer container">
-        <div className="footer-top">
+      <PublicFooter />
+    </div>
+  );
+}
+
+function AboutPage() {
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'about deal — the human layer for agents';
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
+
+  const principles = [
+    [
+      '01',
+      'Identity before instruction',
+      'An agent should know who it represents before it decides what to say or do.',
+    ],
+    [
+      '02',
+      'Context has a source',
+      'Confirmed facts, preferences, inferences, and outcomes should never blur into one voice.',
+    ],
+    [
+      '03',
+      'Judgment is the product',
+      'The useful layer is not what a person likes. It is how they weigh tradeoffs and uncertainty.',
+    ],
+    [
+      '04',
+      'Corrections are sacred',
+      'When a person says “that is not me,” the model changes immediately and visibly.',
+    ],
+    [
+      '05',
+      'Boundaries create trust',
+      'A humanized agent knows when to act, when to ask, and when to stop.',
+    ],
+    [
+      '06',
+      'Portable by design',
+      'The human model belongs to the person, not to a particular model provider or chat window.',
+    ],
+  ];
+  const contextSteps = [
+    [
+      '01',
+      'Model the person',
+      'Identity, values, voice, relationships, and professional context.',
+    ],
+    [
+      '02',
+      'Read the moment',
+      'The task, audience, stakes, and current signals around the request.',
+    ],
+    [
+      '03',
+      'Compile what matters',
+      'A small, scoped packet with provenance, boundaries, and judgment guidance.',
+    ],
+    [
+      '04',
+      'Learn carefully',
+      'Outcomes and explicit corrections refine the model without rewriting the person.',
+    ],
+  ];
+
+  return (
+    <div className="about-page site">
+      <Atmosphere>
+        <header className="nav container about-nav">
           <Logo />
-          <div className="footer-links">
-            <a href="#features">Product</a>
-            <a href="#how-it-works">How it works</a>
-            <a href="#faq">Faq</a>
-            <a href="https://github.com/zester4/deal-engine">Github</a>
+          <div className="nav-actions">
+            <span className="about-nav-label">about deal</span>
+            <Button secondary onClick={() => navigate('/sign-in')}>
+              Enter workspace <Arrow />
+            </Button>
           </div>
-          <span className="footer-note">
-            Human context for the agents you already use.
-          </span>
-        </div>
-        <div className="footer-bottom">
-          <span>© 2026 deal</span>
-          <span>
-            Built for thoughtful agents and the people they represent.
-          </span>
-          <div>
-            <a href="#">Privacy</a>
-            <a href="#">Terms</a>
+        </header>
+        <section className="about-hero container">
+          <div className="about-hero-copy">
+            <span className="eyebrow">why deal exists</span>
+            <h1>
+              The human layer
+              <br />
+              <em>between intent and action.</em>
+            </h1>
+            <p>
+              Models can reason. Agents can act. deal gives them the missing
+              understanding: a living, portable model of the person they are
+              helping.
+            </p>
+            <div className="hero-actions">
+              <Button onClick={() => navigate('/sign-up')}>
+                Build your human model <Arrow />
+              </Button>
+              <Button secondary onClick={() => navigate('/')}>
+                Back to the homepage
+              </Button>
+            </div>
           </div>
-        </div>
-      </footer>
+          <div
+            className="about-hero-art"
+            aria-label="A scoped deal context packet"
+          >
+            <div className="about-art-image" />
+            <div className="about-packet">
+              <div className="about-packet-top">
+                <span className="packet-status">
+                  <i /> context packet
+                </span>
+                <span>expires in 14m</span>
+              </div>
+              <div className="about-packet-heading">
+                <span className="preview-eyebrow">
+                  for this person · this moment
+                </span>
+                <strong>Founder / thoughtful operator</strong>
+                <p>
+                  Direct when the stakes are high. Warm when trust is being
+                  built.
+                </p>
+              </div>
+              <div className="about-packet-rows">
+                <span>
+                  <b>voice</b> concise · evidence-led
+                </span>
+                <span>
+                  <b>boundary</b> ask before commitment
+                </span>
+                <span>
+                  <b>source</b> confirmed by human
+                </span>
+              </div>
+              <div className="about-packet-footer">
+                <span>identity · judgment · memory</span>
+                <span className="packet-scope">scoped</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </Atmosphere>
+      <main>
+        <section className="about-manifesto">
+          <div className="container">
+            <div className="about-section-intro">
+              <span className="eyebrow">a different starting point</span>
+              <h2>
+                A person is more than
+                <br />
+                <em>a list of preferences.</em>
+              </h2>
+              <p>
+                Most agents start with a prompt and a pile of retrieved text.
+                deal starts with the human. It keeps the difference between a
+                fact and a feeling, a boundary and a suggestion, a lesson and a
+                guess.
+              </p>
+            </div>
+            <div className="manifesto-grid">
+              <article>
+                <span>01</span>
+                <strong>What matters</strong>
+                <p>
+                  Values, priorities, relationships, and the things worth
+                  protecting.
+                </p>
+              </article>
+              <article>
+                <span>02</span>
+                <strong>How to think</strong>
+                <p>
+                  Decision style, risk posture, communication rhythm, and
+                  tradeoffs.
+                </p>
+              </article>
+              <article>
+                <span>03</span>
+                <strong>When to stop</strong>
+                <p>
+                  Boundaries, uncertainty, sensitivity, and the moments that
+                  need a human.
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+        <section className="about-principles container">
+          <div className="section-heading about-heading">
+            <span className="eyebrow">the deal point of view</span>
+            <h2>
+              Understanding is a system,
+              <br />
+              <em>not a personality prompt.</em>
+            </h2>
+          </div>
+          <div className="principle-grid">
+            {principles.map(([number, title, body]) => (
+              <article className="principle-card" key={number}>
+                <span className="principle-number">{number}</span>
+                <h3>{title}</h3>
+                <p>{body}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+        <section className="about-loop">
+          <div className="container">
+            <div className="about-loop-heading">
+              <span className="eyebrow">the context loop</span>
+              <h2>
+                A quiet layer
+                <br />
+                <em>that keeps the thread.</em>
+              </h2>
+              <p>
+                deal is designed to sit underneath the agents you already use.
+                It does not replace their tools or execution loop. It makes the
+                person inside that loop legible.
+              </p>
+            </div>
+            <div className="context-timeline">
+              {contextSteps.map(([number, title, body], index) => (
+                <article className="timeline-step" key={number}>
+                  <div className="timeline-marker">
+                    <span>{number}</span>
+                    {index < contextSteps.length - 1 && <i />}
+                  </div>
+                  <div>
+                    <h3>{title}</h3>
+                    <p>{body}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+        <section className="about-origin container">
+          <div className="origin-copy">
+            <span className="eyebrow">built for the space between</span>
+            <h2>
+              The prompt tells an agent
+              <br />
+              <em>what to do.</em>
+            </h2>
+            <p>
+              The human model helps it understand who is asking, what good looks
+              like, what has already been tried, and what should never be
+              assumed. That is the difference between a capable response and a
+              response that feels like it came from you.
+            </p>
+            <a
+              className="dark-link"
+              href="https://github.com/zester4/deal-engine"
+            >
+              Read the open architecture <Arrow />
+            </a>
+          </div>
+          <div className="origin-card">
+            <div className="origin-card-top">
+              <span className="tiny-dot green-dot" />
+              <span>deal runtime</span>
+              <span>v1 · stable context</span>
+            </div>
+            <div className="origin-card-body">
+              <span className="preview-eyebrow">agent receives</span>
+              <strong>Enough understanding to choose well.</strong>
+              <div className="origin-lines">
+                <span>
+                  <i /> identity and role
+                </span>
+                <span>
+                  <i /> current priorities
+                </span>
+                <span>
+                  <i /> relevant memory
+                </span>
+                <span>
+                  <i /> judgment + boundaries
+                </span>
+              </div>
+            </div>
+            <div className="origin-card-footer">
+              <span>signed context</span>
+              <span>human stays in control</span>
+            </div>
+          </div>
+        </section>
+      </main>
+      <Atmosphere dark>
+        <section className="closing-cta about-closing container section-center">
+          <span className="eyebrow">the work is still yours</span>
+          <h2>
+            Give your agent a way
+            <br />
+            <em>to know you.</em>
+          </h2>
+          <p className="section-lede">
+            Start with a human model that can travel wherever your work does.
+          </p>
+          <div className="hero-actions">
+            <Button onClick={() => navigate('/sign-up')}>
+              Start with deal <Arrow />
+            </Button>
+            <Button secondary onClick={() => navigate('/')}>
+              See the product
+            </Button>
+          </div>
+        </section>
+      </Atmosphere>
+      <PublicFooter />
     </div>
   );
 }
@@ -1103,6 +1462,7 @@ function App() {
   if (route === '/sign-in') return <AuthPage mode="sign-in" />;
   if (route === '/sign-up') return <AuthPage mode="sign-up" />;
   if (route === '/app') return <DashboardPage />;
+  if (route === '/about') return <AboutPage />;
   return <HomePage />;
 }
 

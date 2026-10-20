@@ -19,6 +19,7 @@ without exposing infrastructure configuration in the user interface. Set
 Routes:
 
 - `/` — product homepage
+- `/about` — why deal exists and how the human context loop works
 - `/sign-in` — sign-in entry point
 - `/sign-up` — workspace creation entry point
 - `/app` — human context workspace
