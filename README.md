@@ -62,6 +62,7 @@ apps/
   dashboard/           User-facing consent, memory, identity, audit UI
 packages/
   core/                Domain models, schemas, context compiler
+  skills/              Portable Agent Skills parser and metadata catalog
   memory/              Memory adapter interface + Supermemory adapter
   policy/              Deterministic judgment and boundary rules
   sdk/                 TypeScript SDK for agent developers
@@ -91,6 +92,8 @@ The first runnable vertical slice is now available:
 
 - Fastify control-plane API under `apps/api`
 - Versioned schemas and context compiler under `packages/core`
+- Portable Agent Skills bridge under `packages/skills`; skills remain host-owned
+  while DEAL binds their metadata to the signed human context packet
 - Deterministic policy engine under `packages/policy`
 - Memory adapter contract, local adapter, and Supermemory adapter under `packages/memory`
 - TypeScript client under `packages/sdk` and a dependency-free Python client under `packages/sdk-python`
@@ -107,6 +110,7 @@ Run it locally:
 ```bash
 pnpm install
 ./node_modules/.bin/tsc -p packages/core/tsconfig.json
+./node_modules/.bin/tsc -p packages/skills/tsconfig.json
 ./node_modules/.bin/tsc -p packages/policy/tsconfig.json
 ./node_modules/.bin/tsc -p packages/memory/tsconfig.json
 ./node_modules/.bin/tsc -p packages/sdk/tsconfig.json
@@ -180,6 +184,9 @@ installations can still pass `{ apiKey, baseUrl }` to `deal`.
 The full integration guide, including LangChain middleware, Claude system
 prompts, AI SDK/AI Gateway middleware, OpenRouter, outcomes, and security rules
 is in [`docs/AGENT_INTEGRATIONS.md`](docs/AGENT_INTEGRATIONS.md).
+
+The researched Agent Skills model and the DEAL composition contract are in
+[`docs/SKILLS.md`](docs/SKILLS.md).
 
 Professional roles, domain enrollment, verified facts, behavioral patterns, and
 regulated-domain boundaries are documented in

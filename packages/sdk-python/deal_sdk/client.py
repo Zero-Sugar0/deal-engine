@@ -5,6 +5,8 @@ from typing import Any, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+DEFAULT_API_URL = "https://deal-engine.up.railway.app"
+
 
 class DEALError(RuntimeError):
     """Raised when the DEAL API rejects a request or cannot be reached."""
@@ -13,8 +15,20 @@ class DEALError(RuntimeError):
 class DEALClient:
     """Small dependency-free client for agent integrations."""
 
-    def __init__(self, base_url: str, api_key: str, timeout: float = 30.0) -> None:
-        self.base_url = base_url.rstrip("/")
+    def __init__(
+        self,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        timeout: float = 30.0,
+    ) -> None:
+        # Preserve DEALClient(base_url, api_key) while allowing the hosted
+        # convenience form DEALClient(api_key="...") or DEALClient("...").
+        if api_key is None:
+            api_key = base_url
+            base_url = None
+        if not api_key or not api_key.strip():
+            raise ValueError("deal API key is required")
+        self.base_url = (base_url or DEFAULT_API_URL).rstrip("/")
         self.api_key = api_key
         self.timeout = timeout
 
@@ -52,6 +66,7 @@ class DEALClient:
         audience: str | None = None,
         active_topic: str | None = None,
         user_intent: str | None = None,
+        skills: list[Mapping[str, Any]] | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "task": task,
@@ -64,6 +79,7 @@ class DEALClient:
             "audience": audience,
             "activeTopic": active_topic,
             "userIntent": user_intent,
+            "skills": skills,
         }.items():
             if value is not None:
                 body[key] = value

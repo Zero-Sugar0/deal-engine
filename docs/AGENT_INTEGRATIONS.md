@@ -41,6 +41,48 @@ const prepared = await runtime.prepareChat({
 // it into the native hook for the runtime being used.
 ```
 
+### Add a host-agent skill
+
+Skills and DEAL solve different layers of the same turn. A skill owns a
+repeatable procedure; DEAL owns the human model, provenance, boundaries,
+authority, and correction rules. Parse the portable `SKILL.md` in the host
+application and pass only its descriptor to DEAL:
+
+```ts
+import { parseSkillMarkdown } from '@deal/skills';
+
+const skill = parseSkillMarkdown(skillMarkdown, {
+  source: 'project',
+  directoryName: 'customer-replies',
+});
+
+const prepared = await runtime.prepare({
+  task: 'Reply to this customer',
+  channel: 'support',
+  skills: [skill.descriptor],
+});
+
+// The host skill runtime loads `skill.instructions`, references, and scripts.
+// DEAL contributes the human context and the non-authority contract.
+```
+
+The portable skill lifecycle is progressive disclosure: metadata at discovery,
+`SKILL.md` when activated, and `references/`, `assets/`, or `scripts/` only when
+the skill needs them. DEAL never executes those files on the API server. When a
+provider combines the two instruction sources, the intended precedence is:
+
+```text
+DEAL authority and boundaries
+  > DEAL human context and corrections
+  > skill instructions
+  > skill references and scripts
+```
+
+This means a finance skill can teach a workflow for preparing a review, while
+DEAL still decides whether the current person has supplied enough context, what
+data may be shown, whether the agent must ask, and whether an action needs
+approval. A skill cannot make an agent licensed, human, or authorized.
+
 The runtime caches a packet only until its signed expiry. Call
 `runtime.clearCache()` when the host application receives a human correction or
 changes the active task.

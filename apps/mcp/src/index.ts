@@ -26,6 +26,26 @@ const tools = [
         audience: { type: 'string' },
         activeTopic: { type: 'string' },
         userIntent: { type: 'string' },
+        skills: {
+          type: 'array',
+          maxItems: 16,
+          description:
+            'Active Agent Skills metadata. Skills provide workflow guidance, not authority.',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              description: { type: 'string' },
+              version: { type: 'string' },
+              contentHash: { type: 'string' },
+              source: { type: 'string' },
+              license: { type: 'string' },
+              compatibility: { type: 'string' },
+              metadata: { type: 'object' },
+            },
+            required: ['name', 'description'],
+          },
+        },
       },
       required: ['task'],
     },

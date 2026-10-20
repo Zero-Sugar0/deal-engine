@@ -94,6 +94,15 @@ describe('DEAL control plane', () => {
       payload: {
         task: 'Find qualified HR leaders and draft outreach',
         requestedCapabilities: ['context_read', 'response_draft'],
+        skills: [
+          {
+            name: 'customer-replies',
+            description: 'Draft customer replies using the support playbook.',
+            version: '2.0.0',
+            contentHash: 'a'.repeat(64),
+            source: 'project',
+          },
+        ],
       },
     });
     expect(contextResponse.statusCode).toBe(200);
@@ -107,6 +116,9 @@ describe('DEAL control plane', () => {
     expect(context.packet.memory.corrections).toContain(
       'Never target agencies or current customers',
     );
+    expect(context.packet.skills.active[0].name).toBe('customer-replies');
+    expect(context.packet.skills.precedence[0]).toBe('deal_authority');
+    expect(context.packet.authority.mayWrite).not.toContain('customer-replies');
 
     const policyResponse = await app.inject({
       method: 'POST',
@@ -584,7 +596,7 @@ describe('DEAL control plane', () => {
       },
     });
     const packet = response.json().packet;
-    expect(packet.schemaVersion).toBe('4');
+    expect(packet.schemaVersion).toBe('5');
     expect(packet.humanModel.version).toBe(onboarding.json().modelVersion);
     expect(packet.humanModel.identity.preferredName).toBe('Alex');
     expect(packet.humanModel.identity.selfDescription).toContain(

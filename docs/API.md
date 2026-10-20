@@ -45,7 +45,16 @@ Content-Type: application/json
   "channel": "chat",
   "audience": "the founder",
   "activeTopic": "positioning",
-  "userIntent": "pressure-test the new message"
+  "userIntent": "pressure-test the new message",
+  "skills": [
+    {
+      "name": "customer-replies",
+      "description": "Draft customer replies using the support playbook.",
+      "version": "2.0.0",
+      "contentHash": "<sha256-of-SKILL.md>",
+      "source": "project"
+    }
+  ]
 }
 ```
 
@@ -55,7 +64,25 @@ Content-Type: application/json
 {
   "packetId": "ctx_123",
   "packet": {
-    "schemaVersion": "4",
+    "schemaVersion": "5",
+    "skills": {
+      "active": [
+        {
+          "name": "customer-replies",
+          "description": "Draft customer replies using the support playbook.",
+          "version": "2.0.0",
+          "contentHash": "<sha256-of-SKILL.md>",
+          "source": "project"
+        }
+      ],
+      "precedence": [
+        "deal_authority",
+        "deal_boundaries",
+        "deal_human_context",
+        "skill_instructions",
+        "skill_resources"
+      ]
+    },
     "humanModel": {},
     "behavior": {},
     "responseGuidance": {
@@ -77,7 +104,38 @@ Content-Type: application/json
 The host agent supplies the task and uses its own tools. `requestedCapabilities`
 is retained only as an optional delegated-scope assertion for deployments that
 want DEAL to verify an agent’s declared authority; DEAL does not provide or
-authenticate those external tools.
+authenticate those external tools. `skills` is metadata about the host agent's
+active Agent Skills. It is included for provenance and composition guidance;
+it cannot grant authority, consent, identity, or access to sensitive context.
+
+## Combining Agent Skills with DEAL
+
+Agent Skills own task-specific procedures. DEAL owns the human model and the
+control plane around it. The host agent should load the skill according to its
+runtime, then send only its validated descriptor with the context request:
+
+```ts
+const skill = parseSkillMarkdown(skillMarkdown, { source: 'project' });
+const prepared = await runtime.prepare({
+  task: 'Reply to this customer',
+  skills: [skill.descriptor],
+  channel: 'support',
+});
+```
+
+The host keeps `skill.instructions`, references, assets, and scripts. DEAL does
+not execute them. The rendered packet explicitly enforces this order:
+
+```text
+DEAL authority and boundaries
+  > DEAL human context and corrections
+  > skill instructions
+  > skill references and scripts
+```
+
+This lets a customer-support skill change the workflow while the human's voice,
+privacy rules, approval requirements, and corrections remain stable across
+Claude, Codex, LangChain, OpenAI, Vercel AI, OpenRouter, and custom runtimes.
 
 ## Professional profiles
 

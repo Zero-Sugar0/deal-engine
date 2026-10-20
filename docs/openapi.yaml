@@ -343,6 +343,11 @@ components:
         audience: { type: string }
         activeTopic: { type: string }
         userIntent: { type: string }
+        skills:
+          type: array
+          maxItems: 16
+          description: Active Agent Skills metadata; never an authority grant.
+          items: { $ref: '#/components/schemas/SkillDescriptor' }
     ContextResponse:
       type: object
       required: [packetId, packet, signature]
@@ -350,6 +355,23 @@ components:
         packetId: { type: string, format: uuid }
         packet: { type: object, additionalProperties: true }
         signature: { type: string }
+    SkillDescriptor:
+      type: object
+      required: [name, description]
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+          maxLength: 64
+        description: { type: string, maxLength: 1024 }
+        version: { type: string, maxLength: 128 }
+        contentHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+        source:
+          type: string
+          enum: [system, organization, project, user, runtime, remote]
+        license: { type: string, maxLength: 256 }
+        compatibility: { type: string, maxLength: 500 }
+        metadata: { type: object, additionalProperties: { type: string } }
     ProfessionProfile:
       type: object
       required: [id, version, title, category, summary, objective]

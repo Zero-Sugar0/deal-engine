@@ -6,6 +6,8 @@ import {
   InteractionContextSchema,
   ResponseGuidanceSchema,
   ProfessionalContextSchema,
+  SkillDescriptorSchema,
+  SkillContextSchema,
 } from './schema.js';
 import type {
   Authority,
@@ -20,6 +22,7 @@ import type {
   Persona,
   ProfessionalContext,
   ResponseGuidance,
+  SkillDescriptorInput,
 } from './schema.js';
 
 export interface CompileContextInput {
@@ -49,6 +52,7 @@ export interface CompileContextInput {
   interaction?: InteractionContext;
   grounding?: Grounding;
   professional?: ProfessionalContext;
+  skills?: SkillDescriptorInput[];
 }
 
 export function hashTask(task: string): string {
@@ -372,9 +376,14 @@ export function compileHumanContextPacket(
     ...normalizedHumanModel,
     responseGuidance,
   });
+  const normalizedSkills = SkillContextSchema.parse({
+    active: (input.skills ?? []).map((skill) =>
+      SkillDescriptorSchema.parse(skill),
+    ),
+  });
 
   return {
-    schemaVersion: '4',
+    schemaVersion: '5',
     packetId: crypto.randomUUID(),
     issuedAt: issuedAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
@@ -400,6 +409,7 @@ export function compileHumanContextPacket(
     persona: finalHumanModel.persona,
     domain: finalHumanModel.domain,
     professional: ProfessionalContextSchema.parse(input.professional ?? {}),
+    skills: normalizedSkills,
     memory: {
       preferences: input.memory.preferences ?? [],
       corrections: input.memory.corrections ?? [],

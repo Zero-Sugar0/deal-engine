@@ -13,6 +13,7 @@ import {
   RelationshipContextSchema,
   RelationalProfileSchema,
   SelfConceptSchema,
+  SkillDescriptorSchema,
 } from '@deal/core';
 import type { Grounding, InteractionContext, MemoryContext } from '@deal/core';
 import type { HumanModel, ProfileFact } from '@deal/core';
@@ -55,6 +56,7 @@ const contextBody = z.object({
   audience: z.string().optional(),
   activeTopic: z.string().optional(),
   userIntent: z.string().optional(),
+  skills: z.array(SkillDescriptorSchema).max(16).default([]),
 });
 
 const policyBody = z.object({
@@ -1669,6 +1671,7 @@ export function buildServer(
       policyVersion: delegation.profileId ?? 'default_v1',
       ttlMinutes: contextTtlMinutes,
       memoryReferences: memory.references,
+      skills: body.skills?.map((skill) => SkillDescriptorSchema.parse(skill)),
     });
     const signature = await new SignJWT(
       packet as unknown as Record<string, unknown>,
@@ -1697,6 +1700,12 @@ export function buildServer(
         packetId: packet.packetId,
         taskHash: packet.taskHash,
         memoryCount: hits.length,
+        skills: packet.skills.active.map((skill) => ({
+          name: skill.name,
+          version: skill.version,
+          contentHash: skill.contentHash,
+          source: skill.source,
+        })),
       },
     });
     return { packetId: packet.packetId, packet, signature };

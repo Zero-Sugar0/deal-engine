@@ -2,7 +2,10 @@ import type {
   HumanContextPacket,
   HumanModel,
   ProfessionProfile,
+  SkillDescriptorInput,
 } from '@deal/core';
+
+export type { SkillDescriptor, SkillDescriptorInput } from '@deal/core';
 
 export * from './agent.js';
 export * from './integrations.js';
@@ -67,6 +70,8 @@ export interface ContextRequest {
   audience?: string;
   activeTopic?: string;
   userIntent?: string;
+  /** Active host-agent skills; descriptors never grant authority. */
+  skills?: SkillDescriptorInput[];
 }
 
 export interface Conversation {
