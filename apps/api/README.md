@@ -53,6 +53,7 @@ MCP_SERVER_URL=
 - `POST /v1/actions/verify`
 - `POST /v1/memory/outcomes`
 - `POST /v1/agents`
+- `GET /v1/agents`
 - `POST /v1/agents/:id/credentials/rotate`
 - `POST /v1/credentials/:id/revoke`
 - `POST /v1/delegations`

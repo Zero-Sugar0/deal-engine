@@ -260,6 +260,10 @@ paths:
             schema:
               $ref: '#/components/schemas/ExecutionVerificationRequest'
       responses: { '200': { description: Authorized action } }
+  /v1/agents:
+    get:
+      summary: List the authenticated human's agents and credential metadata
+      responses: { '200': { description: Agent list without raw credentials } }
   /v1/agents/{agentId}/credentials/rotate:
     post:
       summary: Rotate all active credentials for an agent

@@ -56,6 +56,16 @@ credential and a provider-issued JWT. Thereafter the verified external JWT can
 authenticate that human. DEAL never auto-links by email and never trusts an
 unverified subject claim.
 
+### Agent key lifecycle
+
+`DEAL_API_KEY` and `DEAL_HUMAN_API_KEY` are deployment/bootstrap credentials;
+they are not the intended end-user key-generation experience. After a human is
+authenticated, the dashboard uses `GET /v1/agents`, `POST /v1/agents`, and the
+credential rotate/revoke endpoints to manage agent credentials. A raw agent key
+is returned only when it is created or rotated, and is stored only as a hash by
+the API. The dashboard must show it once and direct the user to store it in the
+agent's server-side environment.
+
 ## Memory retrieval
 
 Postgres stores canonical memory records, validity windows, confirmation state,

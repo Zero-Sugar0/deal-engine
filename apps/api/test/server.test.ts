@@ -66,6 +66,21 @@ describe('DEAL control plane', () => {
     expect(metrics.headers['x-request-id']).toBeTypeOf('string');
   });
 
+  it('lists human-owned agents without exposing raw credentials', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/agents',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.agents).toHaveLength(1);
+    expect(body.agents[0].name).toBe('Demo Growth Agent');
+    expect(body.agents[0].credentials[0].id).toBeTypeOf('string');
+    expect(body.agents[0].credentials[0].active).toBe(true);
+    expect(body.agents[0].apiKey).toBeUndefined();
+  });
+
   it('enforces a shared rate-limit contract at the API boundary', async () => {
     const first = await limitedApp.inject({
       method: 'GET',

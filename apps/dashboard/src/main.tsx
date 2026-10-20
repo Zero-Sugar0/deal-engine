@@ -12,6 +12,55 @@ import './refinements.css';
 
 type Route = '/' | '/about' | '/sign-in' | '/sign-up' | '/app';
 
+const dealApiUrl = (
+  import.meta.env.VITE_DEAL_API_URL || 'https://deal-engine.up.railway.app'
+).replace(/\/$/, '');
+const dashboardTokenKey = 'deal_human_token';
+
+type DashboardAgent = {
+  id: string;
+  name: string;
+  runtime: string;
+  status: 'active' | 'suspended';
+  credentials: Array<{
+    id: string;
+    active: boolean;
+    expiresAt?: string;
+    revokedAt?: string;
+  }>;
+};
+
+type CreatedAgent = Omit<DashboardAgent, 'credentials'>;
+
+type DashboardProfile = {
+  human: {
+    displayName: string;
+    email: string;
+    organizationId: string;
+  };
+};
+
+async function dashboardRequest<T>(
+  token: string,
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await fetch(`${dealApiUrl}${path}`, {
+    ...init,
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      ...(init.headers ?? {}),
+    },
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    error?: string;
+  } & T;
+  if (!response.ok)
+    throw new Error(body.error || `DEAL request failed (${response.status})`);
+  return body;
+}
+
 const integrations = [
   'OpenAI',
   'Claude',
@@ -1102,12 +1151,36 @@ function AboutPage() {
 }
 
 function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
-  const [submitted, setSubmitted] = useState(false);
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitted(true);
-  }
+  const [credential, setCredential] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [pending, setPending] = useState(false);
   const signIn = mode === 'sign-in';
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage('');
+    if (!credential.trim()) {
+      setErrorMessage('Enter your human workspace access key.');
+      return;
+    }
+    setPending(true);
+    try {
+      await dashboardRequest<DashboardProfile>(
+        credential.trim(),
+        '/v1/profile',
+      );
+      sessionStorage.setItem(dashboardTokenKey, credential.trim());
+      navigate('/app');
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'That workspace access key could not be verified.',
+      );
+    } finally {
+      setPending(false);
+    }
+  }
   return (
     <div className="auth-page">
       <div className="auth-visual">
@@ -1155,38 +1228,28 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
           <h2>{signIn ? 'Enter your workspace.' : 'Start with the human.'}</h2>
           <p>
             {signIn
-              ? 'Sign in to review what your agents understand and how they act.'
-              : 'Create your workspace and start shaping the context your agents carry.'}
+              ? 'Sign in to review what your agents understand and manage their access.'
+              : 'Your organization issues a human workspace access key. Use it to create and manage agent keys safely.'}
           </p>
           <form onSubmit={submit}>
             <label>
-              Email address
-              <input type="email" placeholder="you@company.com" required />
+              Human workspace access key
+              <input
+                type="password"
+                placeholder="deal_human_…"
+                value={credential}
+                onChange={(event) => setCredential(event.target.value)}
+                autoComplete="off"
+                required
+              />
             </label>
-            {!signIn && (
-              <label>
-                What should we call you?
-                <input type="text" placeholder="Your name" required />
-              </label>
-            )}
             <Button type="submit">
-              {signIn ? 'Continue with email' : 'Create workspace'} <Arrow />
+              {pending ? 'Checking access…' : 'Enter workspace'} <Arrow />
             </Button>
           </form>
-          <div className="auth-divider">
-            <span>or continue with</span>
-          </div>
-          <Button secondary onClick={() => setSubmitted(true)}>
-            Continue with single sign-on
-          </Button>
-          {submitted && (
-            <div className="auth-message">
-              Your secure sign-in flow will open here when authentication is
-              connected.
-            </div>
-          )}
+          {errorMessage && <div className="auth-error">{errorMessage}</div>}
           <small className="auth-legal">
-            By continuing, you agree to the deal terms and privacy policy.
+            Agent keys are shown once and never stored in the dashboard.
           </small>
         </div>
       </main>
@@ -1196,7 +1259,34 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
 
 function DashboardPage() {
   const [active, setActive] = useState('Overview');
+  const [token, setToken] = useState<string | null>(() =>
+    sessionStorage.getItem(dashboardTokenKey),
+  );
+  const [profile, setProfile] = useState<DashboardProfile['human']>();
   const navItems = ['Overview', 'Human model', 'Memory', 'Agents', 'Approvals'];
+
+  useEffect(() => {
+    if (!token) {
+      navigate('/sign-in');
+      return;
+    }
+    dashboardRequest<DashboardProfile>(token, '/v1/profile')
+      .then((response) => setProfile(response.human))
+      .catch(() => {
+        sessionStorage.removeItem(dashboardTokenKey);
+        setToken(null);
+        navigate('/sign-in');
+      });
+  }, [token]);
+
+  if (!token) return null;
+
+  function signOut() {
+    sessionStorage.removeItem(dashboardTokenKey);
+    setToken(null);
+    navigate('/sign-in');
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -1204,8 +1294,8 @@ function DashboardPage() {
         <div className="workspace-switch">
           <span className="workspace-avatar">DF</span>
           <span>
-            <strong>Demo Founder</strong>
-            <small>personal workspace</small>
+            <strong>{profile?.displayName ?? 'Your workspace'}</strong>
+            <small>{profile?.email ?? 'human context workspace'}</small>
           </span>
           <span>⌄</span>
         </div>
@@ -1228,7 +1318,7 @@ function DashboardPage() {
           <button onClick={() => navigate('/')}>
             <span className="nav-icon">↗</span>View homepage
           </button>
-          <button onClick={() => navigate('/sign-in')}>
+          <button onClick={signOut}>
             <span className="nav-icon">↪</span>Sign out
           </button>
         </div>
@@ -1250,10 +1340,236 @@ function DashboardPage() {
         </header>
         {active === 'Overview' ? (
           <Overview />
+        ) : active === 'Agents' ? (
+          <AgentsView token={token} />
         ) : (
           <PlaceholderView title={active} />
         )}
       </main>
+    </div>
+  );
+}
+
+function AgentsView({ token }: { token: string }) {
+  const [agents, setAgents] = useState<DashboardAgent[]>([]);
+  const [name, setName] = useState('');
+  const [runtime, setRuntime] = useState('vercel-ai-sdk');
+  const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  async function loadAgents() {
+    const response = await dashboardRequest<{ agents: DashboardAgent[] }>(
+      token,
+      '/v1/agents',
+    );
+    setAgents(response.agents);
+  }
+
+  useEffect(() => {
+    loadAgents().catch((error) => {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Could not load agents.',
+      );
+    });
+  }, [token]);
+
+  async function createAgent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage('');
+    try {
+      const response = await dashboardRequest<{
+        agent: CreatedAgent;
+        apiKey: string;
+      }>(token, '/v1/agents', {
+        method: 'POST',
+        body: JSON.stringify({ name, runtime }),
+      });
+      setAgents((current) => [
+        ...current,
+        { ...response.agent, credentials: [] },
+      ]);
+      setKey(response.apiKey);
+      setName('');
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Could not create the agent.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rotateAgent(agent: DashboardAgent) {
+    if (
+      !window.confirm(
+        `Rotate ${agent.name}'s key? The current key will stop working immediately.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setErrorMessage('');
+    try {
+      const response = await dashboardRequest<{ apiKey: string }>(
+        token,
+        `/v1/agents/${agent.id}/credentials/rotate`,
+        { method: 'POST', body: JSON.stringify({}) },
+      );
+      setKey(response.apiKey);
+      await loadAgents();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Could not rotate the key.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revokeCredential(agent: DashboardAgent) {
+    const credential = agent.credentials.find((item) => item.active);
+    if (!credential || !window.confirm(`Revoke ${agent.name}'s active key?`))
+      return;
+    setBusy(true);
+    setErrorMessage('');
+    try {
+      await dashboardRequest(token, `/v1/credentials/${credential.id}/revoke`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      await loadAgents();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Could not revoke the key.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyKey() {
+    await navigator.clipboard.writeText(key);
+  }
+
+  return (
+    <div className="agent-manager">
+      <section className="dashboard-hero agent-manager-hero">
+        <div>
+          <span className="eyebrow">agent access</span>
+          <h2>
+            Give each agent
+            <br />
+            <em>its own key.</em>
+          </h2>
+          <p>
+            Keys belong to agents, not people. Create one here, add it to the
+            agent’s server environment, and revoke it without touching your
+            human workspace.
+          </p>
+        </div>
+        <div className="dashboard-model agent-manager-signal">
+          <Notch variant="authority" />
+          <div className="model-surface">
+            <span className="surface-label">credential policy</span>
+            <strong>One key. One runtime. Full control.</strong>
+            <p>Raw keys are returned once and never listed again.</p>
+          </div>
+        </div>
+      </section>
+      {key && (
+        <section className="key-reveal">
+          <div>
+            <span className="eyebrow">copy this now</span>
+            <h3>Your new agent key</h3>
+            <p>
+              DEAL will not show the raw value again. Store it in the agent’s
+              server-side environment, never in browser code.
+            </p>
+          </div>
+          <div className="key-value">
+            <code>{key}</code>
+            <button onClick={copyKey}>Copy key</button>
+          </div>
+          <button className="quiet-link" onClick={() => setKey('')}>
+            I stored it <Arrow />
+          </button>
+        </section>
+      )}
+      <section className="dashboard-panel agent-create-panel">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">new connection</span>
+            <h3>Create an agent credential</h3>
+          </div>
+        </div>
+        <form className="agent-create-form" onSubmit={createAgent}>
+          <label>
+            Agent name
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="My Vercel agent"
+              required
+            />
+          </label>
+          <label>
+            Runtime
+            <input
+              value={runtime}
+              onChange={(event) => setRuntime(event.target.value)}
+              placeholder="vercel-ai-sdk"
+              required
+            />
+          </label>
+          <Button type="submit">{busy ? 'Working…' : 'Create key'}</Button>
+        </form>
+        {errorMessage && <div className="auth-error">{errorMessage}</div>}
+      </section>
+      <section className="dashboard-panel agent-list-panel">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">your agents</span>
+            <h3>Credentials under your control</h3>
+          </div>
+          <span className="panel-count">{agents.length}</span>
+        </div>
+        <div className="agent-list">
+          {agents.map((agent) => {
+            const activeCredential = agent.credentials.find(
+              (credential) => credential.active,
+            );
+            return (
+              <article className="agent-row" key={agent.id}>
+                <span
+                  className={`status-dot ${agent.status === 'active' ? 'green' : 'amber'}`}
+                />
+                <div>
+                  <strong>{agent.name}</strong>
+                  <p>{agent.runtime}</p>
+                </div>
+                <span className="agent-status">
+                  {activeCredential ? 'key active' : 'no active key'}
+                </span>
+                <div className="agent-actions">
+                  <button onClick={() => rotateAgent(agent)} disabled={busy}>
+                    Rotate
+                  </button>
+                  {activeCredential && (
+                    <button
+                      className="danger-link"
+                      onClick={() => revokeCredential(agent)}
+                      disabled={busy}
+                    >
+                      Revoke
+                    </button>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

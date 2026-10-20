@@ -614,6 +614,32 @@ export function buildServer(
     return { agent, apiKey };
   });
 
+  app.get('/v1/agents', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const now = Date.now();
+    const agents = [...store.agents.values()]
+      .filter((agent) => agent.ownerHumanId === credential.humanId)
+      .map((agent) => ({
+        ...agent,
+        credentials: [...store.credentials.values()]
+          .filter((item) => item.agentId === agent.id)
+          .map((item) => ({
+            id: item.id,
+            active:
+              !item.revokedAt &&
+              (!item.expiresAt || new Date(item.expiresAt).getTime() > now),
+            expiresAt: item.expiresAt,
+            revokedAt: item.revokedAt,
+          })),
+      }));
+    return { agents };
+  });
+
   app.post('/v1/agents/:agentId/credentials/rotate', async (request) => {
     const credential = await requireCredential(
       store,
