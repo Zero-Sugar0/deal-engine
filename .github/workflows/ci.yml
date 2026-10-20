@@ -8,11 +8,11 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.25.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -24,6 +24,6 @@ jobs:
       - run: ./node_modules/.bin/tsc -p packages/evals/tsconfig.json
       - run: ./node_modules/.bin/tsc -p apps/api/tsconfig.json
       - run: ./node_modules/.bin/tsc -p apps/mcp/tsconfig.json
-      - run: (cd apps/dashboard && ../../node_modules/.bin/vite build)
+      - run: pnpm --filter @deal/dashboard build
       - run: ./node_modules/.bin/vitest run
       - run: python -m compileall packages/sdk-python/deal_sdk
