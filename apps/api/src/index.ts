@@ -5,8 +5,18 @@ import { PostgresRateLimiter } from './rate-limit.js';
 import { externalAuthFromEnvironment } from './external-auth.js';
 import { HttpEmbeddingProvider, SupermemoryAdapter } from '@deal/memory';
 
+const isProduction = process.env.NODE_ENV === 'production';
 const agentToken = process.env.DEAL_API_KEY ?? 'local-agent-key';
 const humanToken = process.env.DEAL_HUMAN_API_KEY ?? 'local-human-key';
+
+if (
+  isProduction &&
+  (!process.env.DEAL_API_KEY || !process.env.DEAL_HUMAN_API_KEY)
+)
+  throw new Error(
+    'DEAL_API_KEY and DEAL_HUMAN_API_KEY must be configured in production',
+  );
+
 const embeddingProvider = process.env.DEAL_EMBEDDING_URL
   ? new HttpEmbeddingProvider({
       url: process.env.DEAL_EMBEDDING_URL,
@@ -29,7 +39,10 @@ const store = process.env.DATABASE_URL
       semanticAdapter,
     })
   : new DealStore();
-await store.seedDemo(agentToken, humanToken);
+const seedDemo =
+  process.env.DEAL_SEED_DEMO === 'true' ||
+  (!isProduction && process.env.DEAL_SEED_DEMO !== 'false');
+if (seedDemo) await store.seedDemo(agentToken, humanToken);
 const app = buildServer({
   store,
   externalAuth: externalAuthFromEnvironment(),
@@ -38,7 +51,7 @@ const app = buildServer({
       ? new PostgresRateLimiter(store.pool)
       : undefined,
 });
-const port = Number(process.env.DEAL_PORT ?? 3000);
+const port = Number(process.env.PORT ?? process.env.DEAL_PORT ?? 3000);
 
 await app.listen({ host: '0.0.0.0', port });
 app.log.info(
