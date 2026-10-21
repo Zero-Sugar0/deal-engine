@@ -1,4 +1,4 @@
-import { HumanContextPacketSchema } from '@deal/core';
+import { HumanContextPacketSchema, understandConversation } from '@deal/core';
 import type { HumanContextPacket } from '@deal/core';
 import { deal } from './index.js';
 import type { ContextRequest, DealOptions } from './index.js';
@@ -497,6 +497,10 @@ function contextData(packet: HumanContextPacket): Record<string, unknown> {
       })
     : undefined;
 
+  const conversationUnderstanding =
+    packet.conversationUnderstanding ??
+    understandConversation(packet.task, packet.interaction.recentTurns);
+
   const taskUnderstanding =
     route && route.profileId !== 'generalist_assistant_v1'
       ? definedValues({
@@ -519,6 +523,17 @@ function contextData(packet: HumanContextPacket): Record<string, unknown> {
       : undefined;
 
   return definedValues({
+    conversationUnderstanding: {
+      cue: conversationUnderstanding.patternId,
+      move: conversationUnderstanding.category,
+      replyShape: conversationUnderstanding.replyShape,
+      responseMove: conversationUnderstanding.responseMove,
+      helpRequested: conversationUnderstanding.helpRequested,
+      intent: conversationUnderstanding.read,
+      usesRecentContext: conversationUnderstanding.usesRecentContext,
+      safetyPriority: conversationUnderstanding.safetyPriority,
+      certainty: conversationUnderstanding.certainty,
+    },
     person: Object.keys(user).length ? user : undefined,
     communication: Object.keys(communication).length
       ? communication

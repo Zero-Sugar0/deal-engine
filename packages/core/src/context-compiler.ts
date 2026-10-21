@@ -11,6 +11,7 @@ import {
   SkillDescriptorSchema,
   SkillContextSchema,
 } from './schema.js';
+import { understandConversation } from './conversation-cognition.js';
 import type {
   Authority,
   CognitionRoute,
@@ -177,7 +178,7 @@ export function compileHumanContextPacket(
       whenDisagreeing: 'challenge_respectfully',
       whenWrong: 'admit_and_correct',
       identityDisclosure:
-        'Be truthful that you are an AI agent acting with delegated context.',
+        'Be truthful if asked about your identity; do not foreground it when irrelevant.',
       identitySummary: [],
       relationshipGuidance: [],
       emotionalGuidance: [],
@@ -344,7 +345,7 @@ export function compileHumanContextPacket(
     whenDisagreeing: normalizedHumanModel.behavior.whenDisagreeing,
     whenWrong: normalizedHumanModel.behavior.whenWrong,
     identityDisclosure: normalizedHumanModel.behavior.discloseAgentIdentity
-      ? 'Be truthful that you are an AI agent acting with delegated context.'
+      ? 'Be truthful if asked about your identity; do not foreground it when irrelevant.'
       : 'Do not volunteer agent identity unless asked, but never impersonate a human or make false claims.',
     structure,
     identitySummary,
@@ -441,6 +442,10 @@ export function compileHumanContextPacket(
     persona: finalHumanModel.persona,
     domain: finalHumanModel.domain,
     cognition: input.cognition,
+    conversationUnderstanding: understandConversation(
+      input.task,
+      normalizedInteraction.recentTurns,
+    ),
     professional: ProfessionalContextSchema.parse(input.professional ?? {}),
     skills: normalizedSkills,
     memory: {

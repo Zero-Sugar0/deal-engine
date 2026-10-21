@@ -128,6 +128,15 @@ const policyBody = z.object({
 const comparisonBody = z.object({
   task: z.string().trim().min(1).max(12_000),
   agentId: z.string().optional(),
+  recentTurns: z
+    .array(
+      z.object({
+        role: z.enum(['human', 'agent']),
+        content: z.string().trim().min(1).max(4_000),
+      }),
+    )
+    .max(12)
+    .default([]),
   image: z
     .object({
       name: z.string().trim().min(1).max(160),
@@ -1359,9 +1368,18 @@ async function compileDashboardContext(input: {
   agent: Agent;
   delegation: Delegation;
   task: string;
+  recentTurns: InteractionContext['recentTurns'];
   contextTtlMinutes: number;
 }) {
-  const { store, human, agent, delegation, task, contextTtlMinutes } = input;
+  const {
+    store,
+    human,
+    agent,
+    delegation,
+    task,
+    recentTurns,
+    contextTtlMinutes,
+  } = input;
   const includeSensitiveContext = delegation.authority.mayRead.includes(
     'sensitive_context_read',
   );
@@ -1606,7 +1624,7 @@ async function compileDashboardContext(input: {
       channel: 'dashboard',
       audience: human.displayName,
       openLoops: [],
-      recentTurns: [],
+      recentTurns,
     },
     grounding,
     composition: resolvedComposition.composition,
@@ -2706,6 +2724,13 @@ export function buildServer(
       agent: requestedAgent,
       delegation,
       task: body.task,
+      recentTurns: (body.recentTurns ?? []).map((turn, index) => ({
+        id: `try_${index}`,
+        role: turn.role,
+        content: turn.content,
+        createdAt: new Date().toISOString(),
+        metadata: {},
+      })),
       contextTtlMinutes,
     });
     const signature = await new SignJWT(
@@ -2747,32 +2772,31 @@ export function buildServer(
         ? { temperature }
         : {}),
     };
-
+    const priorMessages = (body.recentTurns ?? []).map((turn) => ({
+      role: turn.role === 'human' ? ('user' as const) : ('assistant' as const),
+      content: turn.content,
+    }));
+    const currentMessage = body.image
+      ? {
+          role: 'user' as const,
+          content: [
+            { type: 'text' as const, text: body.task },
+            {
+              type: 'file' as const,
+              data: body.image.data,
+              mediaType: body.image.mediaType,
+              filename: body.image.name,
+            },
+          ],
+        }
+      : { role: 'user' as const, content: body.task };
+    const messages = [...priorMessages, currentMessage];
     const run = (system?: string) =>
-      body.image
-        ? generateText({
-            ...generationOptions,
-            ...(system ? { system } : {}),
-            messages: [
-              {
-                role: 'user' as const,
-                content: [
-                  { type: 'text' as const, text: body.task },
-                  {
-                    type: 'file' as const,
-                    data: body.image.data,
-                    mediaType: body.image.mediaType,
-                    filename: body.image.name,
-                  },
-                ],
-              },
-            ],
-          })
-        : generateText({
-            ...generationOptions,
-            ...(system ? { system } : {}),
-            prompt: body.task,
-          });
+      generateText({
+        ...generationOptions,
+        ...(system ? { system } : {}),
+        messages,
+      });
 
     let rawResult: Awaited<ReturnType<typeof generateText>>;
     let humanizedResult: Awaited<ReturnType<typeof generateText>>;

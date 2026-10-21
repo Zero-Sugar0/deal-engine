@@ -250,15 +250,32 @@ describe('task cognition routing', () => {
     },
   );
 
-  it('keeps the declared identity when no specialist signal is present', () => {
+  it('keeps declared profession separate from unrelated task routing', () => {
     const route = routeTaskCognition({
-      task: 'Help me think through this decision.',
+      task: 'What can you do?',
       declaredProfession: 'growth_operator_v1',
     });
 
-    expect(route.profileId).toBe('growth_operator_v1');
-    expect(route.category).toBe('sales_marketing');
-    expect(route.signals).toContain('identity:declared-profession');
+    expect(route.profileId).toBe('generalist_assistant_v1');
+    expect(route.signals).toContain('route:generalist');
+    expect(route.signals).not.toContain('identity:declared-profession');
+  });
+
+  it('does not turn an emotional share about moving into a logistics route', () => {
+    const route = routeTaskCognition({
+      task: "I got accepted to the program, but I'm worried about moving away.",
+    });
+
+    expect(route.profileId).toBe('generalist_assistant_v1');
+    expect(route.signals).toContain('route:generalist');
+  });
+
+  it('still routes an explicit move-planning request to the relevant context', () => {
+    const route = routeTaskCognition({
+      task: 'I am worried about moving. Can you help me plan packing and utilities?',
+    });
+
+    expect(route.profileId).toBe('moving_house_v1');
   });
 
   it('carries the full scope contract into the selected route', () => {

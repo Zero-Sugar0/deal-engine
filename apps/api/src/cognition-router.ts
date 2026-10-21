@@ -4,6 +4,7 @@ import {
   type CognitionRisk,
   type CognitionRoute,
   type ProfessionProfile,
+  understandConversation,
 } from '@deal/core';
 import {
   contextEntryCatalog,
@@ -133,15 +134,17 @@ function scoreProfile(
     ),
   );
 
-  if (declaredMatch) {
+  // A user's profession is useful context, but it must not turn unrelated
+  // small talk or everyday tasks into a professional-domain route.
+  if (declaredMatch && score > 0) {
     score += 3;
     signals.push('identity:declared-profession');
   }
-  if (roleMatch) {
+  if (roleMatch && score > 0) {
     score += 2;
     signals.push('identity:role');
   }
-  if (domainMatch) {
+  if (domainMatch && score > 0) {
     score += 2;
     signals.push('domain:declared');
   }
@@ -184,6 +187,18 @@ export function routeTaskCognition(
   input: CognitionRoutingInput,
 ): CognitionRoute {
   const task = normalize(input.task);
+  const conversationalCue = understandConversation(input.task);
+  const isNonTaskConversation =
+    conversationalCue.helpRequested === 'no' &&
+    [
+      'social',
+      'celebration',
+      'emotional_support',
+      'gratitude',
+      'disclosure',
+      'openers_closers',
+      'casual_replies',
+    ].includes(conversationalCue.category);
   const candidates = professionCatalog
     .filter((profile) => profile.id !== 'generalist_assistant_v1')
     .map((profile) =>
@@ -219,7 +234,7 @@ export function routeTaskCognition(
   const generalist =
     getProfessionProfile('generalist_assistant_v1') ?? professionCatalog[0];
   const selected =
-    candidates[0]?.score > 0
+    !isNonTaskConversation && candidates[0]?.score > 0
       ? candidates[0]
       : {
           profile: generalist,

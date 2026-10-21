@@ -169,8 +169,19 @@ Use existing memory infrastructure for retrieval and extraction. Use DEAL for ca
 | Canonical persona schema     | DEAL                                                      |
 | Identity and authority       | DEAL                                                      |
 | Judgment and boundaries      | DEAL                                                      |
+| Conversational intent cues   | DEAL                                                      |
 | Consent and audit            | DEAL                                                      |
 | Cross-agent context contract | DEAL                                                      |
+
+The context compiler also classifies the current conversational move (such as
+a greeting, correction, celebration, grief disclosure, or direct question) and
+uses recent saved turns to recognize short follow-ups. The model receives only
+compact cue data (move, response move, reply shape, whether help was requested,
+continuity relevance, and safety priority), not sample replies or a paragraph
+of per-message directions. Non-task social and emotional messages do not
+trigger a profession route just because they mention a work or life domain.
+These defaults work with an empty personal profile and do not script a persona
+announcement.
 
 ## Security model
 

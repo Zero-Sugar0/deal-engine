@@ -343,9 +343,7 @@ export const ResponseGuidanceSchema = z.object({
   whenWrong: z.string().default('admit_and_correct'),
   identityDisclosure: z
     .string()
-    .default(
-      'Be truthful that you are an AI agent acting with delegated context.',
-    ),
+    .default('Be truthful if asked about your identity; do not foreground it when irrelevant.'),
   structure: z.string().optional(),
   identitySummary: z.array(z.string()).default([]),
   relationshipGuidance: z.array(z.string()).default([]),
@@ -375,7 +373,7 @@ export const HumanModelSchema = z.object({
     whenDisagreeing: 'challenge_respectfully',
     whenWrong: 'admit_and_correct',
     identityDisclosure:
-      'Be truthful that you are an AI agent acting with delegated context.',
+      'Be truthful if asked about your identity; do not foreground it when irrelevant.',
   }),
   currentPriorities: z.array(z.string()).default([]),
   knownConstraints: z.array(z.string()).default([]),
@@ -1391,6 +1389,72 @@ export const HumanIdentitySchema = z.object({
 });
 export type HumanIdentity = z.infer<typeof HumanIdentitySchema>;
 
+/**
+ * A lightweight reading of the current conversational move. This is context
+ * for natural adaptation, not a canned reply or a claim about hidden feelings.
+ */
+export const ConversationUnderstandingSchema = z.object({
+  patternId: z.string(),
+  category: z.enum([
+    'everyday',
+    'safety',
+    'boundary',
+    'emotional_support',
+    'repair',
+    'decision_support',
+    'human_understanding',
+    'honesty',
+    'relationship_boundary',
+    'openers_closers',
+    'celebration',
+    'difficult_news',
+    'gratitude',
+    'disclosure',
+    'casual_replies',
+    'help_seeking',
+    'banter',
+    'social',
+  ]),
+  replyShape: z
+    .enum([
+      'brief',
+      'direct',
+      'supportive',
+      'reflective',
+      'practical',
+      'repair',
+      'safety_first',
+      'balanced',
+    ])
+    .default('balanced'),
+  responseMove: z
+    .enum([
+      'respond',
+      'answer',
+      'acknowledge',
+      'reflect',
+      'listen',
+      'celebrate',
+      'repair',
+      'continue',
+      'close',
+      'clarify',
+      'safety_check',
+      'boundary',
+    ])
+    .default('respond'),
+  helpRequested: z.enum(['yes', 'no', 'unclear']).default('unclear'),
+  usesRecentContext: z.boolean().default(false),
+  read: z.string(),
+  responsePosture: z.array(z.string()).min(1),
+  avoid: z.array(z.string()).default([]),
+  safetyPriority: z.enum(['none', 'check', 'urgent']).default('none'),
+  certainty: z.enum(['default', 'possible', 'likely']).default('likely'),
+});
+export type ConversationUnderstanding = z.infer<
+  typeof ConversationUnderstandingSchema
+>;
+
 export const HumanContextPacketSchema = z.object({
   schemaVersion: z.enum(['1', '2', '3', '4', '5', '6']),
   packetId: z.string(),
@@ -1407,6 +1471,7 @@ export const HumanContextPacketSchema = z.object({
   persona: PersonaSchema,
   domain: DomainContextSchema,
   cognition: CognitionRouteSchema.optional(),
+  conversationUnderstanding: ConversationUnderstandingSchema.optional(),
   professional: z.lazy(() => ProfessionalContextSchema).default({}),
   skills: SkillContextSchema.default({}),
   memory: MemoryContextSchema,
@@ -1421,7 +1486,7 @@ export const HumanContextPacketSchema = z.object({
     whenDisagreeing: 'challenge_respectfully',
     whenWrong: 'admit_and_correct',
     identityDisclosure:
-      'Be truthful that you are an AI agent acting with delegated context.',
+      'Be truthful if asked about your identity; do not foreground it when irrelevant.',
   }),
   interaction: InteractionContextSchema.default({}),
   grounding: GroundingSchema.default({}),

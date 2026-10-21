@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { HumanContextPacketSchema } from '@deal/core';
 import type { HumanContextPacket } from '@deal/core';
 import {
   deal,
@@ -8,6 +9,7 @@ import {
   createDealClaudeAgentOptions,
   createDealLangChainMiddleware,
   createDealOpenAIInstructions,
+  renderDealContext,
   withDealOpenAIResponsesRequest,
   withDealOpenAIChatRequest,
   withDealOpenRouterRequest,
@@ -311,6 +313,76 @@ describe('agent integrations', () => {
     expect(prepared.systemInstruction).not.toContain('You are an AI agent');
   });
 
+  it('keeps default conversational cues when personal onboarding context is absent', () => {
+    const anonymousPacket = HumanContextPacketSchema.parse({
+      ...packet(),
+      task: 'Hi',
+      composition: {
+        resolverVersion: '1',
+        selected: [],
+        excluded: [],
+        conflicts: [],
+        applied: { personalContext: false, identityFields: [], memoryIds: [] },
+      },
+    });
+    const rendered = renderDealContext(anonymousPacket);
+    const data = JSON.parse(
+      rendered.replace(/^<human_context_data>\n|\n<\/human_context_data>$/g, ''),
+    ) as Record<string, unknown>;
+
+    expect(data.conversationUnderstanding).toMatchObject({
+      cue: 'small_talk_or_greeting',
+      move: 'social',
+      replyShape: 'brief',
+      responseMove: 'acknowledge',
+      usesRecentContext: false,
+    });
+    expect(data.person).toBeUndefined();
+    expect(data.communication).toBeUndefined();
+    expect(rendered).not.toContain('responsePosture');
+    expect(rendered).not.toContain('delegated context');
+  });
+
+  it('marks terse follow-ups as relying on the existing conversation', () => {
+    const contextualPacket = HumanContextPacketSchema.parse({
+      ...packet(),
+      task: 'The second one.',
+      interaction: {
+        taskMetadata: {},
+        openLoops: [],
+        recentTurns: [
+          {
+            id: 'turn_1',
+            role: 'human',
+            content: 'I am choosing between two apartments.',
+            createdAt: new Date(0).toISOString(),
+            metadata: {},
+          },
+          {
+            id: 'turn_2',
+            role: 'agent',
+            content: 'The second is closer to work.',
+            createdAt: new Date(0).toISOString(),
+            metadata: {},
+          },
+        ],
+      },
+    });
+    const data = JSON.parse(
+      renderDealContext(contextualPacket).replace(
+        /^<human_context_data>\n|\n<\/human_context_data>$/g,
+        '',
+      ),
+    ) as { conversationUnderstanding: Record<string, unknown> };
+
+    expect(data.conversationUnderstanding).toMatchObject({
+      cue: 'contextual_follow_up',
+      usesRecentContext: true,
+      replyShape: 'brief',
+      responseMove: 'continue',
+    });
+  });
+
   it('caches only within packet lifetime and supports explicit invalidation', async () => {
     const { runtime, getContext } = makeRuntime();
     await runtime.prepare({ task: 'Draft a thoughtful reply' });
@@ -452,4 +524,5 @@ describe('agent integrations', () => {
       task: 'Use my direct, warm voice here.',
     });
   });
+
 });

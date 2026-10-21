@@ -1096,6 +1096,11 @@ describe('DEAL control plane', () => {
     expect(packet.responseGuidance.style).toContain(
       'Use natural, conversational language and respond to the actual situation.',
     );
+    expect(packet.conversationUnderstanding).toMatchObject({
+      category: 'everyday',
+      replyShape: 'balanced',
+      usesRecentContext: false,
+    });
     expect(packet.humanModel.identity.country).toBeUndefined();
     expect(packet.composition.applied.personalContext).toBe(false);
   });
@@ -1383,6 +1388,10 @@ describe('DEAL control plane', () => {
       'narrowing the message',
     );
     expect(context.json().packet.interaction.recentTurns).toHaveLength(2);
+    expect(context.json().packet.conversationUnderstanding).toMatchObject({
+      patternId: 'contextual_follow_up',
+      usesRecentContext: true,
+    });
     expect(context.json().packet.interaction.openLoops).toContain(
       'Choose the strongest proof point',
     );

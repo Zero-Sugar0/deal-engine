@@ -76,11 +76,13 @@ const model = wrapLanguageModel({
 ```
 
 On each model call the middleware extracts the latest user message, requests a
-short-lived signed context packet, validates it, and injects the human's
-identity, communication style, values, boundaries, relationship guidance,
-decision style, relevant memory evidence, and delegated behavior into the
-provider's native system-instruction boundary. The host agent still owns its
-model, tools, execution loop, approvals, and provider credentials.
+short-lived signed context packet, validates it, and injects only relevant human
+context plus compact conversational signals: the current move, response move,
+reply shape, whether help was requested, whether the message refers to recent
+turns, and safety priority. It does not inject sample replies or long
+per-message directions. These defaults work even when the user skips profile
+setup; the host should still pass the actual chat history to its model. The
+host agent owns its model, tools, and execution loop.
 
 Use `createDealLangChainMiddleware`, `createDealOpenAIInstructions`,
 `withDealOpenAIResponsesRequest`, `withDealClaudeMessagesRequest`, or

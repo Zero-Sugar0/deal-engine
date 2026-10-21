@@ -956,6 +956,14 @@ function TryItView() {
           body: JSON.stringify({
             task: trimmedTask,
             agentId: selectedAgentId || undefined,
+            recentTurns: runs
+              .slice()
+              .reverse()
+              .flatMap((run) => [
+                { role: 'human' as const, content: run.task },
+                { role: 'agent' as const, content: run.humanized.text },
+              ])
+              .slice(-12),
             image: attachment
               ? {
                   name: attachment.name,

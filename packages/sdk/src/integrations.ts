@@ -1,4 +1,5 @@
 import type { ContextRequest } from './index.js';
+import { understandConversation } from '@deal/core';
 import {
   extractLatestUserText,
   type DealAgentRuntime,
