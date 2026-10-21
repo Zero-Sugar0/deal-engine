@@ -132,10 +132,17 @@ const aiGatewayModelUpdateBody = z.object({
 
 const aiGatewayModelSchema = z.object({
   id: z.string().min(3),
-  name: z.string().optional(),
-  owned_by: z.string().optional(),
-  description: z.string().optional(),
-  type: z.string().optional(),
+  name: z.string().nullish(),
+  owned_by: z.string().nullish(),
+  description: z.string().nullish(),
+  type: z.string().nullish(),
+  modelType: z.string().nullish(),
+  specification: z
+    .object({
+      provider: z.string().nullish(),
+      modelId: z.string().nullish(),
+    })
+    .nullish(),
   context_window: z.number().nullable().optional(),
   max_tokens: z.number().nullable().optional(),
   modalities: z
@@ -151,6 +158,68 @@ function error(
   message: string,
 ): Error & { statusCode: number } {
   return Object.assign(new Error(message), { statusCode });
+}
+
+function aiGatewayFailure(
+  cause: unknown,
+  model: string,
+): {
+  code: string;
+  message: string;
+  retryable: boolean;
+} {
+  const candidate = cause as {
+    name?: unknown;
+    message?: unknown;
+    statusCode?: unknown;
+    status?: unknown;
+  };
+  const name = String(candidate?.name ?? '').toLowerCase();
+  const message = String(candidate?.message ?? '').toLowerCase();
+  const status = Number(candidate?.statusCode ?? candidate?.status ?? 0);
+
+  if (
+    status === 401 ||
+    status === 403 ||
+    name.includes('authentication') ||
+    message.includes('unauthorized') ||
+    message.includes('invalid api key')
+  ) {
+    return {
+      code: 'ai_gateway_authentication_failed',
+      message:
+        'Vercel AI Gateway rejected the saved key. Replace the key on the Developer page and try again.',
+      retryable: false,
+    };
+  }
+
+  if (
+    status === 404 ||
+    name.includes('modelnotfound') ||
+    message.includes('model not found') ||
+    message.includes('no such model')
+  ) {
+    return {
+      code: 'ai_gateway_model_unavailable',
+      message: `The selected model “${model}” is not available through Vercel AI Gateway. Choose another model from the list.`,
+      retryable: false,
+    };
+  }
+
+  if (status === 429 || message.includes('rate limit')) {
+    return {
+      code: 'ai_gateway_rate_limited',
+      message:
+        'Vercel AI Gateway is rate-limiting this request. Wait a moment and try again.',
+      retryable: true,
+    };
+  }
+
+  return {
+    code: 'ai_gateway_request_failed',
+    message: `The selected model “${model}” could not complete this comparison. Check the model choice and try again.`,
+    retryable: status >= 500 || status === 0,
+  };
 }
 
 function dashboardOrigins(): string[] {
@@ -1416,6 +1485,8 @@ export function buildServer(
     if (!human) throw error(404, 'Human not found');
     const saved = store.getActiveAiGatewayCredential(human.id);
     let gatewayKey = process.env.AI_GATEWAY_API_KEY?.trim();
+    const customCatalogUrl =
+      options.aiGatewayModelsUrl ?? process.env.DEAL_AI_GATEWAY_MODELS_URL;
     if (saved) {
       try {
         gatewayKey = decryptSecret(
@@ -1434,36 +1505,55 @@ export function buildServer(
         });
       }
     }
+    if (!gatewayKey && !customCatalogUrl)
+      return reply.code(503).send({
+        error:
+          'Add your Vercel AI Gateway key on the Developer page before choosing a model.',
+        code: 'ai_gateway_not_configured',
+        requestId: request.id,
+      });
     try {
-      const response = await (options.fetchImpl ?? fetch)(
-        options.aiGatewayModelsUrl ??
-          process.env.DEAL_AI_GATEWAY_MODELS_URL ??
-          'https://ai-gateway.vercel.sh/v1/models',
-        {
+      let catalog: unknown;
+      if (customCatalogUrl) {
+        const response = await (options.fetchImpl ?? fetch)(customCatalogUrl, {
           headers: gatewayKey
             ? { Authorization: `Bearer ${gatewayKey}` }
             : undefined,
           signal: AbortSignal.timeout(7_500),
-        },
-      );
-      if (!response.ok)
-        return reply.code(502).send({
-          error: 'The AI Gateway model list could not be loaded.',
-          requestId: request.id,
         });
+        if (!response.ok)
+          return reply.code(502).send({
+            error: 'The AI Gateway model list could not be loaded.',
+            requestId: request.id,
+          });
+        catalog = await response.json();
+      } else {
+        const gateway = createGateway({
+          apiKey: gatewayKey,
+          ...(options.fetchImpl ? { fetch: options.fetchImpl } : {}),
+        });
+        catalog = await gateway.getAvailableModels();
+      }
+
       const body = z
-        .object({ data: z.array(aiGatewayModelSchema) })
-        .parse(await response.json());
-      const models = body.data
+        .object({
+          models: z.array(aiGatewayModelSchema).optional(),
+          data: z.array(aiGatewayModelSchema).optional(),
+        })
+        .parse(catalog);
+      const models = (body.models ?? body.data ?? [])
         .filter(
           (model) =>
-            model.type === 'language' &&
+            (model.modelType ?? model.type ?? 'language') === 'language' &&
             model.modalities?.output?.includes('text') !== false,
         )
         .map((model) => ({
           id: model.id,
           name: model.name ?? model.id,
-          provider: model.owned_by ?? model.id.split('/')[0],
+          provider:
+            model.specification?.provider ??
+            model.owned_by ??
+            model.id.split('/')[0],
           description: model.description ?? '',
           ...(model.context_window == null
             ? {}
@@ -1754,12 +1844,13 @@ export function buildServer(
     const temperature = process.env.AI_GATEWAY_TEMPERATURE
       ? Number(process.env.AI_GATEWAY_TEMPERATURE)
       : undefined;
-    const userGateway =
-      credentialSource === 'saved' && gatewayKey
-        ? createGateway({ apiKey: gatewayKey })
-        : undefined;
+    // Always resolve the selected provider/model through the Gateway provider.
+    // Passing "provider/model" directly to generateText only works when the
+    // global AI SDK provider is configured, which is not true for per-person
+    // saved keys and caused dashboard comparisons to fail at runtime.
+    const gateway = createGateway({ apiKey: gatewayKey });
     const generationOptions = {
-      model: userGateway ? userGateway.languageModel(model) : model,
+      model: gateway.languageModel(model),
       ...(Number.isFinite(maxOutputTokens) && maxOutputTokens! > 0
         ? { maxOutputTokens }
         : {}),
@@ -1803,8 +1894,11 @@ export function buildServer(
       ]);
     } catch (cause) {
       request.log.error({ err: cause, model }, 'AI comparison failed');
+      const failure = aiGatewayFailure(cause, model);
       return reply.code(502).send({
-        error: 'The configured model could not complete this comparison.',
+        error: failure.message,
+        code: failure.code,
+        retryable: failure.retryable,
         requestId: request.id,
       });
     }

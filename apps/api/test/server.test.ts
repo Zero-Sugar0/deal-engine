@@ -9,6 +9,8 @@ const agentToken = 'test-agent-token';
 const humanToken = 'test-human-token';
 const store = new DealStore();
 await store.seedDemo(agentToken, humanToken);
+const previousAiGatewayKey = process.env.AI_GATEWAY_API_KEY;
+process.env.AI_GATEWAY_API_KEY = 'test-gateway-key';
 const skillKeys = generateKeyPairSync('ed25519');
 const skillSigner = new SkillSigner({
   privateKeyPem: skillKeys.privateKey
@@ -31,21 +33,26 @@ const modelCatalogApp = buildServer({
   fetchImpl: async () =>
     new Response(
       JSON.stringify({
-        data: [
+        models: [
           {
             id: 'openai/gpt-4.1-mini',
             name: 'GPT-4.1 mini',
-            owned_by: 'openai',
-            type: 'language',
-            modalities: { input: ['text'], output: ['text'] },
+            modelType: 'language',
+            specification: {
+              specificationVersion: 'v4',
+              provider: 'openai',
+              modelId: 'gpt-4.1-mini',
+            },
           },
           {
             id: 'openai/text-embedding-3-small',
             name: 'Embedding model',
-            owned_by: 'openai',
-            type: 'embedding',
-            context_window: null,
-            max_tokens: null,
+            modelType: 'embedding',
+            specification: {
+              specificationVersion: 'v4',
+              provider: 'openai',
+              modelId: 'text-embedding-3-small',
+            },
           },
         ],
       }),
@@ -77,6 +84,9 @@ const externalApp = buildServer({
 });
 
 afterAll(async () => {
+  if (previousAiGatewayKey)
+    process.env.AI_GATEWAY_API_KEY = previousAiGatewayKey;
+  else delete process.env.AI_GATEWAY_API_KEY;
   await app.close();
   await modelCatalogApp.close();
   await limitedApp.close();
