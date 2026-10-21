@@ -175,13 +175,15 @@ Use existing memory infrastructure for retrieval and extraction. Use DEAL for ca
 
 The context compiler also classifies the current conversational move (such as
 a greeting, correction, celebration, grief disclosure, or direct question) and
-uses recent saved turns to recognize short follow-ups. The model receives only
-compact cue data (move, response move, reply shape, whether help was requested,
-continuity relevance, and safety priority), not sample replies or a paragraph
-of per-message directions. Non-task social and emotional messages do not
-trigger a profession route just because they mention a work or life domain.
-These defaults work with an empty personal profile and do not script a persona
-announcement.
+uses recent turns to recognize short follow-ups. SDK integrations infer a
+bounded, text-only window from the provider's chat messages when no stored
+conversation is supplied; the host still owns and sends the full transcript.
+The model receives compact cue data, an abstract response approach, and the
+compiled conversational defaults. It receives no sample replies or output
+limits. Non-task social and emotional messages do not trigger a profession
+route just because they mention a work or life domain. These defaults work with
+an empty personal profile, while saved identity and communication preferences
+enrich later turns when configured.
 
 ## Security model
 

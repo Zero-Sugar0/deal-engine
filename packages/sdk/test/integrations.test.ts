@@ -327,7 +327,10 @@ describe('agent integrations', () => {
     });
     const rendered = renderDealContext(anonymousPacket);
     const data = JSON.parse(
-      rendered.replace(/^<human_context_data>\n|\n<\/human_context_data>$/g, ''),
+      rendered.replace(
+        /^<human_context_data>\n|\n<\/human_context_data>$/g,
+        '',
+      ),
     ) as Record<string, unknown>;
 
     expect(data.conversationUnderstanding).toMatchObject({
@@ -337,9 +340,18 @@ describe('agent integrations', () => {
       responseMove: 'acknowledge',
       usesRecentContext: false,
     });
+    expect(data.conversationUnderstanding.approach).toContain(
+      'Reply in a brief, warm, ordinary way and leave space for the person to continue.',
+    );
+    expect(data.responseGuidance).toMatchObject({
+      style: ['Lead with the point'],
+      whenUncertain: 'ask',
+      whenWrong: 'admit_and_correct',
+    });
     expect(data.person).toBeUndefined();
     expect(data.communication).toBeUndefined();
     expect(rendered).not.toContain('responsePosture');
+    expect(rendered).not.toContain('Hi there! How can I help you today?');
     expect(rendered).not.toContain('delegated context');
   });
 
@@ -380,6 +392,9 @@ describe('agent integrations', () => {
       usesRecentContext: true,
       replyShape: 'brief',
       responseMove: 'continue',
+      approach: expect.arrayContaining([
+        'Continue from the prior conversation instead of restarting the topic.',
+      ]),
     });
   });
 
@@ -413,6 +428,27 @@ describe('agent integrations', () => {
 
     getContextRevision.mockResolvedValue({ revision: '2', modelVersion: 2 });
     await runtime.prepare({ task: 'Draft a thoughtful reply' });
+    expect(getContext).toHaveBeenCalledTimes(2);
+  });
+
+  it('fetches fresh context when the optional revision endpoint is unavailable', async () => {
+    const getContext = vi.fn(async () => ({
+      packetId: 'ctx_without_revision',
+      packet: packet(),
+      signature: 'sig',
+    }));
+    const getContextRevision = vi
+      .fn<() => Promise<{ revision: string; modelVersion: number }>>()
+      .mockRejectedValue(new Error('Context packet not found'));
+    const runtime = createDealAgentRuntime({
+      getContext,
+      getContextRevision,
+    });
+
+    await runtime.prepare({ task: 'Hi' });
+    await runtime.prepare({ task: 'Hi' });
+
+    expect(getContextRevision).toHaveBeenCalledTimes(2);
     expect(getContext).toHaveBeenCalledTimes(2);
   });
 
@@ -522,7 +558,58 @@ describe('agent integrations', () => {
       channel: 'ai_sdk',
       conversationId: 'conversation_1',
       task: 'Use my direct, warm voice here.',
+      recentTurns: [
+        { role: 'human', content: 'Earlier question' },
+        { role: 'agent', content: 'Earlier answer' },
+      ],
     });
   });
 
+  it('derives continuity from provider messages in prepareChat', async () => {
+    const { runtime, getContext } = makeRuntime();
+    await runtime.prepareChat({
+      messages: [
+        { role: 'user', content: 'I am choosing between two apartments.' },
+        { role: 'assistant', content: 'Which one is closer to work?' },
+        { role: 'user', content: 'The second one.' },
+      ],
+    });
+
+    expect(getContext).toHaveBeenCalledWith({
+      task: 'The second one.',
+      recentTurns: [
+        { role: 'human', content: 'I am choosing between two apartments.' },
+        { role: 'agent', content: 'Which one is closer to work?' },
+      ],
+    });
+  });
+
+  it('uses only recent text turns and excludes tool/system messages', async () => {
+    const { runtime, getContext } = makeRuntime();
+    const middleware = createDealAISDKMiddleware({ runtime });
+    await middleware.transformParams({
+      params: {
+        prompt: [
+          { role: 'system', content: 'Host-only system content' },
+          { role: 'user', content: 'First question' },
+          { role: 'tool', content: 'Internal tool result' },
+          {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'First answer' }],
+          },
+          { role: 'user', content: 'Follow up' },
+        ],
+      },
+    });
+
+    expect(getContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task: 'Follow up',
+        recentTurns: [
+          { role: 'human', content: 'First question' },
+          { role: 'agent', content: 'First answer' },
+        ],
+      }),
+    );
+  });
 });

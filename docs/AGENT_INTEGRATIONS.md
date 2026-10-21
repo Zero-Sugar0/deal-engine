@@ -122,7 +122,7 @@ verification at the host boundary.
 user message
     │
     ▼
-adapter extracts the current task + conversation metadata
+adapter extracts the current task + recent human/assistant text turns
     │
     ▼
 DEAL /v1/context retrieves the structured human model and relevant memory
@@ -139,9 +139,12 @@ host agent responds and continues to own tools, execution, and approvals
 
 This happens at the model boundary for every scoped turn. DEAL does not pretend
 to be the model and it does not replace the host agent's conversation state. A
-`conversationId` lets the API include the latest stored turns and open loops;
-the host can report outcomes and corrections so the human model improves over
-time.
+`conversationId` lets the API include stored turns and open loops. Without one,
+the SDK forwards a bounded text-only window from the provider's message list for
+turn-level understanding; system/tool messages are not forwarded, and the
+current user message is not duplicated. The host remains responsible for the
+full model transcript. The host can report outcomes and corrections so the
+human model improves over time.
 
 ## LangChain JavaScript
 

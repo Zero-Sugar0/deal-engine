@@ -57,4 +57,34 @@ temperature zero, hosted model responses can vary. For a reliable evaluation,
 run several trials with fixed tasks and score them against explicit persona,
 boundary, and decision-style criteria.
 
+## Multi-turn conversational evaluation
+
+Run a small paired conversation suite against the same model:
+
+```bash
+pnpm eval:conversations
+pnpm eval:conversations -- --json
+pnpm eval:conversations -- --raw-only --json
+pnpm eval:conversations -- --raw-only --scenario=decision_context_carryover
+```
+
+The suite covers a casual greeting, listening when advice is declined,
+carrying apartment trade-offs across turns, and a reflective question. Raw and
+DEAL runs receive the same user turns, but each follows its own generated
+assistant history. The report includes the paired replies, selected-context and
+memory counts, generation/context latency, empty outputs, response length, and
+narrow checks for irrelevant AI-identity preambles and explicit feature-menu
+preambles. Bullet counts are reported separately as a format signal, not
+mistaken for a product menu.
+
+Those checks are observable signals, not a score for whether a reply is
+"human." Review each pair for conversational fit, continuity, usefulness, and
+whether any saved identity or preference was used accurately. Repeat runs
+because hosted model output varies. Each run makes model API calls and one DEAL
+context lookup for each DEAL turn.
+
+Use `--raw-only` when the model gateway is reachable but the DEAL context API
+is not; it records the no-context baseline without claiming a paired
+comparison.
+
 DEAL provides context and governance; it does not execute tools or skills.

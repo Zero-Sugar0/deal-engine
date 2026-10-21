@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { generateKeyPairSync } from 'node:crypto';
+import { renderDealContext } from '@deal/sdk';
 import { buildServer } from '../src/server.js';
 import { DealStore } from '../src/store.js';
 import { InMemoryRateLimiter } from '../src/rate-limit.js';
@@ -1101,6 +1102,13 @@ describe('DEAL control plane', () => {
       replyShape: 'balanced',
       usesRecentContext: false,
     });
+    const renderedContext = renderDealContext(packet);
+    expect(renderedContext).toContain(
+      'Use natural, conversational language and respond to the actual situation.',
+    );
+    expect(renderedContext).toContain(
+      'Be truthful if asked about your identity; do not foreground it when irrelevant.',
+    );
     expect(packet.humanModel.identity.country).toBeUndefined();
     expect(packet.composition.applied.personalContext).toBe(false);
   });
@@ -1408,6 +1416,36 @@ describe('DEAL control plane', () => {
     expect(inspected.statusCode).toBe(200);
     expect(inspected.json().expired).toBe(false);
     expect(inspected.json().signature).toBe(context.json().signature);
+  });
+
+  it('uses stateless recent turns to understand a direct conversational follow-up', async () => {
+    const context = await app.inject({
+      method: 'POST',
+      url: '/v1/context',
+      headers: { authorization: `Bearer ${agentToken}` },
+      payload: {
+        task: 'Being close to work.',
+        recentTurns: [
+          {
+            role: 'human',
+            content:
+              'I am choosing between living near work and near my family.',
+          },
+          {
+            role: 'agent',
+            content: 'Which matters more to you right now?',
+          },
+        ],
+      },
+    });
+
+    expect(context.statusCode).toBe(200);
+    expect(context.json().packet.conversationUnderstanding).toMatchObject({
+      patternId: 'answering_previous_question',
+      responseMove: 'continue',
+      usesRecentContext: true,
+    });
+    expect(context.json().packet.interaction.recentTurns).toHaveLength(2);
   });
 
   it('turns human context feedback into confirmed correction memory', async () => {

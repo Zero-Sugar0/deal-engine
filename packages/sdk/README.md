@@ -79,10 +79,15 @@ On each model call the middleware extracts the latest user message, requests a
 short-lived signed context packet, validates it, and injects only relevant human
 context plus compact conversational signals: the current move, response move,
 reply shape, whether help was requested, whether the message refers to recent
-turns, and safety priority. It does not inject sample replies or long
-per-message directions. These defaults work even when the user skips profile
-setup; the host should still pass the actual chat history to its model. The
-host agent owns its model, tools, and execution loop.
+turns, and safety priority. It also includes the selected abstract response
+approach and the compiled conversational defaults, but never sample replies or
+output-token limits. Recent human/assistant text turns are inferred from the
+provider's message list (up to 8 turns and 2,000 characters each); system and
+tool messages are excluded. The current user message is not duplicated in that
+history window. The host still sends its full conversation to the model. These
+defaults work even when the user skips profile setup, and saved identity and
+communication preferences are applied when configured. The host agent owns its
+model, tools, and execution loop.
 
 Use `createDealLangChainMiddleware`, `createDealOpenAIInstructions`,
 `withDealOpenAIResponsesRequest`, `withDealClaudeMessagesRequest`, or

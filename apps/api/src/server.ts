@@ -93,6 +93,15 @@ export interface ServerOptions {
 
 const contextBody = z.object({
   task: z.string().min(1),
+  recentTurns: z
+    .array(
+      z.object({
+        role: z.enum(['human', 'agent']),
+        content: z.string().trim().min(1).max(2_000),
+      }),
+    )
+    .max(8)
+    .default([]),
   requestedCapabilities: z.array(z.string()).default([]),
   taskMetadata: z.record(z.unknown()).default({}),
   conversationId: z.string().optional(),
@@ -4200,7 +4209,13 @@ export function buildServer(
       activeTopic: body.activeTopic,
       userIntent: body.userIntent,
       openLoops: [],
-      recentTurns: [],
+      recentTurns: (body.recentTurns ?? []).map((turn, index) => ({
+        id: `request_${index}`,
+        role: turn.role,
+        content: turn.content,
+        createdAt: new Date().toISOString(),
+        metadata: {},
+      })),
     };
     if (body.conversationId) {
       const conversation = store.conversations.get(body.conversationId);

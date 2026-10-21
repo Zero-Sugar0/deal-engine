@@ -1,7 +1,7 @@
 import type { ContextRequest } from './index.js';
-import { understandConversation } from '@deal/core';
 import {
   extractLatestUserText,
+  extractRecentTurns,
   type DealAgentRuntime,
   type PreparedDealContext,
 } from './agent.js';
@@ -61,6 +61,18 @@ function taskFromInput(input: unknown): string {
   return '';
 }
 
+function messagesFromInput(input: unknown): readonly unknown[] {
+  if (Array.isArray(input)) return input;
+  if (!input || typeof input !== 'object') return [];
+  const value = input as Record<string, unknown>;
+  for (const key of ['messages', 'prompt', 'input']) {
+    if (Array.isArray(value[key])) return value[key] as readonly unknown[];
+  }
+  if (value.context && typeof value.context === 'object')
+    return messagesFromInput(value.context);
+  return [];
+}
+
 async function prepareDealContext<TInput>(
   input: TInput,
   options: DealIntegrationOptions<TInput>,
@@ -75,7 +87,14 @@ async function prepareDealContext<TInput>(
     throw new Error(
       'DEAL integration requires a task, a context.task default, or a user message',
     );
-  return options.runtime.prepare(request);
+  const recentTurns =
+    request.recentTurns ??
+    extractRecentTurns(messagesFromInput(input), request.task);
+  return options.runtime.prepare(
+    recentTurns.length && request.recentTurns === undefined
+      ? { ...request, recentTurns }
+      : request,
+  );
 }
 
 function resolveBase<TInput>(

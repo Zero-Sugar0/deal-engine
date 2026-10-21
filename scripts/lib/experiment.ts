@@ -9,6 +9,7 @@ export type GenerationRecord = {
   text: string;
   finishReason: string;
   usage: unknown;
+  contentTypes: string[];
 };
 
 export type HumanizedRecord = GenerationRecord & {
@@ -17,7 +18,21 @@ export type HumanizedRecord = GenerationRecord & {
     expiresAt: string;
     policyVersion: string;
     professionalProfile?: string;
+    selectedContextCount: number;
+    memoryItemCount: number;
+    identityFieldCount: number;
   };
+};
+
+export type ConversationMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
+export type TimedGenerationRecord = GenerationRecord & {
+  generationMs: number;
+  contextPreparationMs?: number;
+  context?: HumanizedRecord['context'];
 };
 
 function required(name: string): string {
@@ -49,19 +64,15 @@ export function modelId(): string {
   return required('AI_GATEWAY_MODEL');
 }
 
-function generationSettings(system: string | undefined, task: string) {
+function generationOptions() {
   const settings: {
     model: string;
-    prompt: string;
-    system?: string;
     maxOutputTokens?: number;
     temperature?: number;
   } = {
     model: modelId(),
-    prompt: task,
   };
 
-  if (system) settings.system = system;
   if (process.env.AI_GATEWAY_MAX_OUTPUT_TOKENS) {
     settings.maxOutputTokens = Number(process.env.AI_GATEWAY_MAX_OUTPUT_TOKENS);
   }
@@ -71,6 +82,14 @@ function generationSettings(system: string | undefined, task: string) {
   return settings;
 }
 
+function generationSettings(system: string | undefined, task: string) {
+  return {
+    ...generationOptions(),
+    prompt: task,
+    ...(system ? { instructions: system } : {}),
+  };
+}
+
 function record(
   result: Awaited<ReturnType<typeof generateText>>,
 ): GenerationRecord {
@@ -78,6 +97,7 @@ function record(
     text: result.text,
     finishReason: result.finishReason,
     usage: result.usage,
+    contentTypes: result.content.map((part) => part.type),
   };
 }
 
@@ -88,13 +108,19 @@ export async function runRaw(task: string): Promise<GenerationRecord> {
 
 export async function prepareHumanContext(
   task: string,
+  recentTurns?: Array<{ role: 'human' | 'agent'; content: string }>,
+  runtime = createHumanContextRuntime(),
 ): Promise<PreparedDealContext> {
-  const runtime = createDealAgentRuntime(new deal(required('DEAL_API_KEY')));
   return runtime.prepare({
     task,
+    recentTurns,
     channel: process.env.COMPARE_CHANNEL || 'chat',
     audience: process.env.COMPARE_AUDIENCE || 'the human using this agent',
   });
+}
+
+export function createHumanContextRuntime() {
+  return createDealAgentRuntime(new deal(required('DEAL_API_KEY')));
 }
 
 export async function runHumanized(task: string): Promise<HumanizedRecord> {
@@ -110,6 +136,77 @@ export async function runHumanized(task: string): Promise<HumanizedRecord> {
       expiresAt: prepared.packet.expiresAt,
       policyVersion: prepared.packet.policyVersion,
       professionalProfile: prepared.packet.professional.profileId,
+      selectedContextCount: prepared.packet.composition.selected.length,
+      memoryItemCount:
+        prepared.packet.memory.preferences.length +
+        prepared.packet.memory.corrections.length +
+        prepared.packet.memory.episodes.length +
+        prepared.packet.memory.references.length +
+        prepared.packet.memory.items.length,
+      identityFieldCount:
+        prepared.packet.composition.applied.identityFields.length,
+    },
+  };
+}
+
+export async function runRawConversationTurn(
+  history: ConversationMessage[],
+  currentMessage: string,
+): Promise<TimedGenerationRecord> {
+  const startedAt = performance.now();
+  const result = await generateText({
+    ...generationOptions(),
+    messages: [...history, { role: 'user', content: currentMessage }],
+  });
+  return {
+    ...record(result),
+    generationMs: Math.round(performance.now() - startedAt),
+  };
+}
+
+export async function runHumanizedConversationTurn(
+  history: ConversationMessage[],
+  currentMessage: string,
+  runtime = createHumanContextRuntime(),
+): Promise<TimedGenerationRecord> {
+  const recentTurns = history.slice(-8).map((message) => ({
+    role: message.role === 'user' ? ('human' as const) : ('agent' as const),
+    content: message.content.slice(0, 2_000),
+  }));
+  const contextStartedAt = performance.now();
+  const prepared = await prepareHumanContext(
+    currentMessage,
+    recentTurns,
+    runtime,
+  );
+  const contextPreparationMs = Math.round(performance.now() - contextStartedAt);
+  const startedAt = performance.now();
+  const result = await generateText({
+    ...generationOptions(),
+    messages: [...history, { role: 'user', content: currentMessage }],
+    ...(prepared.systemInstruction
+      ? { instructions: prepared.systemInstruction }
+      : {}),
+  });
+
+  return {
+    ...record(result),
+    generationMs: Math.round(performance.now() - startedAt),
+    contextPreparationMs,
+    context: {
+      packetId: prepared.packetId,
+      expiresAt: prepared.packet.expiresAt,
+      policyVersion: prepared.packet.policyVersion,
+      professionalProfile: prepared.packet.professional.profileId,
+      selectedContextCount: prepared.packet.composition.selected.length,
+      memoryItemCount:
+        prepared.packet.memory.preferences.length +
+        prepared.packet.memory.corrections.length +
+        prepared.packet.memory.episodes.length +
+        prepared.packet.memory.references.length +
+        prepared.packet.memory.items.length,
+      identityFieldCount:
+        prepared.packet.composition.applied.identityFields.length,
     },
   };
 }

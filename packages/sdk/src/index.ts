@@ -78,6 +78,8 @@ export interface DealOptions {
 
 export interface ContextRequest {
   task: string;
+  /** Recent user/assistant text turns used to understand conversational context. */
+  recentTurns?: Array<{ role: 'human' | 'agent'; content: string }>;
   requestedCapabilities?: string[];
   taskMetadata?: Record<string, unknown>;
   conversationId?: string;

@@ -530,10 +530,19 @@ function contextData(packet: HumanContextPacket): Record<string, unknown> {
       responseMove: conversationUnderstanding.responseMove,
       helpRequested: conversationUnderstanding.helpRequested,
       intent: conversationUnderstanding.read,
+      approach: conversationUnderstanding.responsePosture,
+      avoid: conversationUnderstanding.avoid,
       usesRecentContext: conversationUnderstanding.usesRecentContext,
       safetyPriority: conversationUnderstanding.safetyPriority,
       certainty: conversationUnderstanding.certainty,
     },
+    responseGuidance: definedValues({
+      style: packet.responseGuidance.style.slice(0, 7),
+      whenUncertain: packet.responseGuidance.whenUncertain,
+      whenDisagreeing: packet.responseGuidance.whenDisagreeing,
+      whenWrong: packet.responseGuidance.whenWrong,
+      identityDisclosure: packet.responseGuidance.identityDisclosure,
+    }),
     person: Object.keys(user).length ? user : undefined,
     communication: Object.keys(communication).length
       ? communication
@@ -562,6 +571,32 @@ function contextData(packet: HumanContextPacket): Record<string, unknown> {
   });
 }
 
+function textFromMessageContent(content: unknown): string {
+  if (typeof content === 'string') return content.trim();
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      if (
+        part &&
+        typeof part === 'object' &&
+        'text' in part &&
+        typeof (part as { text?: unknown }).text === 'string'
+      )
+        return (part as { text: string }).text;
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+function textFromMessage(message: Record<string, unknown>): string {
+  const content = textFromMessageContent(message.content);
+  if (content) return content;
+  return textFromMessageContent(message.parts);
+}
+
 /** Extract the latest human-authored message for automatic chat context. */
 export function extractLatestUserText(messages: readonly unknown[]): string {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -569,23 +604,57 @@ export function extractLatestUserText(messages: readonly unknown[]): string {
     if (!message || typeof message !== 'object') continue;
     const role = (message as { role?: unknown }).role;
     if (role !== 'user' && role !== 'human') continue;
-    const content = (message as { content?: unknown }).content;
-    if (typeof content === 'string' && content.trim()) return content.trim();
-    if (Array.isArray(content)) {
-      const text = content
-        .map((part) => {
-          if (typeof part === 'string') return part;
-          if (part && typeof part === 'object' && 'text' in part)
-            return String((part as { text: unknown }).text);
-          return '';
-        })
-        .filter(Boolean)
-        .join('\n')
-        .trim();
-      if (text) return text;
-    }
+    const text = textFromMessage(message as Record<string, unknown>);
+    if (text) return text;
   }
   return '';
+}
+
+/**
+ * Extract a small, text-only continuity window for DEAL's cognition pass.
+ * The host still sends its full conversation to the model; this projection
+ * gives DEAL enough nearby context to recognize follow-ups and tone shifts.
+ */
+export function extractRecentTurns(
+  messages: readonly unknown[],
+  currentTask = '',
+  limit = 8,
+): Array<{ role: 'human' | 'agent'; content: string }> {
+  const turns: Array<{ role: 'human' | 'agent'; content: string }> = [];
+  for (const message of messages) {
+    if (!message || typeof message !== 'object') continue;
+    const record = message as Record<string, unknown>;
+    const role = record.role;
+    if (
+      role !== 'user' &&
+      role !== 'human' &&
+      role !== 'assistant' &&
+      role !== 'agent'
+    )
+      continue;
+    const content = textFromMessage(record).slice(-2_000);
+    if (!content) continue;
+    turns.push({
+      role: role === 'user' || role === 'human' ? 'human' : 'agent',
+      content,
+    });
+  }
+
+  let latestHumanIndex = -1;
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    if (turns[index]?.role === 'human') {
+      latestHumanIndex = index;
+      break;
+    }
+  }
+  if (
+    latestHumanIndex >= 0 &&
+    currentTask.trim() &&
+    turns[latestHumanIndex]?.content === currentTask.trim()
+  ) {
+    turns.splice(latestHumanIndex, 1);
+  }
+  return turns.slice(-limit);
 }
 
 /**
@@ -622,12 +691,22 @@ export class DealAgentRuntime {
     options: { forceRefresh?: boolean } = {},
   ): Promise<PreparedDealContext> {
     const key = stableValue(input);
-    const revision = this.client.getContextRevision
-      ? (await this.client.getContextRevision()).revision
-      : undefined;
+    let revision: string | undefined;
+    let revisionLookupFailed = false;
+    if (this.client.getContextRevision) {
+      try {
+        revision = (await this.client.getContextRevision()).revision;
+      } catch {
+        // Revision lookup only optimizes cache invalidation. If it is
+        // unavailable, fetch fresh context rather than blocking the model or
+        // reusing a potentially stale packet.
+        revisionLookupFailed = true;
+        this.cache.clear();
+      }
+    }
     const revisionKey = revision ? `${revision}:${key}` : key;
     const cached =
-      this.cacheEnabled && !options.forceRefresh
+      this.cacheEnabled && !revisionLookupFailed && !options.forceRefresh
         ? this.cache.get(revisionKey)
         : undefined;
     const now = this.now().getTime();
@@ -640,7 +719,7 @@ export class DealAgentRuntime {
       packet,
       systemInstruction: this.render(packet),
     };
-    if (this.cacheEnabled) {
+    if (this.cacheEnabled && !revisionLookupFailed) {
       this.cache.set(revisionKey, {
         prepared,
         expiresAt: new Date(packet.expiresAt).getTime(),
@@ -664,7 +743,15 @@ export class DealAgentRuntime {
       throw new Error(
         'DEAL chat context requires a task or at least one user message',
       );
-    return this.prepare({ ...context, task: resolvedTask }, options);
+    return this.prepare(
+      {
+        ...context,
+        task: resolvedTask,
+        recentTurns:
+          context.recentTurns ?? extractRecentTurns(messages, resolvedTask),
+      },
+      options,
+    );
   }
 
   async reportOutcome(input: {
