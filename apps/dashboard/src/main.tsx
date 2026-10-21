@@ -1,5 +1,15 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import {
+  ArrowUpRight,
+  LogOut,
+  LayoutDashboard,
+  UserRound,
+  Brain,
+  Code2,
+  ShieldCheck,
+  Inbox,
+} from 'lucide-react';
 import OpenAI from '@lobehub/icons/es/OpenAI/components/Mono.js';
 import Claude from '@lobehub/icons/es/Claude/components/Mono.js';
 import LangChain from '@lobehub/icons/es/LangChain/components/Mono.js';
@@ -388,7 +398,7 @@ function Logo({ light = false }: { light?: boolean }) {
 }
 
 function Arrow() {
-  return <span aria-hidden="true">↗︎</span>;
+  return <ArrowUpRight aria-hidden="true" size={16} />;
 }
 
 function Button({
@@ -1459,7 +1469,16 @@ function DashboardPage() {
               key={item}
             >
               <span className="nav-icon">
-                {['◌', '◈', '⌁', '◇', '✓'][index]}
+                {(() => {
+                  const Icon = [
+                    LayoutDashboard,
+                    UserRound,
+                    Brain,
+                    Code2,
+                    ShieldCheck,
+                  ][index];
+                  return Icon ? <Icon aria-hidden="true" size={17} /> : null;
+                })()}
               </span>
               {item}
               {item === 'Approvals' && <b>2</b>}
@@ -1468,10 +1487,12 @@ function DashboardPage() {
         </nav>
         <div className="sidebar-bottom">
           <button onClick={() => navigate('/')}>
-            <span className="nav-icon">↗</span>View homepage
+            <ArrowUpRight aria-hidden="true" size={17} />
+            View homepage
           </button>
           <button onClick={signOut}>
-            <span className="nav-icon">↪</span>Sign out
+            <LogOut aria-hidden="true" size={17} />
+            Sign out
           </button>
         </div>
       </aside>
@@ -1906,7 +1927,9 @@ function Pulse({ label, value }: { label: string; value: string }) {
 function PlaceholderView({ title }: { title: string }) {
   return (
     <section className="empty-view">
-      <span className="empty-mark">◌</span>
+      <span className="empty-mark">
+        <Inbox aria-hidden="true" size={20} />
+      </span>
       <span className="eyebrow">{title.toLowerCase()}</span>
       <h2>
         A calmer place to

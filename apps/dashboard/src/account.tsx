@@ -8,14 +8,25 @@ import {
 } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import OpenAI from '@lobehub/icons/es/OpenAI/components/Mono.js';
-import Claude from '@lobehub/icons/es/Claude/components/Mono.js';
-import Google from '@lobehub/icons/es/Google/components/Mono.js';
-import DeepSeek from '@lobehub/icons/es/DeepSeek/components/Mono.js';
-import Meta from '@lobehub/icons/es/Meta/components/Mono.js';
-import Mistral from '@lobehub/icons/es/Mistral/components/Mono.js';
-import Qwen from '@lobehub/icons/es/Qwen/components/Mono.js';
-import Grok from '@lobehub/icons/es/Grok/components/Mono.js';
+import {
+  ArrowUpRight,
+  ArrowUp,
+  LogOut,
+  Plus,
+  Paperclip,
+  X,
+  Check,
+  Copy,
+  KeyRound,
+  Code2,
+  LayoutDashboard,
+  MessageSquare,
+  UserRound,
+  Brain,
+  ShieldCheck,
+  Inbox,
+} from 'lucide-react';
+import { BrandIcon } from './brand-icon';
 import { authClient, dealApiUrl, getDealSessionToken } from './auth-client';
 import { countryOptions, languageOptions } from './locale-options';
 
@@ -509,7 +520,13 @@ export function OnboardingPage({ onNavigate }: { onNavigate: Navigate }) {
               aria-current={draft.step === index ? 'step' : undefined}
               data-complete={draft.step > index}
             >
-              <span>{draft.step > index ? '✓' : index + 1}</span>
+              <span>
+                {draft.step > index ? (
+                  <Check size={14} aria-hidden="true" />
+                ) : (
+                  index + 1
+                )}
+              </span>
               {label}
             </li>
           ))}
@@ -645,8 +662,9 @@ export function OnboardingPage({ onNavigate }: { onNavigate: Navigate }) {
               {busy
                 ? 'Saving…'
                 : draft.step === 2
-                  ? 'Save and enter deal ↗'
-                  : 'Save and continue ↗'}
+                  ? 'Save and enter deal'
+                  : 'Save and continue'}
+              {!busy && <ArrowUpRight aria-hidden="true" size={16} />}
             </SmallButton>
           </div>
         </form>
@@ -656,15 +674,12 @@ export function OnboardingPage({ onNavigate }: { onNavigate: Navigate }) {
 }
 
 const navItems = [
-  ['Overview', 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z'],
-  ['Try it', 'M12 3l2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8z'],
-  [
-    'Human model',
-    'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M4 21v-2a8 8 0 0 1 16 0v2',
-  ],
-  ['Memory', 'M4 5h16v14H4z M8 9h8 M8 13h6'],
-  ['Developer', 'M8 5l-6 7 6 7 M16 5l6 7-6 7 M14 3l-4 18'],
-  ['Approvals', 'M4 12l5 5L20 6'],
+  ['Overview', LayoutDashboard],
+  ['Try it', MessageSquare],
+  ['Human model', UserRound],
+  ['Memory', Brain],
+  ['Developer', Code2],
+  ['Approvals', ShieldCheck],
 ] as const;
 
 export function AccountExperience({ onNavigate }: { onNavigate: Navigate }) {
@@ -721,7 +736,7 @@ export function AccountExperience({ onNavigate }: { onNavigate: Navigate }) {
           </span>
         </div>
         <nav className="account-nav" aria-label="Your account">
-          {navItems.map(([label, icon]) => (
+          {navItems.map(([label, Icon]) => (
             <button
               aria-current={active === label ? 'page' : undefined}
               className={active === label ? 'account-nav-active' : ''}
@@ -729,19 +744,7 @@ export function AccountExperience({ onNavigate }: { onNavigate: Navigate }) {
               onClick={() => setActive(label)}
               type="button"
             >
-              <svg
-                aria-hidden="true"
-                width="17"
-                height="17"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d={icon} />
-              </svg>
+              <Icon aria-hidden="true" size={17} strokeWidth={1.6} />
               {label}
               {label === 'Approvals' && approvalCount > 0 && (
                 <b>{approvalCount}</b>
@@ -755,10 +758,10 @@ export function AccountExperience({ onNavigate }: { onNavigate: Navigate }) {
             onClick={() => onNavigate('/')}
             type="button"
           >
-            ↗ <span>View deal</span>
+            <ArrowUpRight aria-hidden="true" size={17} /> <span>View deal</span>
           </button>
           <button aria-label="Sign out" onClick={signOut} type="button">
-            ↪ <span>Sign out</span>
+            <LogOut aria-hidden="true" size={17} /> <span>Sign out</span>
           </button>
         </div>
       </aside>
@@ -860,6 +863,11 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
       <div className="try-code-toolbar">
         <span>{language || 'text'}</span>
         <button onClick={copyCode} type="button">
+          {copied ? (
+            <Check aria-hidden="true" size={14} />
+          ) : (
+            <Copy aria-hidden="true" size={14} />
+          )}
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
@@ -907,6 +915,7 @@ function TryItView() {
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
+  const messageInput = useRef<HTMLTextAreaElement>(null);
   const conversation = useRef<HTMLDivElement>(null);
   const activeRun = runs[0];
 
@@ -959,6 +968,7 @@ function TryItView() {
       );
       setRuns((current) => [result, ...current].slice(0, 8));
       setTask('');
+      if (messageInput.current) messageInput.current.style.height = '';
       setAttachment(undefined);
     } catch (error) {
       setErrorMessage(
@@ -1047,7 +1057,7 @@ function TryItView() {
                     onClick={() => setTask(suggestion)}
                     type="button"
                   >
-                    {suggestion} <span>↗</span>
+                    {suggestion} <ArrowUpRight aria-hidden="true" size={14} />
                   </button>
                 ))}
               </div>
@@ -1110,19 +1120,6 @@ function TryItView() {
         {errorMessage && (
           <div className="account-error try-error">{errorMessage}</div>
         )}
-        {attachment && (
-          <div className="try-attachment">
-            <img src={attachment.data} alt="" />
-            <span>{attachment.name}</span>
-            <button
-              aria-label="Remove image"
-              onClick={() => setAttachment(undefined)}
-              type="button"
-            >
-              ×
-            </button>
-          </div>
-        )}
         <form className="try-composer" onSubmit={compare}>
           <input
             accept="image/*"
@@ -1131,17 +1128,28 @@ function TryItView() {
             ref={fileInput}
             type="file"
           />
-          <button
-            aria-label="Attach an image"
-            className="try-plus"
-            onClick={() => fileInput.current?.click()}
-            type="button"
-          >
-            +
-          </button>
+          {attachment && (
+            <div className="try-composer-attachment">
+              <img src={attachment.data} alt="" />
+              <span>{attachment.name}</span>
+              <button
+                aria-label="Remove image"
+                onClick={() => setAttachment(undefined)}
+                type="button"
+              >
+                <X aria-hidden="true" size={15} />
+              </button>
+            </div>
+          )}
           <textarea
-            aria-label="Ask your agent"
+            aria-label="Message your agent"
+            ref={messageInput}
             onChange={(event) => setTask(event.target.value)}
+            onInput={(event) => {
+              const input = event.currentTarget;
+              input.style.height = 'auto';
+              input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+            }}
             onKeyDown={(event) => {
               if (
                 event.key === 'Enter' &&
@@ -1153,22 +1161,41 @@ function TryItView() {
                 void compare();
               }
             }}
-            placeholder="Ask your agent…"
-            rows={2}
+            placeholder="Message your agent…"
+            rows={1}
             value={task}
           />
-          <button
-            aria-label="Compare answers"
-            className="try-send"
-            disabled={!task.trim() || busy}
-            type="submit"
-          >
-            {busy ? <span className="try-spinner" /> : '↑'}
-          </button>
+          <div className="try-composer-toolbar">
+            <button
+              aria-label="Attach an image"
+              className="try-composer-attach"
+              onClick={() => fileInput.current?.click()}
+              type="button"
+            >
+              <Paperclip aria-hidden="true" size={16} />
+              <span>Add image</span>
+            </button>
+            <div className="try-composer-toolbar-end">
+              <span className="try-composer-hint">
+                <kbd>Enter</kbd> to send <span aria-hidden="true">·</span>{' '}
+                <kbd>Shift</kbd> + <kbd>Enter</kbd> for a new line
+              </span>
+              <button
+                aria-label="Send message"
+                className="try-composer-submit"
+                disabled={!task.trim() || busy}
+                type="submit"
+              >
+                {busy ? (
+                  <span className="try-spinner" />
+                ) : (
+                  <ArrowUp aria-hidden="true" size={17} />
+                )}
+                <span className="try-composer-submit-label">Send</span>
+              </button>
+            </div>
+          </div>
         </form>
-        <small className="try-composer-note">
-          Send to compare answers side by side
-        </small>
       </section>
     </div>
   );
@@ -1206,6 +1233,11 @@ function ComparisonCard({
         <div className="try-response-actions">
           {context && <span className="try-response-badge">Humanized</span>}
           <button onClick={copyResponse} type="button">
+            {copied ? (
+              <Check aria-hidden="true" size={14} />
+            ) : (
+              <Copy aria-hidden="true" size={14} />
+            )}
             {copied ? 'Copied' : 'Copy'}
           </button>
         </div>
@@ -1360,7 +1392,7 @@ function OverviewView({
             {readiness.map((item) => (
               <div className="overview-readiness-row" key={item.label}>
                 <span className={item.ready ? 'is-ready' : ''}>
-                  {item.ready ? '✓' : '·'}
+                  {item.ready ? <Check size={12} aria-hidden="true" /> : null}
                 </span>
                 <div>
                   <strong>{item.label}</strong>
@@ -1382,7 +1414,8 @@ function OverviewView({
               onClick={() => onNavigate('Developer')}
               type="button"
             >
-              {gateway ? 'Change model' : 'Choose a model'} ↗
+              {gateway ? 'Change model' : 'Choose a model'}{' '}
+              <ArrowUpRight aria-hidden="true" size={14} />
             </button>
           </div>
         </div>
@@ -1516,7 +1549,7 @@ function PanelHeading({
       </div>
       {action && (
         <button className="account-text-link" onClick={onAction} type="button">
-          {action} ↗
+          {action} <ArrowUpRight aria-hidden="true" size={14} />
         </button>
       )}
     </div>
@@ -1544,7 +1577,9 @@ function EmptyState({
 }) {
   return (
     <div className={`account-empty ${compact ? 'account-empty-compact' : ''}`}>
-      <span>◌</span>
+      <span>
+        <Inbox aria-hidden="true" size={20} />
+      </span>
       <strong>{title}</strong>
       <p>{body}</p>
     </div>
@@ -1552,27 +1587,7 @@ function EmptyState({
 }
 
 function ProviderLogo({ provider }: { provider: string }) {
-  const name = provider.toLowerCase();
-  const Icon = name.includes('openai')
-    ? OpenAI
-    : name.includes('anthropic') || name.includes('claude')
-      ? Claude
-      : name.includes('google') || name.includes('gemini')
-        ? Google
-        : name.includes('deepseek')
-          ? DeepSeek
-          : name.includes('meta')
-            ? Meta
-            : name.includes('mistral')
-              ? Mistral
-              : name.includes('qwen') || name.includes('alibaba')
-                ? Qwen
-                : name.includes('xai') ||
-                    name.includes('x-ai') ||
-                    name.includes('grok')
-                  ? Grok
-                  : undefined;
-  return Icon ? <Icon size={22} /> : <span aria-label={provider}>◇</span>;
+  return <BrandIcon name={provider} />;
 }
 
 function GatewayModelPicker({
@@ -1660,7 +1675,7 @@ function GatewayModelPicker({
                   {model.description && <small>{model.description}</small>}
                 </span>
                 <span className="gateway-model-check">
-                  {selected ? '✓' : ''}
+                  {selected ? <Check size={14} aria-hidden="true" /> : null}
                 </span>
               </button>
             );
@@ -3117,7 +3132,7 @@ function FactListEditor({
           }
           type="button"
         >
-          + Add detail
+          <Plus aria-hidden="true" size={14} /> Add detail
         </button>
       </div>
       {facts.map((fact, index) => (
@@ -3218,7 +3233,7 @@ function ValueListEditor({
           onClick={() => onChange([...values, { value: '', priority: 50 }])}
           type="button"
         >
-          + Add value
+          <Plus aria-hidden="true" size={14} /> Add value
         </button>
       </div>
       {values.map((item, index) => (
@@ -3339,7 +3354,7 @@ function ChapterListEditor({
           }
           type="button"
         >
-          + Add chapter
+          <Plus aria-hidden="true" size={14} /> Add chapter
         </button>
       </div>
       {chapters.map((chapter, index) => (
@@ -3445,7 +3460,7 @@ function RelationshipListEditor({
           }
           type="button"
         >
-          + Add relationship
+          <Plus aria-hidden="true" size={14} /> Add relationship
         </button>
       </div>
       {value.map((relationship, index) => (
@@ -3602,7 +3617,7 @@ function ObjectListEditor({
           }
           type="button"
         >
-          + Add item
+          <Plus aria-hidden="true" size={14} /> Add item
         </button>
       </div>
       {items.map((item, index) => (
@@ -3702,7 +3717,7 @@ function TerminologyEditor({
           }
           type="button"
         >
-          + Add term
+          <Plus aria-hidden="true" size={14} /> Add term
         </button>
       </div>
       {entries.map(([key, entry], index) => (
@@ -3735,7 +3750,7 @@ function TerminologyEditor({
             }}
             type="button"
           >
-            ×
+            <X aria-hidden="true" size={14} />
           </button>
         </div>
       ))}
@@ -4109,19 +4124,15 @@ function DeveloperView() {
     <div className="account-content">
       <section className="section-intro-row developer-intro">
         <div>
-          <span className="eyebrow">Developer</span>
-          <h2>
-            Connect your agents
-            <br />
-            <em>without giving up you.</em>
-          </h2>
-          <p>
-            Generate a private key for the agent you already use. deal gives it
-            your model; it keeps its own tools and way of working.
-          </p>
+          <p>Manage agent connections, API keys, and your model provider.</p>
         </div>
         <SmallButton onClick={() => setShowAgentForm((value) => !value)}>
-          {showAgentForm ? 'Close' : 'Add a connection'}
+          {showAgentForm ? (
+            <X aria-hidden="true" size={16} />
+          ) : (
+            <Plus aria-hidden="true" size={16} />
+          )}
+          {showAgentForm ? 'Close' : 'Add connection'}
         </SmallButton>
       </section>
       {newKey && (
@@ -4137,7 +4148,7 @@ function DeveloperView() {
           <div className="new-key-value">
             <code>{newKey}</code>
             <button onClick={copy} type="button">
-              Copy
+              <Copy aria-hidden="true" size={14} /> Copy
             </button>
           </div>
           <button
@@ -4145,7 +4156,7 @@ function DeveloperView() {
             onClick={() => setNewKey('')}
             type="button"
           >
-            I stored it ↗
+            <Check aria-hidden="true" size={16} /> I stored it
           </button>
         </section>
       )}
@@ -4167,12 +4178,24 @@ function DeveloperView() {
             </label>
             <label>
               Built with
-              <input
+              <select
                 onChange={(event) => setRuntime(event.target.value)}
-                placeholder="OpenAI, Claude, Vercel AI…"
                 value={runtime}
-              />
+              >
+                <option value="">Custom integration</option>
+                <option value="openai">OpenAI</option>
+                <option value="claude">Claude</option>
+                <option value="vercel-ai-sdk">Vercel AI SDK</option>
+                <option value="langchain">LangChain</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="cursor">Cursor</option>
+                <option value="codex">Codex</option>
+              </select>
             </label>
+          </div>
+          <div className="developer-runtime-preview">
+            <BrandIcon name={runtime} size={24} />
+            <span>{runtime || 'Custom integration'}</span>
           </div>
           <SmallButton disabled={busy} type="submit">
             {busy ? 'Adding…' : 'Add connection'}
@@ -4192,6 +4215,7 @@ function DeveloperView() {
           aria-selected={developerTab === 'deal'}
           type="button"
         >
+          <KeyRound size={20} aria-hidden="true" />
           deal API keys
           <small>Connect an agent</small>
         </button>
@@ -4202,15 +4226,16 @@ function DeveloperView() {
           aria-selected={developerTab === 'byok'}
           type="button"
         >
-          bring your own key
-          <small>Use your AI Gateway</small>
+          <BrandIcon name="vercel" size={20} />
+          Model provider
+          <small>Vercel AI Gateway</small>
         </button>
       </div>
       {developerTab === 'byok' ? (
         <section className="account-panel gateway-panel">
           <PanelHeading
-            eyebrow="Your AI Gateway"
-            title="Choose the model behind your comparisons"
+            eyebrow="Vercel AI Gateway"
+            title="Provider credentials"
           />
           <p className="gateway-copy">
             Add your Vercel AI Gateway key once. deal encrypts it on the server,
@@ -4222,6 +4247,7 @@ function DeveloperView() {
             <>
               <div className="gateway-saved-card">
                 <div>
+                  <BrandIcon name="vercel" size={24} />
                   <span className="gateway-status-dot" />
                   <strong>Connected to Vercel AI Gateway</strong>
                   <p>{gateway.keyHint}</p>
@@ -4340,10 +4366,7 @@ function DeveloperView() {
       ) : agents.length ? (
         <>
           <section className="account-panel key-create-panel">
-            <PanelHeading
-              eyebrow="New developer key"
-              title="Choose where this key will live"
-            />
+            <PanelHeading eyebrow="API access" title="Create an API key" />
             <form className="key-create-form" onSubmit={createKey}>
               <label>
                 Connection
@@ -4367,6 +4390,7 @@ function DeveloperView() {
                 />
               </label>
               <SmallButton disabled={busy} type="submit">
+                <KeyRound size={16} aria-hidden="true" />{' '}
                 {busy ? 'Creating…' : 'Generate key'}
               </SmallButton>
             </form>
@@ -4376,9 +4400,7 @@ function DeveloperView() {
             <div className="connection-list">
               {agents.map((agent) => (
                 <article className="connection-row" key={agent.id}>
-                  <span
-                    className={`connection-status ${agent.status === 'active' ? 'connection-status-live' : ''}`}
-                  />
+                  <BrandIcon name={agent.runtime || 'custom'} size={24} />
                   <div>
                     <strong>{agent.name}</strong>
                     <p>
