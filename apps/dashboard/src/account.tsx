@@ -17,6 +17,38 @@ import Mistral from '@lobehub/icons/es/Mistral/components/Mono.js';
 import Qwen from '@lobehub/icons/es/Qwen/components/Mono.js';
 import Grok from '@lobehub/icons/es/Grok/components/Mono.js';
 import { authClient, dealApiUrl, getDealSessionToken } from './auth-client';
+import { countryOptions, languageOptions } from './locale-options';
+
+function LocaleSelect({
+  value,
+  onChange,
+  kind,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  kind: 'country' | 'language';
+}) {
+  const options = kind === 'country' ? countryOptions : languageOptions;
+  return (
+    <select
+      value={value}
+      autoComplete={kind === 'country' ? 'country-name' : 'language'}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      <option value="">
+        {kind === 'country' ? 'Select your country' : 'Select your language'}
+      </option>
+      {value && !options.some((option) => option.value === value) && (
+        <option value={value}>{value}</option>
+      )}
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 type CodeToken = { content: string; color?: string };
 type CodeTokenLines = CodeToken[][];
@@ -470,16 +502,24 @@ export function OnboardingPage({ onNavigate }: { onNavigate: Navigate }) {
         >
           <i style={{ width: `${((draft.step + 1) / 3) * 100}%` }} />
         </div>
+        <ol className="onboarding-step-labels" aria-label="Setup steps">
+          {['Your world', 'Your life', 'Your way'].map((label, index) => (
+            <li
+              key={label}
+              aria-current={draft.step === index ? 'step' : undefined}
+              data-complete={draft.step > index}
+            >
+              <span>{draft.step > index ? '✓' : index + 1}</span>
+              {label}
+            </li>
+          ))}
+        </ol>
         <form className="onboarding-card" onSubmit={saveStep}>
           <span className="eyebrow">
             {['Your world', 'Your everyday life', 'Your way'][draft.step]}
           </span>
           <h1>{titles[draft.step]}</h1>
-          <p>
-            {descriptions[draft.step]} Setup is optional. Your agent already has
-            deal’s conversational defaults; these details help it understand you
-            better.
-          </p>
+          <p>{descriptions[draft.step]}</p>
           <fieldset className="onboarding-fields" disabled={busy || !ready}>
             {draft.step === 0 && (
               <>
@@ -497,13 +537,10 @@ export function OnboardingPage({ onNavigate }: { onNavigate: Navigate }) {
                 </label>
                 <label>
                   Country <small>Optional</small>
-                  <input
-                    autoComplete="country-name"
-                    maxLength={100}
-                    minLength={2}
-                    placeholder="Where you live"
+                  <LocaleSelect
+                    kind="country"
                     value={draft.country}
-                    onChange={(event) => update('country', event.target.value)}
+                    onChange={(value) => update('country', value)}
                   />
                 </label>
                 <label>
@@ -520,11 +557,10 @@ export function OnboardingPage({ onNavigate }: { onNavigate: Navigate }) {
                 </label>
                 <label>
                   Preferred language <small>Optional</small>
-                  <input
-                    maxLength={100}
-                    placeholder="English, Yoruba, Spanish…"
+                  <LocaleSelect
+                    kind="language"
                     value={draft.language}
-                    onChange={(event) => update('language', event.target.value)}
+                    onChange={(value) => update('language', value)}
                   />
                 </label>
               </>
@@ -620,12 +656,15 @@ export function OnboardingPage({ onNavigate }: { onNavigate: Navigate }) {
 }
 
 const navItems = [
-  ['Overview', '◌'],
-  ['Try it', '✦'],
-  ['Human model', '◈'],
-  ['Memory', '⌁'],
-  ['Developer', '◇'],
-  ['Approvals', '✓'],
+  ['Overview', 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z'],
+  ['Try it', 'M12 3l2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8z'],
+  [
+    'Human model',
+    'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M4 21v-2a8 8 0 0 1 16 0v2',
+  ],
+  ['Memory', 'M4 5h16v14H4z M8 9h8 M8 13h6'],
+  ['Developer', 'M8 5l-6 7 6 7 M16 5l6 7-6 7 M14 3l-4 18'],
+  ['Approvals', 'M4 12l5 5L20 6'],
 ] as const;
 
 export function AccountExperience({ onNavigate }: { onNavigate: Navigate }) {
@@ -667,10 +706,7 @@ export function AccountExperience({ onNavigate }: { onNavigate: Navigate }) {
 
   if (loading || sessionPending || !profile) return null;
 
-  const heading =
-    active === 'Overview'
-      ? `Good morning, ${profile.displayName.split(' ')[0]}.`
-      : active;
+  const heading = active;
   return (
     <div className="account-shell">
       <aside className="account-sidebar">
@@ -687,12 +723,25 @@ export function AccountExperience({ onNavigate }: { onNavigate: Navigate }) {
         <nav className="account-nav" aria-label="Your account">
           {navItems.map(([label, icon]) => (
             <button
+              aria-current={active === label ? 'page' : undefined}
               className={active === label ? 'account-nav-active' : ''}
               key={label}
               onClick={() => setActive(label)}
               type="button"
             >
-              <span>{icon}</span>
+              <svg
+                aria-hidden="true"
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d={icon} />
+              </svg>
               {label}
               {label === 'Approvals' && approvalCount > 0 && (
                 <b>{approvalCount}</b>
@@ -701,10 +750,14 @@ export function AccountExperience({ onNavigate }: { onNavigate: Navigate }) {
           ))}
         </nav>
         <div className="account-sidebar-bottom">
-          <button onClick={() => onNavigate('/')} type="button">
+          <button
+            aria-label="View deal website"
+            onClick={() => onNavigate('/')}
+            type="button"
+          >
             ↗ <span>View deal</span>
           </button>
-          <button onClick={signOut} type="button">
+          <button aria-label="Sign out" onClick={signOut} type="button">
             ↪ <span>Sign out</span>
           </button>
         </div>
@@ -712,9 +765,7 @@ export function AccountExperience({ onNavigate }: { onNavigate: Navigate }) {
       <main className="account-main">
         <header className="account-header">
           <div>
-            <span className="eyebrow">
-              {active === 'Overview' ? 'Your model at a glance' : 'Your model'}
-            </span>
+            <span className="eyebrow">{profile.displayName}’s workspace</span>
             <h1>{heading}</h1>
           </div>
           <div className="account-header-meta">
@@ -856,7 +907,13 @@ function TryItView() {
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
+  const conversation = useRef<HTMLDivElement>(null);
   const activeRun = runs[0];
+
+  useEffect(() => {
+    const pane = conversation.current;
+    if (pane) pane.scrollTop = pane.scrollHeight;
+  }, [runs, busy]);
 
   useEffect(() => {
     request<{ agents: Agent[] }>('/v1/agents')
@@ -945,31 +1002,6 @@ function TryItView() {
 
   return (
     <div className="account-content try-it-content">
-      <section className="try-it-intro">
-        <div>
-          <span className="eyebrow">A small experiment</span>
-          <h2>
-            See the difference
-            <br />
-            <em>understanding makes.</em>
-          </h2>
-          <p>
-            Ask the same question twice: once with a plain model, and once with
-            your human model guiding the answer. The difference is the point.
-          </p>
-        </div>
-        <div className="try-it-trust-note">
-          <span className="try-it-live-dot" />
-          <div>
-            <strong>Private by design</strong>
-            <small>
-              Your model stays on DEAL. Only the task reaches your model
-              provider.
-            </small>
-          </div>
-        </div>
-      </section>
-
       <section className="try-surface">
         <div className="try-agent-bar">
           <span className="eyebrow">Testing with</span>
@@ -993,94 +1025,88 @@ function TryItView() {
             <i /> {agents.length ? 'Ready' : 'Connect one in Developer'}
           </span>
         </div>
-        {!activeRun ? (
-          <div className="try-empty-state">
-            <div className="try-empty-mark">✦</div>
-            <span className="eyebrow">Start with something real</span>
-            <h3>Give your agent a moment that needs judgment.</h3>
-            <p>
-              Try a decision, a reply, a plan, or anything where your voice and
-              priorities should change the answer.
-            </p>
-            <div className="try-suggestions">
-              {[
-                'Help me decide what to focus on this week.',
-                'Draft a thoughtful reply to a difficult message.',
-                'Explain this idea simply, with the tradeoffs included.',
-              ].map((suggestion) => (
-                <button
-                  key={suggestion}
-                  onClick={() => setTask(suggestion)}
-                  type="button"
-                >
-                  {suggestion} <span>↗</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="try-results">
-            <div className="try-question">
-              <span className="try-question-avatar">{initials('You')}</span>
-              <p>{activeRun.task}</p>
-            </div>
-            <div className="try-response-grid">
-              <ComparisonCard
-                label="Plain answer"
-                description="The model on its own"
-                response={activeRun.raw.text}
-                tone="plain"
-              />
-              <ComparisonCard
-                label="With your understanding"
-                description="The same model with DEAL context"
-                response={activeRun.humanized.text}
-                tone="humanized"
-                context={activeRun.context}
-              />
-            </div>
-            <div className="try-run-meta">
-              <span>Model · {activeRun.model}</span>
-              <span>
-                Profile ·{' '}
-                {activeRun.context.professionalProfile ?? 'Generalist'}
-              </span>
-              {activeRun.context.cognition && (
-                <span>
-                  Understanding · {activeRun.context.cognition.category} ·{' '}
-                  {activeRun.context.cognition.risk} risk
-                </span>
-              )}
-              <span>
-                {activeRun.context.memoryReferences} memories considered
-              </span>
-              <span>Packet · {activeRun.context.packetId.slice(0, 12)}…</span>
-            </div>
-            {runs.length > 1 && (
-              <div className="try-history">
-                <span className="eyebrow">Earlier questions</span>
-                {runs.slice(1).map((run) => (
+        <div
+          className="try-conversation"
+          ref={conversation}
+          role="region"
+          aria-label="Conversation"
+          tabIndex={0}
+        >
+          {!activeRun ? (
+            <div className="try-empty-state">
+              <h3>What would you like help with?</h3>
+              <p>Write a message below or choose a prompt.</p>
+              <div className="try-suggestions">
+                {[
+                  'Help me decide what to focus on this week.',
+                  'Draft a thoughtful reply to a difficult message.',
+                  'Explain this idea simply, with the tradeoffs included.',
+                ].map((suggestion) => (
                   <button
-                    key={run.context.packetId}
-                    onClick={() =>
-                      setRuns((current) => [
-                        run,
-                        ...current.filter(
-                          (item) =>
-                            item.context.packetId !== run.context.packetId,
-                        ),
-                      ])
-                    }
+                    key={suggestion}
+                    onClick={() => setTask(suggestion)}
                     type="button"
                   >
-                    {run.task}
+                    {suggestion} <span>↗</span>
                   </button>
                 ))}
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          ) : (
+            <div className="try-results">
+              {[...runs].reverse().map((run) => (
+                <section
+                  className="try-turn"
+                  key={run.context.packetId}
+                  aria-label={run.task}
+                >
+                  <div className="try-question">
+                    <span className="try-question-avatar">
+                      {initials('You')}
+                    </span>
+                    <p>{run.task}</p>
+                  </div>
+                  <div className="try-comparison-hint">
+                    Swipe horizontally to compare both answers
+                  </div>
+                  <div
+                    className="try-response-grid"
+                    tabIndex={0}
+                    role="region"
+                    aria-label="Side-by-side answer comparison"
+                  >
+                    <ComparisonCard
+                      label="Plain answer"
+                      description="The model on its own"
+                      response={run.raw.text}
+                      tone="plain"
+                    />
+                    <ComparisonCard
+                      label="With DEAL"
+                      description="The same model with your context"
+                      response={run.humanized.text}
+                      tone="humanized"
+                      context={run.context}
+                    />
+                  </div>
+                  <details className="try-run-meta">
+                    <summary>Response details</summary>
+                    <span>Model · {run.model}</span>
+                    <span>
+                      {run.context.memoryReferences} memories considered
+                    </span>
+                  </details>
+                </section>
+              ))}
+            </div>
+          )}
 
+          {busy && (
+            <div className="try-pending" role="status">
+              <span className="try-spinner" /> Comparing answers…
+            </div>
+          )}
+        </div>
         {errorMessage && (
           <div className="account-error try-error">{errorMessage}</div>
         )}
@@ -1117,7 +1143,12 @@ function TryItView() {
             aria-label="Ask your agent"
             onChange={(event) => setTask(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
+              if (
+                event.key === 'Enter' &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing &&
+                window.matchMedia('(pointer: fine)').matches
+              ) {
                 event.preventDefault();
                 void compare();
               }
@@ -1136,7 +1167,7 @@ function TryItView() {
           </button>
         </form>
         <small className="try-composer-note">
-          Enter to compare · Shift + Enter for a new line
+          Send to compare answers side by side
         </small>
       </section>
     </div>
@@ -1268,38 +1299,6 @@ function OverviewView({
   const coverage = Math.round((readySections / readiness.length) * 100);
   return (
     <div className="account-content">
-      <section className="account-hero-card">
-        <div>
-          <span className="eyebrow">Your human model</span>
-          <h2>
-            Understanding that
-            <br />
-            <em>travels with you.</em>
-          </h2>
-          <p>
-            {profile.identity?.mission
-              ? display(profile.identity.mission)
-              : 'Your model is the place where your voice, choices, and boundaries become useful to every agent you use.'}
-          </p>
-          <button
-            className="account-text-link"
-            onClick={() => onNavigate('Human model')}
-            type="button"
-          >
-            Review your model ↗
-          </button>
-        </div>
-        <div className="model-signal">
-          <div className="signal-top">
-            <i /> model is live <span>v{profile.modelVersion ?? 1}</span>
-          </div>
-          <strong>{voice}</strong>
-          <small>Voice · priorities · boundaries</small>
-          <div className="signal-rule">
-            <i />
-          </div>
-        </div>
-      </section>
       {errorMessage && <div className="account-error">{errorMessage}</div>}
       <section className="account-stat-grid">
         <Stat
@@ -1338,8 +1337,8 @@ function OverviewView({
       </section>
       <section className="account-panel overview-readiness-panel">
         <PanelHeading
-          eyebrow="The layer between you and AI"
-          title="Your understanding, ready to travel"
+          eyebrow="Profile status"
+          title="Your saved context"
           action="Edit human model"
           onAction={() => onNavigate('Human model')}
         />
@@ -1863,16 +1862,7 @@ function HumanModelView({
     <div className="account-content">
       <section className="section-intro-row model-page-intro">
         <div>
-          <span className="eyebrow">Human model</span>
-          <h2>
-            The parts that make
-            <br />
-            <em>your way of working.</em>
-          </h2>
-          <p>
-            Shape the identity, voice, history, boundaries, and judgment your
-            agents carry with them. You can change every part at any time.
-          </p>
+          <p>Manage your identity, preferences, and saved context.</p>
         </div>
         <div className="model-page-actions">
           {editing && (
@@ -1989,6 +1979,16 @@ function HumanModelView({
                   updateSection('identity', 'timezone', value)
                 }
               />
+              <label className="editor-field">
+                Country
+                <LocaleSelect
+                  kind="country"
+                  value={String(draft.identity.country ?? '')}
+                  onChange={(value) =>
+                    updateSection('identity', 'country', value)
+                  }
+                />
+              </label>
               <TextField
                 label="Honorific"
                 value={draft.identity.honorific}
@@ -2267,13 +2267,16 @@ function HumanModelView({
                   updateSection('persona', 'workingHours', value)
                 }
               />
-              <TextField
-                label="Language"
-                value={draft.persona.language}
-                onChange={(value) =>
-                  updateSection('persona', 'language', value)
-                }
-              />
+              <label className="editor-field">
+                Language
+                <LocaleSelect
+                  kind="language"
+                  value={String(draft.persona.language ?? '')}
+                  onChange={(value) =>
+                    updateSection('persona', 'language', value)
+                  }
+                />
+              </label>
               <TextField
                 label="Dialect"
                 value={draft.persona.dialect}

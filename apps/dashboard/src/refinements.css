@@ -1202,7 +1202,7 @@ a:focus-visible {
 .try-empty-state {
   display: flex;
   align-items: center;
-  min-height: 386px;
+  min-height: 240px;
   flex-direction: column;
   justify-content: center;
   text-align: center;
@@ -1223,7 +1223,7 @@ a:focus-visible {
   max-width: 460px;
   margin-top: 14px;
   color: #221b2a;
-  font-size: clamp(25px, 3vw, 36px);
+  font-size: clamp(21px, 2vw, 26px);
   font-weight: 470;
   letter-spacing: -0.055em;
   line-height: 1.05;
@@ -1752,7 +1752,7 @@ a:focus-visible {
     max-width: 44vw;
   }
   .try-empty-state {
-    min-height: 430px;
+    min-height: 240px;
   }
   .try-response-grid {
     grid-template-columns: 1fr;
@@ -1834,11 +1834,12 @@ a:focus-visible {
   background: #fbfafc;
 }
 .account-sidebar {
-  position: sticky;
+  position: relative;
   top: 0;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: auto;
+  min-height: 100dvh;
   padding: 27px 16px 18px;
   background: #f0edfa;
   border-right: 1px solid #1e192d12;
@@ -2520,6 +2521,7 @@ a:focus-visible {
   grid-column: 1 / -1;
 }
 .editor-grid input,
+.editor-grid select,
 .editor-grid textarea,
 .key-create-form input,
 .key-create-form select,
@@ -2543,6 +2545,7 @@ a:focus-visible {
   resize: vertical;
 }
 .editor-grid input:focus,
+.editor-grid select:focus,
 .editor-grid textarea:focus,
 .key-create-form input:focus,
 .key-create-form select:focus,
@@ -3215,8 +3218,42 @@ a:focus-visible {
   cursor: wait;
 }
 .onboarding-main {
-  width: min(620px, calc(100% - 32px));
-  margin: 7vh auto 0;
+  width: min(660px, calc(100% - 40px));
+  margin: clamp(20px, 5vh, 58px) auto 0;
+  padding-bottom: max(32px, env(safe-area-inset-bottom));
+}
+.onboarding-step-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.onboarding-step-labels li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #81778c;
+  font-size: 13px;
+}
+.onboarding-step-labels li > span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid #d9d3e2;
+  border-radius: 50%;
+  font-size: 11px;
+}
+.onboarding-step-labels [aria-current],
+.onboarding-step-labels [data-complete='true'] {
+  color: #332344;
+}
+.onboarding-step-labels [aria-current] > span {
+  color: white;
+  background: #332344;
+  border-color: #332344;
 }
 .onboarding-progress {
   height: 3px;
@@ -3243,12 +3280,12 @@ a:focus-visible {
   max-width: 470px;
   margin-top: 15px;
   font-size: clamp(34px, 5vw, 52px);
-  line-height: 0.95;
+  line-height: 1.08;
 }
 .onboarding-card > p {
   max-width: 480px;
   margin-top: 14px;
-  font-size: 12px;
+  font-size: 15px;
   line-height: 1.6;
 }
 .choice-grid {
@@ -3323,6 +3360,8 @@ a:focus-visible {
 }
 .onboarding-fields label {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
   gap: 9px;
   color: #38313f;
   font-size: 14px;
@@ -3332,7 +3371,9 @@ a:focus-visible {
   font-size: 12px;
 }
 .onboarding-fields input,
+.onboarding-fields select,
 .onboarding-fields textarea {
+  grid-column: 1 / -1;
   box-sizing: border-box;
   width: 100%;
   padding: 12px 14px;
@@ -3347,6 +3388,7 @@ a:focus-visible {
   resize: vertical;
 }
 .onboarding-fields input:focus-visible,
+.onboarding-fields select:focus-visible,
 .onboarding-fields textarea:focus-visible {
   outline: 2px solid #9f8fca;
   outline-offset: 2px;
@@ -3384,6 +3426,7 @@ a:focus-visible {
   .account-sidebar {
     position: static;
     height: auto;
+    min-height: 0;
     padding: 18px 18px 9px;
     border-right: 0;
     border-bottom: 1px solid #1e192d12;
@@ -3679,6 +3722,238 @@ a:focus-visible {
   .about-closing {
     padding-top: 80px;
     padding-bottom: 90px;
+  }
+}
+
+/* Readable account controls and compact mobile navigation. */
+.account-person > span:last-child,
+.account-panel,
+.model-card,
+.editor-field,
+.try-response-card,
+.gateway-model-option-copy {
+  min-width: 0;
+}
+.account-nav button {
+  min-height: 44px;
+  font-size: 13px;
+}
+.account-button {
+  min-height: 44px;
+  font-size: 13px;
+}
+.account-panel p,
+.model-card p {
+  line-height: 1.65;
+}
+.account-stat > span,
+.account-stat small,
+.model-signal small,
+.overview-readiness-row small,
+.account-empty-state p,
+.model-card-empty,
+.account-pulse small {
+  font-size: 12px;
+  line-height: 1.55;
+  color: #74687f;
+}
+.model-signal small {
+  color: #c4b8cf;
+}
+.overview-readiness-row strong,
+.model-items li,
+.account-text-link {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.account-hero-card > div > p {
+  font-size: 14px;
+  line-height: 1.65;
+}
+.account-content code {
+  overflow-wrap: anywhere;
+}
+.account-content pre code {
+  overflow-wrap: normal;
+}
+.onboarding-skip {
+  min-height: 44px;
+}
+.onboarding-page .account-button:focus-visible,
+.onboarding-skip:focus-visible {
+  outline: 2px solid #8d78ae;
+  outline-offset: 3px;
+}
+@media (max-width: 850px) {
+  .account-sidebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+    padding: 16px 20px;
+  }
+  .account-sidebar > .account-logo {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+  }
+  .account-person {
+    display: none;
+  }
+  .account-sidebar-bottom {
+    grid-column: 2;
+    grid-row: 1;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .account-sidebar-bottom button {
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .account-nav {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    overflow: visible;
+    margin: 0;
+    padding: 0;
+  }
+  .account-nav button {
+    justify-content: center;
+    min-width: 0;
+    padding: 9px 6px;
+    font-size: 12px;
+    gap: 6px;
+  }
+  .account-nav .account-nav-active {
+    box-shadow: 0 2px 8px #2c194a0a;
+  }
+  .account-main {
+    padding: 0 20px max(32px, env(safe-area-inset-bottom));
+  }
+  .account-header {
+    padding: 26px 0;
+    gap: 12px;
+  }
+  .account-header h1 {
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+  .account-header-meta {
+    flex-shrink: 0;
+  }
+  .account-content {
+    gap: 16px;
+  }
+  .account-hero-card {
+    grid-template-columns: 1fr;
+  }
+  .editor-grid {
+    grid-template-columns: 1fr;
+  }
+  .editor-wide {
+    grid-column: auto;
+  }
+}
+@media (max-width: 560px) {
+  .account-shell input,
+  .account-shell textarea,
+  .account-shell select {
+    font-size: 16px;
+    max-width: 100%;
+  }
+  .account-panel {
+    padding: 20px 16px;
+  }
+  .account-main {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+  .account-hero-card h2,
+  .section-intro-row h2 {
+    font-size: clamp(28px, 8vw, 36px);
+    line-height: 1.12;
+  }
+  .onboarding-header {
+    padding: 16px 0;
+    gap: 8px;
+  }
+  .onboarding-skip {
+    margin-right: 4px;
+    font-size: 12px;
+  }
+  .onboarding-header > span {
+    white-space: nowrap;
+    font-size: 11px;
+  }
+  .onboarding-main {
+    width: calc(100% - 28px);
+    margin-top: 12px;
+  }
+  .onboarding-step-labels {
+    gap: 5px;
+  }
+  .onboarding-step-labels li {
+    font-size: 11px;
+    gap: 5px;
+  }
+  .onboarding-card {
+    margin-top: 22px;
+    padding: 24px 20px;
+    border-radius: 16px;
+  }
+  .onboarding-card h1 {
+    font-size: clamp(28px, 8vw, 36px);
+  }
+  .onboarding-card > p {
+    font-size: 14px;
+  }
+  .onboarding-fields {
+    gap: 18px;
+    margin-top: 24px;
+  }
+  .onboarding-fields label {
+    font-size: 14px;
+  }
+  .onboarding-actions {
+    gap: 10px;
+    margin-top: 24px;
+  }
+  .onboarding-actions .account-button {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+  .try-agent-bar {
+    flex-wrap: wrap;
+  }
+  .try-agent-bar select {
+    max-width: 100%;
+    min-height: 44px;
+  }
+  .try-agent-status {
+    margin-left: 0;
+  }
+  .try-response-grid {
+    min-width: 0;
+  }
+  .try-markdown table {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .try-composer {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+  .gateway-actions {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .editor-save-bar {
+    position: static;
   }
 }
 
@@ -4058,6 +4333,7 @@ a:focus-visible {
   .editor-save-bar {
     align-items: flex-start;
     flex-direction: column;
+    position: static;
   }
   .editor-save-actions {
     width: 100%;
@@ -4076,5 +4352,184 @@ a:focus-visible {
   }
   .terminology-row {
     grid-template-columns: 1fr 1fr 25px;
+  }
+}
+
+/* Chat scrolls independently while the composer stays within reach. */
+.try-surface {
+  display: flex;
+  flex-direction: column;
+  height: max(440px, calc(100dvh - 170px));
+  min-height: 0;
+  padding: 20px;
+  overflow: hidden;
+}
+.try-agent-bar {
+  width: 100%;
+  flex-shrink: 0;
+}
+.try-conversation {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 24px 2px;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #c9bfd4 transparent;
+}
+.try-conversation:focus-visible,
+.try-response-grid:focus-visible {
+  outline: 2px solid #9f8fca;
+  outline-offset: -2px;
+}
+.try-conversation .try-empty-state {
+  min-height: 100%;
+}
+.try-results {
+  min-height: 0;
+}
+.try-turn + .try-turn {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #2e263212;
+}
+.try-question {
+  justify-content: flex-end;
+  max-width: 100%;
+  margin-bottom: 20px;
+}
+.try-question p {
+  max-width: 85%;
+  padding: 12px 16px;
+  border-radius: 16px 16px 4px 16px;
+  background: #eee9f8;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.try-question-avatar {
+  display: none;
+}
+.try-comparison-hint {
+  display: none;
+}
+.try-run-meta {
+  display: block;
+  margin-top: 12px;
+  font-size: 11px;
+}
+.try-run-meta summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.try-run-meta span {
+  display: block;
+  padding: 3px 0;
+  overflow-wrap: anywhere;
+}
+.try-surface .try-composer {
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: none;
+  margin: 12px 0 0;
+  padding: 14px 54px 14px;
+}
+.try-composer textarea {
+  min-height: 48px;
+  font-size: 16px;
+}
+.try-plus,
+.try-send {
+  bottom: 14px;
+}
+.try-composer-note {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.try-attachment,
+.try-error {
+  flex-shrink: 0;
+}
+.try-pending {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 16px;
+  color: #74687f;
+  font-size: 13px;
+}
+@media (max-width: 850px) {
+  .try-surface {
+    height: max(400px, calc(100dvh - 280px));
+    padding: 14px;
+    border-radius: 14px;
+  }
+}
+@media (max-width: 760px) {
+  .try-it-content .try-surface {
+    height: max(260px, calc(100dvh - 310px));
+  }
+  .try-response-grid {
+    grid-template-columns: repeat(2, minmax(270px, 1fr));
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 12px;
+    scroll-snap-type: x proximity;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+  .try-response-card {
+    scroll-snap-align: start;
+    padding: 16px;
+  }
+  .try-response-heading {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .try-response-actions {
+    min-height: 32px;
+  }
+  .try-response-actions > button {
+    min-height: 36px;
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+  .try-response-heading h3 {
+    font-size: 17px;
+  }
+  .try-comparison-hint {
+    display: block;
+    margin-bottom: 10px;
+    color: #81778c;
+    font-size: 11px;
+  }
+  .try-agent-bar select {
+    flex: 1;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .try-agent-status {
+    font-size: 10px;
+  }
+  .try-conversation {
+    padding-top: 16px;
+  }
+  .try-question p {
+    font-size: 14px;
+  }
+  .try-plus,
+  .try-send {
+    width: 38px;
+    height: 38px;
+  }
+  .try-suggestions {
+    flex-direction: column;
+    width: 100%;
+    margin-top: 16px;
+  }
+  .try-suggestions button {
+    min-height: 44px;
+    font-size: 12px;
   }
 }
