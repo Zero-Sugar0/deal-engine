@@ -1,0 +1,438 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/schemas/entry-v1.json",
+  "title": "Context Entry v1",
+  "description": "A context entry describes a role, life area, or system persona an agent may adopt or reason about. Entries are data, not instructions to the user, and carry provenance, safety, and evaluation metadata.",
+  "type": "object",
+  "required": [
+    "id",
+    "version",
+    "kind",
+    "title",
+    "category",
+    "summary",
+    "objective",
+    "scope",
+    "responsibilities",
+    "behaviorContract",
+    "operatingPatterns",
+    "failureModes",
+    "requiredContext",
+    "escalation",
+    "safetyBoundaries",
+    "dataHandling",
+    "authority",
+    "regulation",
+    "evaluation",
+    "lifecycle"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*_v[0-9]+$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "profession",
+        "life_context",
+        "relationship",
+        "business",
+        "consumer",
+        "understanding",
+        "thought",
+        "non_human_life",
+        "system_role"
+      ]
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "category": { "type": "string", "minLength": 1 },
+    "aliases": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "routing": {
+      "type": "object",
+      "required": ["terms"],
+      "additionalProperties": false,
+      "properties": {
+        "terms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["term", "weight"],
+            "additionalProperties": false,
+            "properties": {
+              "term": { "type": "string", "minLength": 1 },
+              "weight": { "type": "number", "minimum": 0, "maximum": 1 },
+              "ambiguous": { "type": "boolean" }
+            }
+          }
+        },
+        "negativeTerms": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "summary": { "type": "string", "minLength": 1 },
+    "objective": { "type": "string", "minLength": 1 },
+    "scope": {
+      "type": "object",
+      "required": ["inScope", "outOfScope"],
+      "additionalProperties": false,
+      "properties": {
+        "inScope": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "outOfScope": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      }
+    },
+    "responsibilities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "knowledgeAreas": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "behaviorContract": {
+      "type": "object",
+      "required": ["tone", "defaults", "must", "mustNot"],
+      "additionalProperties": false,
+      "properties": {
+        "tone": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "defaults": { "type": "array", "items": { "type": "string" } },
+        "must": { "type": "array", "items": { "type": "string" } },
+        "mustNot": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "operatingPatterns": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+    },
+    "communicationPatterns": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+    },
+    "decisionPatterns": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+    },
+    "failureModes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "detection", "mitigation"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "detection": { "type": "string" },
+          "mitigation": { "type": "string" }
+        }
+      }
+    },
+    "requiredContext": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "necessity"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "necessity": {
+            "type": "string",
+            "enum": ["required", "helpful", "optional"]
+          },
+          "sensitivity": {
+            "type": "string",
+            "enum": ["none", "personal", "sensitive", "special_category"]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "user_stated",
+              "user_confirmed",
+              "inferred",
+              "third_party",
+              "system"
+            ]
+          }
+        }
+      }
+    },
+    "escalation": {
+      "type": "object",
+      "required": ["triggers", "routes"],
+      "additionalProperties": false,
+      "properties": {
+        "triggers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["condition", "severity", "action"],
+            "additionalProperties": false,
+            "properties": {
+              "condition": { "type": "string" },
+              "severity": {
+                "type": "string",
+                "enum": ["info", "elevated", "urgent", "emergency"]
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "note",
+                  "clarify",
+                  "soften",
+                  "refuse_part",
+                  "refer",
+                  "stop_and_route"
+                ]
+              }
+            }
+          }
+        },
+        "routes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "emergency": { "type": "string" },
+              "crisis": { "type": "string" },
+              "specialist": { "type": "string" },
+              "verifiedAt": { "type": "string", "format": "date" }
+            }
+          }
+        }
+      }
+    },
+    "safetyBoundaries": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "dataHandling": {
+      "type": "object",
+      "required": [
+        "sensitiveClasses",
+        "consentRequired",
+        "retention",
+        "minimization"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sensitiveClasses": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "PII",
+              "PHI",
+              "financial",
+              "credentials",
+              "minor_data",
+              "biometric",
+              "mental_health",
+              "sexual_life",
+              "political",
+              "religious",
+              "ethnic",
+              "immigration",
+              "criminal",
+              "location",
+              "other"
+            ]
+          }
+        },
+        "consentRequired": { "type": "boolean" },
+        "retention": {
+          "type": "string",
+          "enum": [
+            "session_only",
+            "until_user_deletes",
+            "policy_defined",
+            "never_store"
+          ]
+        },
+        "minimization": { "type": "string" }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "required": ["mayDecide", "mayNotDecide", "humanOwnerRequired"],
+      "additionalProperties": false,
+      "properties": {
+        "mayDecide": { "type": "array", "items": { "type": "string" } },
+        "mayNotDecide": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "humanOwnerRequired": { "type": "boolean" }
+      }
+    },
+    "regulation": {
+      "type": "object",
+      "required": [
+        "regulated",
+        "licenseRequiredFor",
+        "jurisdictions",
+        "lastVerified"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "regulated": { "type": "boolean" },
+        "licenseRequiredFor": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "jurisdictions": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^([A-Z]{2}|GLOBAL)$" },
+          "minItems": 1
+        },
+        "language": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "lastVerified": { "type": "string", "format": "date" },
+        "sources": {
+          "type": "array",
+          "items": { "type": "string", "format": "uri" }
+        }
+      }
+    },
+    "toolBindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "restricted": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "requiresApproval": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "examples": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "good": { "$ref": "#/$defs/exampleList" },
+        "bad": { "$ref": "#/$defs/exampleList" }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "required": ["testCases"],
+      "additionalProperties": false,
+      "properties": {
+        "testCases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["input", "expectedRoute", "expectedBehavior"],
+            "additionalProperties": false,
+            "properties": {
+              "input": { "type": "string" },
+              "expectedRoute": { "type": "string" },
+              "expectedBehavior": { "type": "string" },
+              "expectedEscalation": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "note",
+                  "clarify",
+                  "soften",
+                  "refuse_part",
+                  "refer",
+                  "stop_and_route"
+                ]
+              }
+            }
+          }
+        },
+        "metrics": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "required": ["status", "owner", "changelog"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["draft", "review", "active", "deprecated", "retired"]
+        },
+        "owner": { "type": "string" },
+        "supersedes": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*_v[0-9]+$"
+        },
+        "deprecatedBy": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*_v[0-9]+$"
+        },
+        "changelog": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["version", "date", "change"],
+            "additionalProperties": false,
+            "properties": {
+              "version": { "type": "string" },
+              "date": { "type": "string", "format": "date" },
+              "change": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "exampleList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["input", "response", "why"],
+        "additionalProperties": false,
+        "properties": {
+          "input": { "type": "string" },
+          "response": { "type": "string" },
+          "why": { "type": "string" }
+        }
+      }
+    }
+  }
+}

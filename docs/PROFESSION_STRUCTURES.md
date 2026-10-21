@@ -28,6 +28,13 @@ safety, cross-cultural understanding, decision-making, and reflective
 journaling. They are defined in `apps/api/src/human-contexts.ts` and available
 through `GET /v1/human-contexts`.
 
+The richer context-entry contract is also being introduced additively in v1.
+Its schema is [`context-entry-v1.schema.json`](./context-entry-v1.schema.json),
+the shared pattern registry is [`context-patterns-v1.json`](./context-patterns-v1.json),
+and the expanded cognitive-engineer entry is
+[`cognitive-engineer-v1.json`](./cognitive-engineer-v1.json). These files do
+not create a v2 or supersede the existing `cognitive_engineer_v1` catalog entry.
+
 Every profile has a `subjectType`. Professional profiles use `profession`; the
 life-context pack uses `animal`, `plant`, `fungus`, `microbial`, `ecosystem`,
 `object`, or `life_context`. A life context changes the agent's task guidance;
