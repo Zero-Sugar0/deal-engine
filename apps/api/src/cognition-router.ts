@@ -214,6 +214,7 @@ export function routeTaskCognition(
     licenseRequiredFor: routeProfile.licenseRequiredFor,
     restrictedActions: routeProfile.restrictedActions,
     approvalActions: routeProfile.approvalActions,
+    contextAccess: 'automatic',
     confidence,
     risk: riskFor(routeProfile, task),
     signals: [...selected.signals, `task:category:${routeProfile.category}`],

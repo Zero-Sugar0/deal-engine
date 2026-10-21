@@ -53,7 +53,10 @@ Content-Type: application/json
 The context compiler then adds the selected profile’s responsibilities,
 knowledge areas, operating patterns, failure modes, escalation triggers,
 sensitive data classes, safety boundaries, restricted actions, and approval
-actions to the packet. A delegation
+actions to the packet. Context retrieval and task cognition are automatic after
+the delegation grants the agent context access; `approvalActions` do not gate
+that read. They are only used if the agent later asks to execute a listed
+consequential action through the policy endpoint. A delegation
 profile takes precedence over a general `domain.profession` field.
 
 ## Person-specific facts
@@ -127,9 +130,11 @@ The host agent and organization remain responsible for credentials, regulated
 workflows, emergency procedures, and domain-specific compliance.
 
 Restricted and approval actions are also enforced by the deterministic policy
-engine, not only described to the model. For example, a personal-finance
-profile can deny `investment_recommendation` even if a host agent accidentally
-declares that action in its delegated write scope.
+engine, not only described to the model. This happens at action time, not when
+the agent requests its human context. For example, a personal-finance profile
+can deny `investment_recommendation` even if a host agent accidentally declares
+that action in its delegated write scope, while the same agent can still read
+the approved persona and decision context without an approval request.
 
 ## Discovery API
 

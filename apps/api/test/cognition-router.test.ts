@@ -155,6 +155,7 @@ describe('task cognition routing', () => {
     expect(route.licenseRequiredFor).toContain('diagnosis');
     expect(route.approvalActions).toContain('sensitive_health_record_write');
     expect(route.restrictedActions).toContain('prescribe');
+    expect(route.contextAccess).toBe('automatic');
   });
 
   it('accepts self-described identity without allowing inferred protected traits', () => {

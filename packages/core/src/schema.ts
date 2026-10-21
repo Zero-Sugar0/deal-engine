@@ -435,7 +435,10 @@ export const CognitionRouteSchema = z.object({
   regulated: z.boolean().default(false),
   licenseRequiredFor: z.array(z.string()).default([]),
   restrictedActions: z.array(z.string()).default([]),
+  /** Consequential actions only; this never gates context retrieval. */
   approvalActions: z.array(z.string()).default([]),
+  /** Context and cognition are read automatically after delegation checks. */
+  contextAccess: z.literal('automatic').default('automatic'),
   confidence: z.number().min(0).max(1),
   risk: CognitionRiskSchema,
   signals: z.array(z.string()).default([]),
@@ -531,6 +534,7 @@ export const ProfessionProfileSchema = z.object({
   regulated: z.boolean().default(false),
   licenseRequiredFor: z.array(z.string()).default([]),
   restrictedActions: z.array(z.string()).default([]),
+  /** Consequential actions only; this never gates context retrieval. */
   approvalActions: z.array(z.string()).default([]),
   source: z.enum(['system', 'organization', 'human']).default('system'),
 });
@@ -561,6 +565,8 @@ export const ProfessionalContextSchema = z.object({
   licenseRequiredFor: z.array(z.string()).default([]),
   restrictedActions: z.array(z.string()).default([]),
   approvalActions: z.array(z.string()).default([]),
+  /** Context and persona are read automatically after delegation checks. */
+  contextAccess: z.literal('automatic').default('automatic'),
   requiredContext: z.array(z.string()).default([]),
   missingContext: z.array(z.string()).default([]),
   humanFacts: z.array(ProfileFactSchema).default([]),

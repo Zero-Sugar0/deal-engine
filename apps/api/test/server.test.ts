@@ -370,6 +370,25 @@ describe('DEAL control plane', () => {
     expect(context.packet.cognition.signals).toContain('task:diabetic');
   });
 
+  it('returns cognitive context without approval; approval applies only to actions', async () => {
+    const contextResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/context',
+      headers: { authorization: `Bearer ${agentToken}` },
+      payload: {
+        task: 'Design a human context and behavior contract for my AI agent',
+        requestedCapabilities: ['context_read', 'response_draft'],
+      },
+    });
+
+    expect(contextResponse.statusCode).toBe(200);
+    const packet = contextResponse.json().packet;
+    expect(packet.cognition.profileId).toBe('cognitive_engineer_v1');
+    expect(packet.cognition.contextAccess).toBe('automatic');
+    expect(packet.cognition.approvalActions).toContain('publish_human_model');
+    expect(packet.professional.contextAccess).toBe('automatic');
+  });
+
   it('registers, attests, pins, distributes, and revokes organization skills', async () => {
     const registeredResponse = await app.inject({
       method: 'POST',

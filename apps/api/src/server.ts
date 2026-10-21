@@ -250,6 +250,9 @@ function professionalPolicyRules(professional: {
   restrictedActions?: string[];
   approvalActions?: string[];
 }): PolicyRule[] {
+  // These rules are consulted only by action authorization endpoints. They
+  // must never turn a context read, persona render, or cognition route into an
+  // approval request.
   const profileId = professional.profileId ?? 'professional';
   return [
     ...(professional.restrictedActions ?? []).map((action) => ({
@@ -656,6 +659,7 @@ async function compileDashboardContext(input: {
         licenseRequiredFor: selectedProfession.licenseRequiredFor,
         restrictedActions: selectedProfession.restrictedActions,
         approvalActions: selectedProfession.approvalActions,
+        contextAccess: 'automatic' as const,
         requiredContext: selectedProfession.requiredContext,
         missingContext: missingProfessionalContext(
           selectedProfession.requiredContext,
@@ -3167,6 +3171,7 @@ export function buildServer(
           licenseRequiredFor: selectedProfession.licenseRequiredFor,
           restrictedActions: selectedProfession.restrictedActions,
           approvalActions: selectedProfession.approvalActions,
+          contextAccess: 'automatic' as const,
           requiredContext: selectedProfession.requiredContext,
           missingContext: missingProfessionalContext(
             selectedProfession.requiredContext,
