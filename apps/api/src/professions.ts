@@ -13,11 +13,13 @@ import {
   professionExpansionPatternIds,
 } from './profession-expansion.js';
 import { lifeContextStructures, lifeContextIds } from './life-contexts.js';
+import { humanContextStructures, humanContextIds } from './human-contexts.js';
 
 export { professionStructures } from './profession-structures.js';
 export { professionExpansionStructures } from './profession-expansion.js';
 export { cognitiveEngineerStructure } from './profession-expansion.js';
 export { lifeContextStructures } from './life-contexts.js';
+export { humanContextStructures } from './human-contexts.js';
 
 const pattern = (
   id: string,
@@ -2087,6 +2089,7 @@ const mergedProfessionCatalog = [
   cognitiveEngineerStructure,
   ...professionExpansionStructures,
   ...lifeContextStructures,
+  ...humanContextStructures,
 ];
 
 export const professionCatalog: ProfessionProfile[] = [
@@ -2120,6 +2123,13 @@ if (
   new Set(lifeContextIds).size !== 30
 ) {
   throw new Error('Life context catalog must contain 30 unique structures');
+}
+
+if (
+  humanContextStructures.length !== 30 ||
+  new Set(humanContextIds).size !== 30
+) {
+  throw new Error('Human context catalog must contain 30 unique structures');
 }
 
 for (const profile of professionCatalog) {

@@ -22,10 +22,19 @@ dog, plant, freshwater ecosystem, household budget, trip, car, or hobby. They
 are defined in `apps/api/src/life-contexts.ts` and available through
 `GET /v1/life-contexts`.
 
+The human-context pack adds 30 structures numbered 101–130. These cover
+relationships, family and grief, business and negotiation, shopping and scam
+safety, cross-cultural understanding, decision-making, and reflective
+journaling. They are defined in `apps/api/src/human-contexts.ts` and available
+through `GET /v1/human-contexts`.
+
 Every profile has a `subjectType`. Professional profiles use `profession`; the
 life-context pack uses `animal`, `plant`, `fungus`, `microbial`, `ecosystem`,
 `object`, or `life_context`. A life context changes the agent's task guidance;
 it never changes the person's identity or claims that the agent is licensed.
+Human-context profiles use `human_relationship`, `business`, `consumer`,
+`human_understanding`, or `human_thought`. They are task subjects, not inferred
+identities or personas.
 
 | ID                               | Category    |
 | -------------------------------- | ----------- |

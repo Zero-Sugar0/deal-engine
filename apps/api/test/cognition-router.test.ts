@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { routeTaskCognition } from '../src/cognition-router.js';
 import {
   cognitiveEngineerStructure,
+  humanContextStructures,
   lifeContextStructures,
   professionCatalog,
   professionExpansionStructures,
@@ -70,6 +71,23 @@ describe('task cognition routing', () => {
     ).toBe(30);
     expect(
       lifeContextStructures.every(
+        (profile) =>
+          profile.subjectType !== 'profession' &&
+          profile.summary.length > 0 &&
+          profile.objective.length > 0 &&
+          profile.requiredContext.length > 0 &&
+          profile.safetyBoundaries.length > 0,
+      ),
+    ).toBe(true);
+  });
+
+  it('loads thirty human contexts with explicit subject types', () => {
+    expect(humanContextStructures).toHaveLength(30);
+    expect(
+      new Set(humanContextStructures.map((profile) => profile.id)).size,
+    ).toBe(30);
+    expect(
+      humanContextStructures.every(
         (profile) =>
           profile.subjectType !== 'profession' &&
           profile.summary.length > 0 &&
@@ -162,6 +180,36 @@ describe('task cognition routing', () => {
       'car_ownership_maintenance_v1',
       'transport_personal',
     ],
+    [
+      'My partner keeps checking my phone and I feel afraid.',
+      'romantic_relationship_support_v1',
+      'love',
+    ],
+    [
+      'I think this online match is asking for gift cards.',
+      'dating_safety_scam_awareness_v1',
+      'love_safety',
+    ],
+    [
+      'Help me write a refund request for a faulty item.',
+      'returns_refund_help_v1',
+      'shopping',
+    ],
+    [
+      'Help me understand their side without excusing what they did.',
+      'perspective_taking_support_v1',
+      'understanding',
+    ],
+    [
+      'Help me think through this hard decision.',
+      'decision_making_reflection_v1',
+      'thinking',
+    ],
+    [
+      'Help me start a small business.',
+      'small_business_starting_v1',
+      'business',
+    ],
   ])('routes %s to %s', (task, profileId, category) => {
     const route = routeTaskCognition({
       task,
@@ -180,6 +228,21 @@ describe('task cognition routing', () => {
     ['Help me make a monthly household budget.', 'life_context'],
     ['Plan a safe hike for this weekend.', 'life_context'],
     ['What does this warning light mean on my car?', 'object'],
+    [
+      'My partner keeps checking my phone and I feel afraid.',
+      'human_relationship',
+    ],
+    [
+      'I think this online match is asking for gift cards.',
+      'human_relationship',
+    ],
+    ['Help me write a refund request for a faulty item.', 'consumer'],
+    [
+      'Help me understand their side without excusing what they did.',
+      'human_understanding',
+    ],
+    ['Help me think through this hard decision.', 'human_thought'],
+    ['Help me start a small business.', 'business'],
   ])(
     'preserves the non-professional subject type for %s',
     (task, subjectType) => {

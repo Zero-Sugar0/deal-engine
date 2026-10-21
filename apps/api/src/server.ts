@@ -51,6 +51,7 @@ import {
 } from './profiles.js';
 import {
   getProfessionProfile,
+  humanContextStructures,
   lifeContextStructures,
   professionCatalog,
   searchProfessionProfiles,
@@ -2077,6 +2078,40 @@ export function buildServer(
       (candidate) => candidate.id === params.lifeContextId,
     );
     if (!profile) throw error(404, 'Life context not found');
+    return profile;
+  });
+
+  app.get('/v1/human-contexts', async (request) => {
+    await requireCredential(store, request, undefined, options.externalAuth);
+    const query = request.query as { search?: string; category?: string };
+    const search = query.search?.trim().toLowerCase();
+    const profiles = humanContextStructures.filter((profile) => {
+      if (query.category && profile.category !== query.category) return false;
+      if (!search) return true;
+      return [
+        profile.id,
+        profile.title,
+        profile.subjectType,
+        profile.category,
+        ...profile.aliases,
+        ...profile.routingTerms,
+        ...profile.knowledgeAreas,
+        ...profile.responsibilities,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(search);
+    });
+    return profiles;
+  });
+
+  app.get('/v1/human-contexts/:humanContextId', async (request) => {
+    await requireCredential(store, request, undefined, options.externalAuth);
+    const params = request.params as { humanContextId: string };
+    const profile = humanContextStructures.find(
+      (candidate) => candidate.id === params.humanContextId,
+    );
+    if (!profile) throw error(404, 'Human context not found');
     return profile;
   });
 

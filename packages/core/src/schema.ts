@@ -413,6 +413,11 @@ export const ProfessionSubjectTypeSchema = z.enum([
   'ecosystem',
   'object',
   'life_context',
+  'human_relationship',
+  'business',
+  'consumer',
+  'human_understanding',
+  'human_thought',
 ]);
 export type ProfessionSubjectType = z.infer<typeof ProfessionSubjectTypeSchema>;
 
@@ -524,6 +529,18 @@ export const ProfessionCategorySchema = z.enum([
   'leisure',
   'transport_personal',
   'household_safety',
+  'love',
+  'love_safety',
+  'milestones',
+  'friendship',
+  'family',
+  'emotional_wellbeing',
+  'respect',
+  'community',
+  'shopping',
+  'shopping_safety',
+  'understanding',
+  'thinking',
   'general',
 ]);
 export type ProfessionCategory = z.infer<typeof ProfessionCategorySchema>;

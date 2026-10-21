@@ -649,6 +649,8 @@ export const professionStructures: ProfessionProfile[] = [
       'law',
       'legal',
       'contract',
+      'termination',
+      'termination risk',
       'lease',
       'tenant',
       'employment law',

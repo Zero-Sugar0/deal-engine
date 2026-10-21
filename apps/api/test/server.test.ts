@@ -854,6 +854,32 @@ describe('DEAL control plane', () => {
     expect(dogCare.statusCode).toBe(200);
     expect(dogCare.json().category).toBe('companion_animals');
 
+    const humanContexts = await app.inject({
+      method: 'GET',
+      url: '/v1/human-contexts?search=relationship',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    expect(humanContexts.statusCode).toBe(200);
+    expect(
+      humanContexts
+        .json()
+        .some(
+          (profile: { id: string }) =>
+            profile.id === 'romantic_relationship_support_v1',
+        ),
+    ).toBe(true);
+
+    const decisionSupport = await app.inject({
+      method: 'GET',
+      url: '/v1/human-contexts/decision_making_reflection_v1',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    expect(decisionSupport.statusCode).toBe(200);
+    expect(decisionSupport.json()).toMatchObject({
+      subjectType: 'human_thought',
+      category: 'thinking',
+    });
+
     const financeAgent = await app.inject({
       method: 'POST',
       url: '/v1/agents',
