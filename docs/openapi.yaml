@@ -416,6 +416,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProfessionProfile'
         '404': { description: Profession profile not found }
+  /v1/life-contexts:
+    get:
+      summary: Discover non-professional and non-human life-context operating profiles
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: category, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Life-context profiles for animals, plants, ecosystems, objects, and everyday life
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProfessionProfile'
+  /v1/life-contexts/{lifeContextId}:
+    get:
+      summary: Read one life-context operating profile
+      parameters:
+        - {
+            name: lifeContextId,
+            in: path,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        '200':
+          description: Life-context operating profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfessionProfile'
+        '404': { description: Life context not found }
   /v1/onboarding:
     post:
       summary: Complete or update layered human-model answers
@@ -677,11 +710,24 @@ components:
         signedAt: { type: string, format: date-time }
     ProfessionProfile:
       type: object
-      required: [id, version, title, category, summary, objective]
+      required: [id, version, title, subjectType, category, summary, objective]
       properties:
         id: { type: string }
         version: { type: string }
         title: { type: string }
+        subjectType:
+          type: string
+          enum:
+            [
+              profession,
+              animal,
+              plant,
+              fungus,
+              microbial,
+              ecosystem,
+              object,
+              life_context,
+            ]
         category: { type: string }
         aliases: { type: array, items: { type: string } }
         summary: { type: string }

@@ -12,10 +12,12 @@ import {
   professionExpansionStructures,
   professionExpansionPatternIds,
 } from './profession-expansion.js';
+import { lifeContextStructures, lifeContextIds } from './life-contexts.js';
 
 export { professionStructures } from './profession-structures.js';
 export { professionExpansionStructures } from './profession-expansion.js';
 export { cognitiveEngineerStructure } from './profession-expansion.js';
+export { lifeContextStructures } from './life-contexts.js';
 
 const pattern = (
   id: string,
@@ -2084,6 +2086,7 @@ const mergedProfessionCatalog = [
   ...professionStructures,
   cognitiveEngineerStructure,
   ...professionExpansionStructures,
+  ...lifeContextStructures,
 ];
 
 export const professionCatalog: ProfessionProfile[] = [
@@ -2112,8 +2115,19 @@ for (const patternId of professionExpansionPatternIds) {
   }
 }
 
+if (
+  lifeContextStructures.length !== 30 ||
+  new Set(lifeContextIds).size !== 30
+) {
+  throw new Error('Life context catalog must contain 30 unique structures');
+}
+
 for (const profile of professionCatalog) {
-  if (profile.licenseRequiredFor.length > 0 && !profile.regulated) {
+  if (
+    profile.subjectType === 'profession' &&
+    profile.licenseRequiredFor.length > 0 &&
+    !profile.regulated
+  ) {
     throw new Error(
       `Profession ${profile.id} has licensed actions but is not marked regulated`,
     );

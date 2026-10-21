@@ -51,6 +51,7 @@ import {
 } from './profiles.js';
 import {
   getProfessionProfile,
+  lifeContextStructures,
   professionCatalog,
   searchProfessionProfiles,
 } from './professions.js';
@@ -639,6 +640,7 @@ async function compileDashboardContext(input: {
         profileId: selectedProfession?.id ?? selectedProfessionId,
         profileVersion: selectedProfession.version,
         title: selectedProfession.title,
+        subjectType: selectedProfession.subjectType,
         category: selectedProfession.category,
         role: human.role || selectedProfession.title,
         industry: domain.industry,
@@ -2044,6 +2046,40 @@ export function buildServer(
     return profile;
   });
 
+  app.get('/v1/life-contexts', async (request) => {
+    await requireCredential(store, request, undefined, options.externalAuth);
+    const query = request.query as { search?: string; category?: string };
+    const search = query.search?.trim().toLowerCase();
+    const profiles = lifeContextStructures.filter((profile) => {
+      if (query.category && profile.category !== query.category) return false;
+      if (!search) return true;
+      return [
+        profile.id,
+        profile.title,
+        profile.subjectType,
+        profile.category,
+        ...profile.aliases,
+        ...profile.routingTerms,
+        ...profile.knowledgeAreas,
+        ...profile.responsibilities,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(search);
+    });
+    return profiles;
+  });
+
+  app.get('/v1/life-contexts/:lifeContextId', async (request) => {
+    await requireCredential(store, request, undefined, options.externalAuth);
+    const params = request.params as { lifeContextId: string };
+    const profile = lifeContextStructures.find(
+      (candidate) => candidate.id === params.lifeContextId,
+    );
+    if (!profile) throw error(404, 'Life context not found');
+    return profile;
+  });
+
   app.get('/v1/skills/keys', async (_request, reply) => {
     if (!skillSigner.configured)
       throw error(503, 'Skill signing keys are not configured');
@@ -3151,6 +3187,7 @@ export function buildServer(
           profileId: selectedProfession?.id ?? selectedProfessionId,
           profileVersion: selectedProfession.version,
           title: selectedProfession.title,
+          subjectType: selectedProfession.subjectType,
           category: selectedProfession.category,
           role: human.role || selectedProfession.title,
           industry: domain.industry,

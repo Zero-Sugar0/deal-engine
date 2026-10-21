@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { routeTaskCognition } from '../src/cognition-router.js';
 import {
   cognitiveEngineerStructure,
+  lifeContextStructures,
   professionCatalog,
   professionExpansionStructures,
   professionStructures,
@@ -60,6 +61,23 @@ describe('task cognition routing', () => {
       ).length,
     );
     expect(cognitiveEngineerStructure.routingPriority).toBeGreaterThan(0);
+  });
+
+  it('loads thirty life contexts with explicit subject types', () => {
+    expect(lifeContextStructures).toHaveLength(30);
+    expect(
+      new Set(lifeContextStructures.map((profile) => profile.id)).size,
+    ).toBe(30);
+    expect(
+      lifeContextStructures.every(
+        (profile) =>
+          profile.subjectType !== 'profession' &&
+          profile.summary.length > 0 &&
+          profile.objective.length > 0 &&
+          profile.requiredContext.length > 0 &&
+          profile.safetyBoundaries.length > 0,
+      ),
+    ).toBe(true);
   });
 
   it.each([
@@ -123,6 +141,27 @@ describe('task cognition routing', () => {
       'cognitive_engineer_v1',
       'technology',
     ],
+    [
+      'My dog ate something and is now retching.',
+      'dog_care_v1',
+      'companion_animals',
+    ],
+    ['Can I eat this wild mushroom?', 'mushroom_foraging_v1', 'foraging'],
+    [
+      'Help me make a monthly household budget.',
+      'household_budgeting_v1',
+      'money_at_home',
+    ],
+    [
+      'Plan a safe hike for this weekend.',
+      'hiking_outdoor_safety_v1',
+      'outdoor_recreation',
+    ],
+    [
+      'What does this warning light mean on my car?',
+      'car_ownership_maintenance_v1',
+      'transport_personal',
+    ],
   ])('routes %s to %s', (task, profileId, category) => {
     const route = routeTaskCognition({
       task,
@@ -134,6 +173,19 @@ describe('task cognition routing', () => {
     expect(route.confidence).toBeGreaterThan(0.5);
     expect(route.retrievedPatterns.length).toBeGreaterThan(0);
   });
+
+  it.each([
+    ['My dog ate something and is now retching.', 'animal'],
+    ['Can I eat this wild mushroom?', 'fungus'],
+    ['Help me make a monthly household budget.', 'life_context'],
+    ['Plan a safe hike for this weekend.', 'life_context'],
+    ['What does this warning light mean on my car?', 'object'],
+  ])(
+    'preserves the non-professional subject type for %s',
+    (task, subjectType) => {
+      expect(routeTaskCognition({ task }).subjectType).toBe(subjectType);
+    },
+  );
 
   it('keeps the declared identity when no specialist signal is present', () => {
     const route = routeTaskCognition({

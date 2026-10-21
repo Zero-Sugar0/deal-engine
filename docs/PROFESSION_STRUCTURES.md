@@ -16,6 +16,17 @@ product-defining `cognitive_engineer_v1` role. The expansion is defined in
 `apps/api/src/profession-expansion.ts` and exported through the same
 `GET /v1/professions` catalog.
 
+DEAL also includes 30 life-context structures numbered 71–100. These are not
+professional identities: they describe the subject of the task, such as a
+dog, plant, freshwater ecosystem, household budget, trip, car, or hobby. They
+are defined in `apps/api/src/life-contexts.ts` and available through
+`GET /v1/life-contexts`.
+
+Every profile has a `subjectType`. Professional profiles use `profession`; the
+life-context pack uses `animal`, `plant`, `fungus`, `microbial`, `ecosystem`,
+`object`, or `life_context`. A life context changes the agent's task guidance;
+it never changes the person's identity or claims that the agent is licensed.
+
 | ID                               | Category    |
 | -------------------------------- | ----------- |
 | `health_education_assistant_v1`  | healthcare  |
@@ -73,6 +84,20 @@ changing the host agent SDK.
 The host agent must still use its own tools and current sources. Profession
 structures provide bounded reasoning guidance, not factual authority or a
 substitute for a licensed professional.
+
+## Life-context coverage
+
+The life-context pack covers companion animals, livestock and wildlife, plants,
+fungi, compost and freshwater ecosystems, household pests, budgeting, cooking,
+travel, outdoor recreation, fitness, DIY and moving, leisure, personal
+transport, home organisation, emergency preparedness, camping, and cycling.
+
+Life-context routing is still deterministic and inspectable. Current weather,
+travel rules, fishing limits, road conditions, poisoning guidance, and other
+changing facts must be checked against current local or official sources by the
+host agent. The structures provide safe reasoning patterns and escalation
+boundaries; they are not a substitute for a veterinarian, clinician,
+qualified tradesperson, ranger, emergency service, or local authority.
 
 ## Human identity context
 

@@ -197,6 +197,7 @@ export function routeTaskCognition(
     profileId: routeProfile.id,
     profileVersion: routeProfile.version,
     title: routeProfile.title,
+    subjectType: routeProfile.subjectType,
     category: routeProfile.category,
     summary: routeProfile.summary,
     objective: routeProfile.objective,

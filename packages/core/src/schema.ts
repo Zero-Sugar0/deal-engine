@@ -403,6 +403,19 @@ export const CognitionRiskSchema = z.enum([
 ]);
 export type CognitionRisk = z.infer<typeof CognitionRiskSchema>;
 
+/** What the selected operating model is about. */
+export const ProfessionSubjectTypeSchema = z.enum([
+  'profession',
+  'animal',
+  'plant',
+  'fungus',
+  'microbial',
+  'ecosystem',
+  'object',
+  'life_context',
+]);
+export type ProfessionSubjectType = z.infer<typeof ProfessionSubjectTypeSchema>;
+
 /**
  * Task-level understanding selected for one interaction. This is deliberately
  * separate from the person's profession: a founder can ask a health question
@@ -413,6 +426,7 @@ export const CognitionRouteSchema = z.object({
   profileId: z.string(),
   profileVersion: z.string(),
   title: z.string(),
+  subjectType: ProfessionSubjectTypeSchema.default('profession'),
   category: z.lazy(() => ProfessionCategorySchema),
   summary: z.string(),
   objective: z.string(),
@@ -494,6 +508,22 @@ export const ProfessionCategorySchema = z.enum([
   'public_safety',
   'business_support',
   'creative',
+  'companion_animals',
+  'livestock',
+  'wildlife',
+  'plants',
+  'foraging',
+  'soil_ecosystems',
+  'home_ecosystems',
+  'money_at_home',
+  'food_at_home',
+  'travel',
+  'outdoor_recreation',
+  'fitness',
+  'home',
+  'leisure',
+  'transport_personal',
+  'household_safety',
   'general',
 ]);
 export type ProfessionCategory = z.infer<typeof ProfessionCategorySchema>;
@@ -515,6 +545,7 @@ export const ProfessionProfileSchema = z.object({
   id: z.string(),
   version: z.string(),
   title: z.string(),
+  subjectType: ProfessionSubjectTypeSchema.default('profession'),
   category: ProfessionCategorySchema,
   aliases: z.array(z.string()).default([]),
   routingPriority: z.number().int().default(0),
@@ -545,6 +576,7 @@ export const ProfessionalContextSchema = z.object({
   profileId: z.string().optional(),
   profileVersion: z.string().optional(),
   title: z.string().optional(),
+  subjectType: ProfessionSubjectTypeSchema.default('profession'),
   category: ProfessionCategorySchema.optional(),
   role: z.string().optional(),
   industry: z.string().optional(),
