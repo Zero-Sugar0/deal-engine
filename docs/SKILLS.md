@@ -91,8 +91,8 @@ consequential tool action and use exact approval binding when required.
   version `5` packets.
 - `@deal/skills` — portable `SKILL.md` parsing, content hashing, warnings, and
   a small metadata catalog. It never executes skill code.
-- `@deal/sdk` — `ContextRequest.skills` and rendered skill precedence guidance
-  for every provider adapter.
+- `@deal/sdk` — `ContextRequest.skills` and task-selected human-context data
+  for every provider adapter; the host owns skill activation and instructions.
 - API and MCP — accepts up to 16 active skill descriptors and audits their
   identity without changing delegation authority.
 - Python SDK — supports the same `skills` field and hosted API-key-only setup.

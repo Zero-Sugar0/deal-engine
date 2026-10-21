@@ -673,6 +673,103 @@ function textMatchesContext(target: string, value: string | undefined): number {
   return normalizedWords(value).filter((word) => targetWords.has(word)).length;
 }
 
+function identityFieldsForTask(
+  identity: HumanModel['identity'],
+  task: string,
+  cognition: CognitionRoute,
+  include: Set<string>,
+  exclude: Set<string>,
+): string[] {
+  const normalizedTask = task.toLowerCase();
+  const personalFocus = /\b(i|me|my|mine)\b/.test(normalizedTask);
+  const thirdPartyFocus =
+    /\b(my child|my son|my daughter|my partner|my husband|my wife|my friend|my parent|someone else|a client)\b/.test(
+      normalizedTask,
+    );
+  const profileRequest =
+    /\b(about me|who am i|my identity|my profile|my background|my story|my bio|biography|introduce me)\b/.test(
+      normalizedTask,
+    );
+  const requiredContext = cognition.requiredContext.join(' ').toLowerCase();
+  const locationSensitiveCategory = [
+    'travel',
+    'legal',
+    'finance',
+    'healthcare',
+    'public_service',
+    'public_sector',
+    'social_services',
+    'public_health',
+  ].includes(cognition.category);
+  const present = (key: keyof typeof identity): boolean => {
+    const value = identity[key];
+    return Array.isArray(value)
+      ? value.length > 0
+      : value !== undefined && value !== null && value !== '';
+  };
+  const explicitCues: Partial<Record<keyof typeof identity, RegExp>> = {
+    pronouns: /\b(my pronouns|use my pronouns|how should you refer to me)\b/,
+    genderIdentity: /\b(my gender|my gender identity)\b/,
+    raceEthnicity: /\b(my race|my ethnicity)\b/,
+    culturalBackground: /\b(my culture|my cultural background)\b/,
+    nationality: /\b(my nationality|my passport|my immigration status)\b/,
+    personalBackground:
+      /\b(my personal background|my life story|my upbringing)\b/,
+    religionOrBelief: /\b(my religion|my faith|my religious beliefs)\b/,
+    sexualOrientation: /\b(my sexuality|my sexual orientation)\b/,
+    accessibilityNeeds:
+      /\b(my accessibility needs|my accommodation|make this accessible for me)\b/,
+  };
+  const nationalityRelevant =
+    explicitCues.nationality?.test(normalizedTask) ||
+    (cognition.category === 'travel' && locationSensitiveCategory);
+  const requestedLocation =
+    /\b(my country|where i live|in my country|near me|local to me|my region|my jurisdiction|my timezone|my passport|my nationality|travel to|visa for me)\b/.test(
+      normalizedTask,
+    ) ||
+    (personalFocus &&
+      !thirdPartyFocus &&
+      /\b(location|country|jurisdiction|timezone|region)\b/.test(
+        requiredContext,
+      )) ||
+    locationSensitiveCategory;
+  const requestedAge =
+    /\b(my age|how old am i|i am \d{1,3}|i'm \d{1,3}|for my age)\b/.test(
+      normalizedTask,
+    ) ||
+    (!thirdPartyFocus &&
+      ((personalFocus && /\bage\b/.test(requiredContext)) ||
+        (personalFocus && cognition.category === 'healthcare') ||
+        cognition.category === 'fitness'));
+
+  return Object.entries(identity)
+    .filter(([rawKey]) => {
+      const key = rawKey as keyof typeof identity;
+      const path = `identity.${rawKey}`;
+      if (!present(key) || exclude.has(path)) return false;
+      if (include.has('human_identity') || include.has(path)) return true;
+      if (key === 'preferredName' || key === 'locale' || key === 'languages')
+        return true;
+      if (key === 'country') return requestedLocation;
+      if (key === 'nationality') return nationalityRelevant;
+      if (key === 'age') return requestedAge;
+      if (key === 'timezone')
+        return /\b(time|timezone|schedule|meeting|calendar|today|tomorrow)\b/.test(
+          normalizedTask,
+        );
+      if (
+        key === 'mission' ||
+        key === 'organization' ||
+        key === 'selfDescription'
+      )
+        return profileRequest;
+      const cue = explicitCues[key];
+      if (cue?.test(normalizedTask)) return true;
+      return profileRequest && key === 'pronouns';
+    })
+    .map(([key]) => `identity.${key}`);
+}
+
 function contextKindForSubject(
   subjectType: string,
 ):
@@ -817,9 +914,13 @@ function resolveContextComposition(input: {
   }
 
   const identityFields = personalContext
-    ? Object.entries(input.humanModel.identity)
-        .filter(([, value]) => value !== undefined && value !== null)
-        .map(([key]) => `identity.${key}`)
+    ? identityFieldsForTask(
+        input.humanModel.identity,
+        input.task,
+        input.cognition,
+        included,
+        excluded,
+      )
     : [];
   const excludedEntries = [
     ...options.exclude.map((id) => ({

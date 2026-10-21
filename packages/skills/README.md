@@ -26,7 +26,7 @@ const prepared = await runtime.prepare({
 });
 
 // The host agent loads `skill.instructions` only when it activates the skill.
-// prepared.systemInstruction supplies the human layer and skill precedence.
+// prepared.systemInstruction contains only task-relevant human context data.
 ```
 
 The parser follows the portable contract: `name` and `description` are required;
