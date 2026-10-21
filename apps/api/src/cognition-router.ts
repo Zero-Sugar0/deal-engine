@@ -167,7 +167,11 @@ export function routeTaskCognition(
         input.domain,
       ),
     )
-    .sort((left, right) => right.score - left.score);
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        right.profile.routingPriority - left.profile.routingPriority,
+    );
   const generalist =
     getProfessionProfile('generalist_assistant_v1') ?? professionCatalog[0];
   const selected =
@@ -202,11 +206,14 @@ export function routeTaskCognition(
     communicationPatterns: routeProfile.communicationPatterns,
     decisionPatterns: routeProfile.decisionPatterns,
     failureModes: routeProfile.failureModes,
+    requiredContext: routeProfile.requiredContext,
     escalationTriggers: routeProfile.escalationTriggers,
     safetyBoundaries: routeProfile.safetyBoundaries,
     sensitiveDataClasses: routeProfile.sensitiveDataClasses,
     regulated: routeProfile.regulated,
+    licenseRequiredFor: routeProfile.licenseRequiredFor,
     restrictedActions: routeProfile.restrictedActions,
+    approvalActions: routeProfile.approvalActions,
     confidence,
     risk: riskFor(routeProfile, task),
     signals: [...selected.signals, `task:category:${routeProfile.category}`],

@@ -3,6 +3,12 @@ import {
   type ProfessionProfile,
   type ProfessionalPattern,
 } from '@deal/core';
+import {
+  professionStructures,
+  professionStructurePatternIds,
+} from './profession-structures.js';
+
+export { professionStructures } from './profession-structures.js';
 
 const pattern = (
   id: string,
@@ -82,6 +88,7 @@ function profession(
   return ProfessionProfileSchema.parse({
     version: '1.0.0',
     aliases: [],
+    routingPriority: 0,
     routingTerms: [],
     responsibilities: [],
     knowledgeAreas: [],
@@ -113,7 +120,7 @@ function profession(
   });
 }
 
-export const professionCatalog: ProfessionProfile[] = [
+const legacyProfessionCatalog: ProfessionProfile[] = [
   profession({
     id: 'generalist_assistant_v1',
     title: 'Generalist Assistant',
@@ -2064,6 +2071,40 @@ export const professionCatalog: ProfessionProfile[] = [
     ],
   }),
 ];
+
+const mergedProfessionCatalog = [
+  ...legacyProfessionCatalog,
+  ...professionStructures,
+];
+
+export const professionCatalog: ProfessionProfile[] = [
+  ...new Map(
+    mergedProfessionCatalog.map((profile) => [profile.id, profile]),
+  ).values(),
+];
+
+const allPatternIds = new Set(
+  professionCatalog
+    .flatMap((profile) => [
+      ...profile.operatingPatterns,
+      ...profile.communicationPatterns,
+      ...profile.decisionPatterns,
+    ])
+    .map((item) => item.id),
+);
+for (const patternId of professionStructurePatternIds) {
+  if (!allPatternIds.has(patternId)) {
+    throw new Error(`Profession pattern ${patternId} is not resolvable`);
+  }
+}
+
+for (const profile of professionCatalog) {
+  if (profile.licenseRequiredFor.length > 0 && !profile.regulated) {
+    throw new Error(
+      `Profession ${profile.id} has licensed actions but is not marked regulated`,
+    );
+  }
+}
 
 const byId = new Map(professionCatalog.map((profile) => [profile.id, profile]));
 
