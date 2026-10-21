@@ -11,6 +11,7 @@ import {
 } from './schema.js';
 import type {
   Authority,
+  CognitionRoute,
   DomainContext,
   HumanContextPacket,
   HumanModel,
@@ -53,6 +54,7 @@ export interface CompileContextInput {
   interaction?: InteractionContext;
   grounding?: Grounding;
   professional?: ProfessionalContext;
+  cognition?: CognitionRoute;
   skills?: SkillDescriptorInput[];
   skillAttestations?: SkillAttestation[];
 }
@@ -386,7 +388,7 @@ export function compileHumanContextPacket(
   });
 
   return {
-    schemaVersion: '5',
+    schemaVersion: '6',
     packetId: crypto.randomUUID(),
     issuedAt: issuedAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
@@ -411,6 +413,7 @@ export function compileHumanContextPacket(
     },
     persona: finalHumanModel.persona,
     domain: finalHumanModel.domain,
+    cognition: input.cognition,
     professional: ProfessionalContextSchema.parse(input.professional ?? {}),
     skills: normalizedSkills,
     memory: {

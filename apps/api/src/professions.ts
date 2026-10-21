@@ -82,6 +82,7 @@ function profession(
   return ProfessionProfileSchema.parse({
     version: '1.0.0',
     aliases: [],
+    routingTerms: [],
     responsibilities: [],
     knowledgeAreas: [],
     operatingPatterns: [evidence, clarify],
@@ -134,6 +135,17 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'growth_operator_v1',
     title: 'Growth Operator',
     category: 'sales_marketing',
+    routingTerms: [
+      'growth',
+      'go to market',
+      'lead generation',
+      'qualified lead',
+      'outreach',
+      'prospect',
+      'customer discovery',
+      'positioning',
+      'campaign',
+    ],
     summary:
       'A relationship-oriented growth operator representing a founder’s judgment.',
     objective:
@@ -197,6 +209,17 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'founder_v1',
     title: 'Founder and Entrepreneur',
     category: 'business',
+    routingTerms: [
+      'founder',
+      'startup',
+      'business idea',
+      'fundraising',
+      'investor',
+      'pitch deck',
+      'runway',
+      'cofounder',
+      'hiring plan',
+    ],
     summary:
       'A high-agency builder balancing vision, uncertainty, customers, and scarce resources.',
     objective:
@@ -239,6 +262,15 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'chief_of_staff_v1',
     title: 'Chief of Staff',
     category: 'business',
+    routingTerms: [
+      'executive',
+      'leadership',
+      'board meeting',
+      'meeting brief',
+      'follow up',
+      'operating cadence',
+      'stakeholder coordination',
+    ],
     summary:
       'A trusted operating partner that turns leadership intent into coordinated follow-through.',
     objective:
@@ -277,6 +309,16 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'product_manager_v1',
     title: 'Product Manager',
     category: 'technology',
+    routingTerms: [
+      'product',
+      'roadmap',
+      'feature',
+      'user story',
+      'requirements',
+      'product launch',
+      'prioritize features',
+      'product manager',
+    ],
     summary:
       'A cross-functional decision maker connecting user needs, product strategy, and delivery constraints.',
     objective:
@@ -310,6 +352,16 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'project_program_manager_v1',
     title: 'Project and Program Manager',
     category: 'business',
+    routingTerms: [
+      'project',
+      'program',
+      'milestone',
+      'deadline',
+      'dependency',
+      'project plan',
+      'status report',
+      'deliverable',
+    ],
     summary:
       'A coordinator that makes dependencies, decisions, risks, and ownership visible.',
     objective:
@@ -340,6 +392,16 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'operations_manager_v1',
     title: 'Operations Manager',
     category: 'business',
+    routingTerms: [
+      'operations',
+      'process',
+      'workflow',
+      'incident',
+      'service level',
+      'capacity planning',
+      'quality control',
+      'continuous improvement',
+    ],
     summary:
       'A systems-oriented operator improving reliability, flow, and accountability.',
     objective:
@@ -371,6 +433,17 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'accountant_bookkeeper_v1',
     title: 'Accountant and Bookkeeper',
     category: 'finance',
+    routingTerms: [
+      'accounting',
+      'accountant',
+      'bookkeeping',
+      'ledger',
+      'reconciliation',
+      'invoice',
+      'financial statement',
+      'payroll',
+      'tax return',
+    ],
     summary:
       'A precise financial record keeper that separates source data from interpretation.',
     objective:
@@ -427,6 +500,19 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'personal_finance_organizer_v1',
     title: 'Personal Finance Organizer',
     category: 'finance',
+    routingTerms: [
+      'personal finance',
+      'budget',
+      'monthly budget',
+      'money',
+      'debt',
+      'savings',
+      'income',
+      'expense',
+      'credit',
+      'loan',
+      'mortgage',
+    ],
     summary:
       'A calm organizer that helps a person understand their financial information and choices.',
     objective:
@@ -489,6 +575,17 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'financial_analyst_cfo_v1',
     title: 'Financial Analyst and CFO',
     category: 'finance',
+    routingTerms: [
+      'financial analysis',
+      'forecast',
+      'forecasting',
+      'revenue',
+      'margin',
+      'unit economics',
+      'capital planning',
+      'cash flow forecast',
+      'board reporting',
+    ],
     summary:
       'A decision-support partner that connects financial evidence to business choices.',
     objective:
@@ -533,9 +630,129 @@ export const professionCatalog: ProfessionProfile[] = [
     ],
   }),
   profession({
+    id: 'health_education_assistant_v1',
+    title: 'Health Education Guide',
+    category: 'healthcare',
+    aliases: ['health question', 'medical information', 'health education'],
+    routingTerms: [
+      'health',
+      'medical',
+      'doctor',
+      'nurse',
+      'symptom',
+      'diagnosis',
+      'medication',
+      'medicine',
+      'diabetes',
+      'diabetic',
+      'blood sugar',
+      'glucose',
+      'insulin',
+      'hypoglycemia',
+      'blood pressure',
+      'cholesterol',
+      'pregnancy',
+      'pain',
+      'fever',
+      'rash',
+      'dose',
+      'side effect',
+    ],
+    summary:
+      'A plain-language health education pattern that answers directly, makes uncertainty visible, and routes personal risk to qualified care.',
+    objective:
+      'Help a person understand general health information and prepare better questions without diagnosing, prescribing, or replacing a clinician.',
+    responsibilities: [
+      'plain-language education',
+      'question preparation',
+      'risk signal recognition',
+      'care handoff',
+    ],
+    knowledgeAreas: [
+      'health literacy',
+      'symptoms',
+      'medications',
+      'chronic conditions',
+      'prevention',
+      'patient communication',
+    ],
+    operatingPatterns: [
+      evidence,
+      clarify,
+      consent,
+      handoff,
+      pattern(
+        'red_flag_screening',
+        'Red-flag screening',
+        'Check for urgent danger signals before continuing routine education.',
+      ),
+    ],
+    communicationPatterns: [
+      deescalate,
+      pattern(
+        'plain_language_first',
+        'Plain language first',
+        'Answer the question directly before adding nuance, uncertainty, and next steps.',
+      ),
+    ],
+    decisionPatterns: [tradeoffs],
+    failureModes: [
+      'false reassurance',
+      'unsupported certainty',
+      'burying urgent exceptions',
+      'overloading the person with disclaimers',
+      'turning general education into personal treatment advice',
+    ],
+    requiredContext: ['goal', 'symptoms', 'medications', 'consentRules'],
+    escalationTriggers: [
+      'urgent symptoms',
+      'severe or rapidly changing readings',
+      'medication uncertainty',
+      'missing critical context',
+      'uncertain clinical interpretation',
+    ],
+    safetyBoundaries: [
+      'Do not diagnose, prescribe, or claim a clinical examination.',
+      'Distinguish general education from advice about a specific person.',
+      'Escalate urgent or uncertain situations to qualified professional care.',
+      'Use only the health information necessary for the question and do not infer unrelated conditions.',
+    ],
+    sensitiveDataClasses: [
+      'PHI',
+      'diagnoses',
+      'medications',
+      'biometrics',
+      'mental health',
+    ],
+    regulated: true,
+    licenseRequiredFor: [
+      'diagnosis',
+      'prescribing',
+      'clinical interpretation',
+      'treatment decisions',
+    ],
+    restrictedActions: [
+      'diagnose',
+      'prescribe',
+      'clinical_treatment',
+      'medical_interpretation',
+    ],
+    approvalActions: ['sensitive_health_record_write'],
+  }),
+  profession({
     id: 'physician_clinician_v1',
     title: 'Physician and Clinician',
     category: 'healthcare',
+    routingTerms: [
+      'physician',
+      'clinician',
+      'clinical',
+      'diagnose',
+      'prescribe',
+      'treatment',
+      'patient assessment',
+      'differential diagnosis',
+    ],
     summary:
       'A clinical reasoning pattern that prioritizes safety, consent, evidence, and professional review.',
     objective:
@@ -611,6 +828,15 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'nurse_care_coordinator_v1',
     title: 'Nurse and Care Coordinator',
     category: 'healthcare',
+    routingTerms: [
+      'nurse',
+      'nursing',
+      'care plan',
+      'care coordination',
+      'discharge planning',
+      'patient follow up',
+      'triage',
+    ],
     summary:
       'A continuity-focused care pattern that coordinates people, instructions, and follow-up.',
     objective: 'Make care transitions clear, respectful, and safe.',
@@ -660,6 +886,14 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'clinical_intake_coordinator_v1',
     title: 'Clinical Intake Coordinator',
     category: 'healthcare',
+    routingTerms: [
+      'clinical intake',
+      'patient intake',
+      'clinic intake',
+      'appointment preparation',
+      'intake form',
+      'service routing',
+    ],
     summary:
       'A respectful intake pattern for collecting only necessary information and routing safely.',
     objective: 'Make intake clear and safe without clinical judgment.',
@@ -711,6 +945,16 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'therapist_counselor_v1',
     title: 'Therapist and Counselor',
     category: 'healthcare',
+    routingTerms: [
+      'therapist',
+      'therapy',
+      'counseling',
+      'counsellor',
+      'mental health support',
+      'trauma',
+      'self harm',
+      'crisis support',
+    ],
     summary:
       'A listening and support pattern grounded in consent, boundaries, and safety escalation.',
     objective:
@@ -763,6 +1007,18 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'attorney_legal_professional_v1',
     title: 'Attorney and Legal Professional',
     category: 'legal',
+    routingTerms: [
+      'legal',
+      'lawyer',
+      'attorney',
+      'contract',
+      'termination clause',
+      'lawsuit',
+      'court',
+      'jurisdiction',
+      'legal risk',
+      'privacy policy',
+    ],
     summary:
       'A fact-pattern and issue-spotting pattern that protects confidentiality and avoids false legal certainty.',
     objective:
@@ -818,6 +1074,17 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'compliance_risk_officer_v1',
     title: 'Compliance and Risk Officer',
     category: 'legal',
+    routingTerms: [
+      'compliance',
+      'risk assessment',
+      'internal audit',
+      'control',
+      'regulation',
+      'regulatory',
+      'policy breach',
+      'security breach',
+      'governance',
+    ],
     summary:
       'A control-oriented pattern for identifying obligations, evidence, and residual risk.',
     objective:
@@ -862,6 +1129,22 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'software_engineer_v1',
     title: 'Software Engineer',
     category: 'technology',
+    routingTerms: [
+      'software',
+      'programming',
+      'code',
+      'coding',
+      'typescript',
+      'javascript',
+      'python',
+      'api',
+      'debug',
+      'bug',
+      'timeout',
+      'database',
+      'deploy',
+      'unit test',
+    ],
     summary:
       'A build-and-verify pattern for turning requirements into maintainable software.',
     objective:
@@ -909,6 +1192,18 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'security_engineer_v1',
     title: 'Security Engineer',
     category: 'technology',
+    routingTerms: [
+      'cybersecurity',
+      'security',
+      'vulnerability',
+      'threat model',
+      'penetration test',
+      'incident response',
+      'credential exposure',
+      'malware',
+      'phishing',
+      'identity access',
+    ],
     summary:
       'A threat-aware pattern that protects systems while respecting authorized scope.',
     objective:
@@ -958,6 +1253,18 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'data_scientist_ml_engineer_v1',
     title: 'Data Scientist and ML Engineer',
     category: 'technology',
+    routingTerms: [
+      'data science',
+      'machine learning',
+      'ml model',
+      'model training',
+      'dataset',
+      'statistics',
+      'experiment',
+      'model evaluation',
+      'data pipeline',
+      'prediction',
+    ],
     summary:
       'An evidence and measurement pattern for turning data into bounded decisions.',
     objective:
@@ -1006,6 +1313,17 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'designer_researcher_v1',
     title: 'Designer and User Researcher',
     category: 'creative_media',
+    routingTerms: [
+      'design',
+      'designer',
+      'user research',
+      'ux',
+      'ui',
+      'prototype',
+      'usability test',
+      'accessibility',
+      'user experience',
+    ],
     summary:
       'A human-centered pattern for understanding needs and making usable choices.',
     objective:
@@ -1048,6 +1366,16 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'research_scientist_v1',
     title: 'Research Scientist',
     category: 'science',
+    routingTerms: [
+      'research',
+      'scientific study',
+      'hypothesis',
+      'experiment design',
+      'peer review',
+      'literature review',
+      'reproducibility',
+      'publication',
+    ],
     summary:
       'A hypothesis-driven pattern that values reproducibility, uncertainty, and review.',
     objective:
@@ -1094,6 +1422,18 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'teacher_educator_v1',
     title: 'Teacher and Educator',
     category: 'education',
+    routingTerms: [
+      'teacher',
+      'teaching',
+      'lesson plan',
+      'lesson planning',
+      'curriculum',
+      'classroom',
+      'student',
+      'homework',
+      'explain this',
+      'learn',
+    ],
     summary:
       'A patient learning pattern that adapts instruction to the learner and objective.',
     objective:
@@ -1137,6 +1477,18 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'recruiter_hr_partner_v1',
     title: 'Recruiter and People Operations Partner',
     category: 'people_operations',
+    routingTerms: [
+      'recruiting',
+      'recruiter',
+      'hiring',
+      'candidate',
+      'interview',
+      'job description',
+      'onboarding',
+      'employee',
+      'human resources',
+      'hr policy',
+    ],
     summary:
       'A fair and relationship-aware pattern for hiring and employee experience.',
     objective:
@@ -1186,6 +1538,18 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'sales_account_executive_v1',
     title: 'Sales and Account Executive',
     category: 'sales_marketing',
+    routingTerms: [
+      'sales',
+      'account executive',
+      'prospecting',
+      'qualification',
+      'sales call',
+      'discovery call',
+      'proposal',
+      'negotiation',
+      'deal',
+      'customer account',
+    ],
     summary:
       'A consultative relationship pattern for understanding fit and making honest commitments.',
     objective:
@@ -1228,6 +1592,17 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'customer_success_support_v1',
     title: 'Customer Success and Support Specialist',
     category: 'sales_marketing',
+    routingTerms: [
+      'customer support',
+      'support ticket',
+      'customer success',
+      'bug report',
+      'troubleshooting',
+      'renewal',
+      'service issue',
+      'customer complaint',
+      'help desk',
+    ],
     summary:
       'A continuity and repair pattern for helping customers while protecting trust.',
     objective:
@@ -1264,6 +1639,17 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'marketing_content_pr_v1',
     title: 'Marketing, Content, and Communications Professional',
     category: 'sales_marketing',
+    routingTerms: [
+      'marketing',
+      'content strategy',
+      'blog post',
+      'press release',
+      'public relations',
+      'brand messaging',
+      'copywriting',
+      'social media campaign',
+      'audience research',
+    ],
     summary:
       'A clear point-of-view pattern for communicating value without misleading audiences.',
     objective:
@@ -1300,6 +1686,17 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'writer_editor_journalist_v1',
     title: 'Writer, Editor, and Journalist',
     category: 'creative_media',
+    routingTerms: [
+      'writer',
+      'editing',
+      'editor',
+      'journalist',
+      'article',
+      'story',
+      'fact check',
+      'headline',
+      'interview transcript',
+    ],
     summary:
       'A story and verification pattern that respects the difference between fact, quote, framing, and opinion.',
     objective:
@@ -1335,6 +1732,17 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'social_worker_case_manager_v1',
     title: 'Social Worker and Case Manager',
     category: 'social_services',
+    routingTerms: [
+      'social worker',
+      'case manager',
+      'case management',
+      'social services',
+      'housing assistance',
+      'resource navigation',
+      'safeguarding',
+      'benefits application',
+      'community resources',
+    ],
     summary:
       'A dignity and resource-navigation pattern for people facing complex needs.',
     objective:
@@ -1384,6 +1792,17 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'architect_engineer_contractor_v1',
     title: 'Architect, Engineer, and Contractor',
     category: 'construction_trades',
+    routingTerms: [
+      'architect',
+      'construction',
+      'contractor',
+      'building plan',
+      'floor plan',
+      'structural',
+      'materials estimate',
+      'building code',
+      'site condition',
+    ],
     summary:
       'A constraint, specification, and safety pattern for physical-world projects.',
     objective:
@@ -1434,6 +1853,18 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'logistics_supply_chain_v1',
     title: 'Logistics and Supply Chain Professional',
     category: 'manufacturing_logistics',
+    routingTerms: [
+      'logistics',
+      'supply chain',
+      'inventory',
+      'warehouse',
+      'shipment',
+      'shipping',
+      'procurement',
+      'vendor',
+      'route planning',
+      'shortage',
+    ],
     summary:
       'A flow and exception-management pattern for moving goods and information reliably.',
     objective:
@@ -1472,6 +1903,17 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'hospitality_retail_manager_v1',
     title: 'Hospitality and Retail Manager',
     category: 'hospitality_retail',
+    routingTerms: [
+      'hospitality',
+      'retail',
+      'restaurant',
+      'hotel',
+      'store manager',
+      'customer service',
+      'staffing',
+      'inventory management',
+      'service recovery',
+    ],
     summary:
       'A service-recovery and team-coordination pattern for high-contact customer environments.',
     objective:
@@ -1507,6 +1949,17 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'public_policy_civil_service_v1',
     title: 'Public Policy and Civil Service Professional',
     category: 'public_service',
+    routingTerms: [
+      'public policy',
+      'government',
+      'civil service',
+      'public program',
+      'policy analysis',
+      'public administration',
+      'citizen services',
+      'public accountability',
+      'benefits eligibility',
+    ],
     summary:
       'A public-interest pattern that balances evidence, process, equity, and accountability.',
     objective:
@@ -1556,6 +2009,18 @@ export const professionCatalog: ProfessionProfile[] = [
     id: 'farmer_environmental_professional_v1',
     title: 'Agriculture and Environmental Professional',
     category: 'agriculture_environment',
+    routingTerms: [
+      'agriculture',
+      'farmer',
+      'farming',
+      'crop',
+      'soil',
+      'irrigation',
+      'environmental',
+      'ecology',
+      'land management',
+      'water management',
+    ],
     summary:
       'A place-aware stewardship pattern that balances production, ecology, safety, and long horizons.',
     objective:
@@ -1612,7 +2077,15 @@ export function searchProfessionProfiles(query: string): ProfessionProfile[] {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return professionCatalog;
   return professionCatalog.filter((profile) =>
-    [profile.id, profile.title, profile.category, ...profile.aliases]
+    [
+      profile.id,
+      profile.title,
+      profile.category,
+      ...profile.aliases,
+      ...profile.routingTerms,
+      ...profile.knowledgeAreas,
+      ...profile.responsibilities,
+    ]
       .join(' ')
       .toLowerCase()
       .includes(normalized),

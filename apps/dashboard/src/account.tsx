@@ -146,6 +146,13 @@ type ComparisonResponse = {
     expiresAt: string;
     policyVersion: string;
     professionalProfile?: string;
+    cognition?: {
+      profileId: string;
+      category: string;
+      risk: string;
+      confidence: number;
+      signals: string[];
+    };
     memoryReferences: number;
     agentId: string;
   };
@@ -864,6 +871,12 @@ function TryItView() {
                 Profile ·{' '}
                 {activeRun.context.professionalProfile ?? 'Generalist'}
               </span>
+              {activeRun.context.cognition && (
+                <span>
+                  Understanding · {activeRun.context.cognition.category} ·{' '}
+                  {activeRun.context.cognition.risk} risk
+                </span>
+              )}
               <span>
                 {activeRun.context.memoryReferences} memories considered
               </span>

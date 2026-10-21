@@ -348,6 +348,61 @@ export const DomainContextSchema = z.object({
 });
 export type DomainContext = z.infer<typeof DomainContextSchema>;
 
+export const CognitionRiskSchema = z.enum([
+  'low',
+  'moderate',
+  'high',
+  'critical',
+]);
+export type CognitionRisk = z.infer<typeof CognitionRiskSchema>;
+
+/**
+ * Task-level understanding selected for one interaction. This is deliberately
+ * separate from the person's profession: a founder can ask a health question
+ * without DEAL changing their identity to a clinician.
+ */
+export const CognitionRouteSchema = z.object({
+  routeId: z.string(),
+  profileId: z.string(),
+  profileVersion: z.string(),
+  title: z.string(),
+  category: z.lazy(() => ProfessionCategorySchema),
+  summary: z.string(),
+  objective: z.string(),
+  responsibilities: z.array(z.string()).default([]),
+  knowledgeAreas: z.array(z.string()).default([]),
+  operatingPatterns: z
+    .array(z.lazy(() => ProfessionalPatternSchema))
+    .default([]),
+  communicationPatterns: z
+    .array(z.lazy(() => ProfessionalPatternSchema))
+    .default([]),
+  decisionPatterns: z
+    .array(z.lazy(() => ProfessionalPatternSchema))
+    .default([]),
+  failureModes: z.array(z.string()).default([]),
+  escalationTriggers: z.array(z.string()).default([]),
+  safetyBoundaries: z.array(z.string()).default([]),
+  sensitiveDataClasses: z.array(z.string()).default([]),
+  regulated: z.boolean().default(false),
+  restrictedActions: z.array(z.string()).default([]),
+  confidence: z.number().min(0).max(1),
+  risk: CognitionRiskSchema,
+  signals: z.array(z.string()).default([]),
+  retrievedPatterns: z.array(z.string()).default([]),
+  transientFacts: z.array(z.string()).default([]),
+  responsePlan: z.object({
+    leadWith: z
+      .enum(['answer', 'context', 'empathy', 'options', 'recommendation'])
+      .default('answer'),
+    askAtMost: z.number().int().min(0).max(3).default(1),
+    avoid: z.array(z.string()).default([]),
+    escalateWhen: z.array(z.string()).default([]),
+  }),
+  source: z.enum(['system', 'organization', 'human']).default('system'),
+});
+export type CognitionRoute = z.infer<typeof CognitionRouteSchema>;
+
 export const ProfessionCategorySchema = z.enum([
   'business',
   'finance',
@@ -388,6 +443,7 @@ export const ProfessionProfileSchema = z.object({
   title: z.string(),
   category: ProfessionCategorySchema,
   aliases: z.array(z.string()).default([]),
+  routingTerms: z.array(z.string()).default([]),
   summary: z.string(),
   objective: z.string(),
   responsibilities: z.array(z.string()).default([]),
@@ -660,7 +716,7 @@ export const HumanIdentitySchema = z.object({
 export type HumanIdentity = z.infer<typeof HumanIdentitySchema>;
 
 export const HumanContextPacketSchema = z.object({
-  schemaVersion: z.enum(['1', '2', '3', '4', '5']),
+  schemaVersion: z.enum(['1', '2', '3', '4', '5', '6']),
   packetId: z.string(),
   issuedAt: z.string(),
   expiresAt: z.string(),
@@ -674,6 +730,7 @@ export const HumanContextPacketSchema = z.object({
   }),
   persona: PersonaSchema,
   domain: DomainContextSchema,
+  cognition: CognitionRouteSchema.optional(),
   professional: z.lazy(() => ProfessionalContextSchema).default({}),
   skills: SkillContextSchema.default({}),
   memory: MemoryContextSchema,

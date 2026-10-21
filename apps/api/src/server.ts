@@ -54,6 +54,7 @@ import {
   professionCatalog,
   searchProfessionProfiles,
 } from './professions.js';
+import { routeTaskCognition } from './cognition-router.js';
 import type { WorkflowStep } from './store.js';
 import { SkillSigner } from './skill-signing.js';
 import type { DealAuth } from './auth.js';
@@ -568,6 +569,14 @@ async function compileDashboardContext(input: {
   const decision = DecisionStyleSchema.parse(human.decision ?? {});
   const behavior = BehavioralContractSchema.parse(human.behavior ?? {});
   const judgment = JudgmentRulesSchema.parse(human.judgment ?? {});
+  const cognition = routeTaskCognition({
+    task,
+    humanRole: human.role,
+    declaredProfession: domain.profession ?? delegation.profileId,
+    domain: [domain.industry, domain.specialization, ...domain.goals].filter(
+      (value): value is string => Boolean(value),
+    ),
+  });
   const selectedProfessionId =
     delegation.profileId ?? domain.profession ?? 'generalist_assistant_v1';
   const selectedProfession =
@@ -575,7 +584,7 @@ async function compileDashboardContext(input: {
     getProfessionProfile('generalist_assistant_v1');
   const professionalContext = selectedProfession
     ? {
-        profileId: selectedProfessionId,
+        profileId: selectedProfession?.id ?? selectedProfessionId,
         profileVersion: selectedProfession.version,
         title: selectedProfession.title,
         category: selectedProfession.category,
@@ -759,6 +768,7 @@ async function compileDashboardContext(input: {
     authority: delegation.authority,
     judgment,
     professional: professionalContext,
+    cognition,
     humanModel: scopedHumanModel.model,
     interaction: {
       taskMetadata: { surface: 'dashboard_compare' },
@@ -1914,6 +1924,13 @@ export function buildServer(
         credentialSource,
         memoryCount,
         hasImage: Boolean(body.image),
+        cognition: {
+          routeId: packet.cognition?.routeId,
+          profileId: packet.cognition?.profileId,
+          category: packet.cognition?.category,
+          risk: packet.cognition?.risk,
+          confidence: packet.cognition?.confidence,
+        },
       },
     });
     return {
@@ -1934,6 +1951,16 @@ export function buildServer(
         expiresAt: packet.expiresAt,
         policyVersion: packet.policyVersion,
         professionalProfile: packet.professional.profileId,
+        cognition: packet.cognition
+          ? {
+              routeId: packet.cognition.routeId,
+              profileId: packet.cognition.profileId,
+              category: packet.cognition.category,
+              risk: packet.cognition.risk,
+              confidence: packet.cognition.confidence,
+              signals: packet.cognition.signals,
+            }
+          : undefined,
         memoryReferences: memoryCount,
         agentId: requestedAgent.id,
       },
@@ -3053,6 +3080,14 @@ export function buildServer(
     const decision = DecisionStyleSchema.parse(human.decision ?? {});
     const behavior = BehavioralContractSchema.parse(human.behavior ?? {});
     const judgment = JudgmentRulesSchema.parse(human.judgment ?? {});
+    const cognition = routeTaskCognition({
+      task: body.task,
+      humanRole: human.role,
+      declaredProfession: domain.profession ?? delegation.profileId,
+      domain: [domain.industry, domain.specialization, ...domain.goals].filter(
+        (value): value is string => Boolean(value),
+      ),
+    });
     const selectedProfessionId =
       delegation.profileId ?? domain.profession ?? 'generalist_assistant_v1';
     const selectedProfession =
@@ -3060,7 +3095,7 @@ export function buildServer(
       getProfessionProfile('generalist_assistant_v1');
     const professionalContext = selectedProfession
       ? {
-          profileId: selectedProfessionId,
+          profileId: selectedProfession?.id ?? selectedProfessionId,
           profileVersion: selectedProfession.version,
           title: selectedProfession.title,
           category: selectedProfession.category,
@@ -3289,6 +3324,7 @@ export function buildServer(
       authority: delegation.authority,
       judgment,
       professional: professionalContext,
+      cognition,
       humanModel: scopedHumanModel.model,
       interaction,
       grounding,

@@ -64,7 +64,7 @@ Content-Type: application/json
 {
   "packetId": "ctx_123",
   "packet": {
-    "schemaVersion": "5",
+    "schemaVersion": "6",
     "skills": {
       "active": [
         {
@@ -85,6 +85,23 @@ Content-Type: application/json
       "attestations": []
     },
     "humanModel": {},
+    "cognition": {
+      "routeId": "task_healthcare_health_education_assistant_v1",
+      "profileId": "health_education_assistant_v1",
+      "profileVersion": "1.0.0",
+      "title": "Health Education Guide",
+      "category": "healthcare",
+      "confidence": 0.91,
+      "risk": "high",
+      "signals": ["task:diabetic"],
+      "retrievedPatterns": ["evidence_first", "plain_language_first"],
+      "responsePlan": {
+        "leadWith": "answer",
+        "askAtMost": 1,
+        "avoid": ["false reassurance"],
+        "escalateWhen": ["urgent symptoms"]
+      }
+    },
     "behavior": {},
     "responseGuidance": {
       "style": ["Lead with the point and avoid unnecessary hedging"],
@@ -101,6 +118,14 @@ Content-Type: application/json
   "signature": "..."
 }
 ```
+
+`cognition` is selected for the current task. It is separate from
+`professional`, which represents the person's declared identity. A founder can
+therefore ask a health question without being represented as a clinician. DEAL
+routes the task, retrieves the reviewed operating patterns and safety limits,
+and signs the complete packet for the host agent. Route IDs, confidence, and
+internal metadata are for the agent's control logic; they should not be
+announced to the person in a normal response.
 
 The host agent supplies the task and uses its own tools. `requestedCapabilities`
 is retained only as an optional delegated-scope assertion for deployments that

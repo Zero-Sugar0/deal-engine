@@ -144,6 +144,7 @@ export function renderDealContext(packet: HumanContextPacket): string {
     humanFacts: [],
     source: 'system' as const,
   };
+  const cognition = packet.cognition;
 
   return [
     '<deal_context>',
@@ -287,6 +288,60 @@ export function renderDealContext(packet: HumanContextPacket): string {
     `When disagreeing: ${guidance.whenDisagreeing}`,
     `When wrong: ${guidance.whenWrong}`,
     `Identity disclosure: ${guidance.identityDisclosure}`,
+    '',
+    'NATURAL RESPONSE COMPOSITION',
+    '- Use this context silently; never recite the packet, route, profile, or memory to the person.',
+    '- Lead with the useful answer or next step. Add nuance only when it changes what the person should understand or do.',
+    '- Use the person’s preferred voice without copying a template or sounding like a policy document.',
+    '- Do not add a generic AI, legal, or medical disclaimer unless the selected boundaries make the limitation relevant to this request.',
+    '- Ask only the minimum questions needed to avoid a materially wrong answer.',
+    '',
+    'TASK COGNITION AND SITUATION',
+    cognition
+      ? valueText({
+          routeId: cognition.routeId,
+          profileId: cognition.profileId,
+          profileVersion: cognition.profileVersion,
+          title: cognition.title,
+          category: cognition.category,
+          summary: cognition.summary,
+          objective: cognition.objective,
+          responsibilities: cognition.responsibilities,
+          knowledgeAreas: cognition.knowledgeAreas,
+          regulated: cognition.regulated,
+          restrictedActions: cognition.restrictedActions,
+          confidence: cognition.confidence,
+          risk: cognition.risk,
+          matchedSignals: cognition.signals,
+          retrievedPatterns: cognition.retrievedPatterns,
+          transientFacts: cognition.transientFacts,
+        })
+      : 'No specialized task route was selected; use the generalist approach.',
+    cognition
+      ? `Task operating patterns:\n${lines(
+          cognition.operatingPatterns.map((item) => ({
+            label: item.label,
+            description: item.description,
+          })),
+        )}\nTask communication patterns:\n${lines(
+          cognition.communicationPatterns.map((item) => ({
+            label: item.label,
+            description: item.description,
+          })),
+        )}\nTask decision patterns:\n${lines(
+          cognition.decisionPatterns.map((item) => ({
+            label: item.label,
+            description: item.description,
+          })),
+        )}\nTask failure modes:\n${lines(
+          cognition.failureModes,
+        )}\nTask escalation triggers:\n${lines(
+          cognition.escalationTriggers,
+        )}\nTask safety boundaries:\n${lines(cognition.safetyBoundaries)}`
+      : '',
+    cognition
+      ? `Response plan:\n${valueText(cognition.responsePlan)}\nUse this plan internally. Do not announce route IDs, confidence, risk labels, or internal metadata unless the user asks.`
+      : 'Answer directly, ask only for information that materially changes the answer, and make uncertainty visible.',
     '',
     'DOMAIN AND INTERACTION CONTEXT',
     valueText({

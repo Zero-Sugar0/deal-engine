@@ -340,6 +340,36 @@ describe('DEAL control plane', () => {
     expect(policyResponse.json().decision).toBe('require_approval');
   });
 
+  it('routes the current task without replacing the human identity', async () => {
+    const contextResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/context',
+      headers: { authorization: `Bearer ${agentToken}` },
+      payload: {
+        task: 'I am diabetic. Can I take sugar with tea?',
+        requestedCapabilities: ['context_read', 'response_draft'],
+      },
+    });
+
+    expect(contextResponse.statusCode).toBe(200);
+    const context = contextResponse.json();
+    expect(context.packet.professional.profileId).toBe('growth_operator_v1');
+    expect(context.packet.cognition).toMatchObject({
+      profileId: 'health_education_assistant_v1',
+      title: 'Health Education Guide',
+      category: 'healthcare',
+      risk: 'high',
+    });
+    expect(context.packet.cognition.knowledgeAreas).toContain(
+      'health literacy',
+    );
+    expect(context.packet.cognition.safetyBoundaries).toContain(
+      'Do not diagnose, prescribe, or claim a clinical examination.',
+    );
+    expect(context.packet.cognition.confidence).toBeGreaterThan(0.5);
+    expect(context.packet.cognition.signals).toContain('task:diabetic');
+  });
+
   it('registers, attests, pins, distributes, and revokes organization skills', async () => {
     const registeredResponse = await app.inject({
       method: 'POST',
@@ -1033,7 +1063,7 @@ describe('DEAL control plane', () => {
       },
     });
     const packet = response.json().packet;
-    expect(packet.schemaVersion).toBe('5');
+    expect(packet.schemaVersion).toBe('6');
     expect(packet.humanModel.version).toBe(onboarding.json().modelVersion);
     expect(packet.humanModel.identity.preferredName).toBe('Alex');
     expect(packet.humanModel.identity.selfDescription).toContain(
