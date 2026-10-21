@@ -7,7 +7,7 @@
 A person represented by DEAL. The human model is deliberately layered rather
 than reduced to a single prompt or tone field:
 
-- `identity` — names, pronouns, mission, language, self-description, and user-controlled identity facets.
+- `identity` — names, pronouns, mission, language, self-description, and user-controlled identity facets such as gender identity, race or ethnicity, cultural background, nationality, personal background, religion or belief, and sexual orientation.
 - `selfConcept` — how the person describes themselves, strengths, aspirations, growth edges, fears, non-negotiables, and ranked values.
 - `biography` — formative experiences, career chapters, current life/work chapter, places, languages, and expertise.
 - `persona` — observable communication mechanics, examples, phrase preferences, and audience-specific modes.
@@ -18,7 +18,10 @@ than reduced to a single prompt or tone field:
 
 Structured facts carry confidence, confirmation state, source, validity, and
 sensitivity. User-confirmed facts are not interchangeable with agent-observed or
-inferred observations.
+inferred observations. Protected identity attributes are a separate explicit
+schema: they may be self-reported or imported with authorization, are private by
+default, and are never inferred from names, language, location, profession,
+appearance, or conversation.
 
 ```sql
 CREATE TABLE humans (

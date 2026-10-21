@@ -955,6 +955,10 @@ describe('DEAL control plane', () => {
         identity: {
           selfDescription: 'A patient builder who prefers honest progress.',
           languages: [{ value: 'English', category: 'working' }],
+          genderIdentity: { value: 'non-binary' },
+          raceEthnicity: [{ value: 'self-described heritage' }],
+          culturalBackground: [{ value: 'Caribbean' }],
+          personalBackground: [{ value: 'First-generation founder' }],
           identityMarkers: [
             {
               value: 'sensitive identity fact',
@@ -1070,6 +1074,10 @@ describe('DEAL control plane', () => {
       'patient builder',
     );
     expect(packet.humanModel.identity.identityMarkers).toHaveLength(0);
+    expect(packet.humanModel.identity.genderIdentity).toBeUndefined();
+    expect(packet.humanModel.identity.raceEthnicity).toHaveLength(0);
+    expect(packet.redactions).toContain('humanModel.identity.genderIdentity');
+    expect(packet.redactions).toContain('humanModel.identity.raceEthnicity');
     expect(packet.redactions).toContain('humanModel.identity.identityMarkers');
     expect(packet.grounding.instructions).toContain(
       'Sensitive profile facts were withheld because this delegation does not include sensitive_context_read',

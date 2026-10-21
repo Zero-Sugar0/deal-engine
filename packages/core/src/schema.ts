@@ -26,6 +26,45 @@ export const ProfileFactSchema = z.object({
 });
 export type ProfileFact = z.infer<typeof ProfileFactSchema>;
 
+/**
+ * A self-described identity attribute. Protected identity attributes are
+ * deliberately not inferable: they can only enter DEAL through the person or
+ * an explicitly authorised import, and remain private unless the context
+ * authority allows them to travel to an agent.
+ */
+export const IdentityAttributeSchema = z
+  .object({
+    value: z.string().min(1),
+    confirmation: z
+      .enum(['user_confirmed', 'authorized_import'])
+      .default('user_confirmed'),
+    source: z
+      .enum(['self_reported', 'authorized_import'])
+      .default('self_reported'),
+    sensitivity: z
+      .enum(['personal', 'sensitive', 'highly_sensitive'])
+      .default('sensitive'),
+    visibility: z
+      .enum(['private', 'authorized_context', 'never_share'])
+      .default('private'),
+    validFrom: z.string().datetime().optional(),
+    validUntil: z.string().datetime().optional(),
+    notes: z.string().max(500).optional(),
+  })
+  .superRefine((attribute, context) => {
+    if (
+      attribute.confirmation === 'authorized_import' &&
+      attribute.source === 'self_reported'
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['source'],
+        message: 'Authorized imports must identify an authorized import source',
+      });
+    }
+  });
+export type IdentityAttribute = z.infer<typeof IdentityAttributeSchema>;
+
 export const ValuePrioritySchema = z.object({
   value: z.string(),
   meaning: z.string().optional(),
@@ -171,6 +210,14 @@ export const IdentityProfileSchema = z.object({
   identityMarkers: z.array(ProfileFactSchema).default([]),
   affiliations: z.array(ProfileFactSchema).default([]),
   accessibilityNeeds: z.array(ProfileFactSchema).default([]),
+  /** These fields are explicit self-description, never model inference. */
+  genderIdentity: IdentityAttributeSchema.optional(),
+  raceEthnicity: z.array(IdentityAttributeSchema).default([]),
+  culturalBackground: z.array(IdentityAttributeSchema).default([]),
+  nationality: z.array(IdentityAttributeSchema).default([]),
+  personalBackground: z.array(IdentityAttributeSchema).default([]),
+  religionOrBelief: IdentityAttributeSchema.optional(),
+  sexualOrientation: IdentityAttributeSchema.optional(),
 });
 export type IdentityProfile = z.infer<typeof IdentityProfileSchema>;
 
@@ -430,6 +477,20 @@ export const ProfessionCategorySchema = z.enum([
   'manufacturing_logistics',
   'hospitality_retail',
   'agriculture_environment',
+  'public_health',
+  'services',
+  'language_services',
+  'culture',
+  'research',
+  'safety',
+  'crafts',
+  'agriculture',
+  'public_sector',
+  'hospitality',
+  'transport',
+  'public_safety',
+  'business_support',
+  'creative',
   'general',
 ]);
 export type ProfessionCategory = z.infer<typeof ProfessionCategorySchema>;

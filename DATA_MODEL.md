@@ -21,7 +21,8 @@ contexts, relational/emotional cues, boundaries, domain, decision heuristics,
 behavioral contract, current priorities, and known constraints. Each structured
 fact can carry confidence, confirmation, source, validity, and sensitivity. A
 context packet also contains derived `responseGuidance` so an agent knows how to
-speak truthfully and consistently for the relevant audience.
+speak truthfully and consistently for the relevant audience. Protected identity
+facets are explicit self-description, private by default, and never inferred.
 
 ### Organization
 

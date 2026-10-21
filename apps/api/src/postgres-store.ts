@@ -993,6 +993,10 @@ export class PostgresDealStore extends DealStore {
         identityMarkers: [],
         affiliations: [],
         accessibilityNeeds: [],
+        raceEthnicity: [],
+        culturalBackground: [],
+        nationality: [],
+        personalBackground: [],
       },
       persona: {
         displayName: 'Demo Founder',

@@ -1545,6 +1545,18 @@ function stringLines(value: unknown): string[] {
     : [];
 }
 
+function identityAttributeValue(value: unknown): string {
+  return typeof recordValue(value).value === 'string'
+    ? String(recordValue(value).value)
+    : '';
+}
+
+function identityAttributeValues(value: unknown): string[] {
+  return recordList(value)
+    .map((item) => (typeof item.value === 'string' ? item.value : ''))
+    .filter(Boolean);
+}
+
 function modelDraft(profile: Human): ModelDraft {
   return {
     displayName: profile.displayName,
@@ -1593,6 +1605,40 @@ function HumanModelView({
       ...current,
       [section]: { ...current[section], [field]: nextValue },
     }));
+  }
+
+  function updateIdentityAttribute(field: string, value: string) {
+    updateSection(
+      'identity',
+      field,
+      value.trim()
+        ? {
+            value: value.trim(),
+            confirmation: 'user_confirmed',
+            source: 'self_reported',
+            sensitivity: 'sensitive',
+            visibility: 'private',
+          }
+        : undefined,
+    );
+  }
+
+  function updateIdentityList(field: string, value: string) {
+    updateSection(
+      'identity',
+      field,
+      value
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((item) => ({
+          value: item,
+          confirmation: 'user_confirmed',
+          source: 'self_reported',
+          sensitivity: 'sensitive',
+          visibility: 'private',
+        })),
+    );
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -1694,6 +1740,30 @@ function HumanModelView({
                 }
               />
               <TextField
+                label="Gender identity"
+                value={identityAttributeValue(draft.identity.genderIdentity)}
+                placeholder="Only if you want to share"
+                onChange={(value) =>
+                  updateIdentityAttribute('genderIdentity', value)
+                }
+              />
+              <TextField
+                label="Religion or belief"
+                value={identityAttributeValue(draft.identity.religionOrBelief)}
+                placeholder="Only if you want to share"
+                onChange={(value) =>
+                  updateIdentityAttribute('religionOrBelief', value)
+                }
+              />
+              <TextField
+                label="Sexual orientation"
+                value={identityAttributeValue(draft.identity.sexualOrientation)}
+                placeholder="Only if you want to share"
+                onChange={(value) =>
+                  updateIdentityAttribute('sexualOrientation', value)
+                }
+              />
+              <TextField
                 label="Organization"
                 value={draft.identity.organization}
                 onChange={(value) =>
@@ -1780,6 +1850,49 @@ function HumanModelView({
                 updateSection('identity', 'accessibilityNeeds', value)
               }
             />
+            <div className="identity-privacy-note">
+              These details are optional, private, and never guessed by DEAL.
+              They are shared with an agent only when you explicitly allow
+              sensitive context for that connection.
+            </div>
+            <div className="editor-grid">
+              <TextAreaField
+                label="Race or ethnicity"
+                value={identityAttributeValues(
+                  draft.identity.raceEthnicity,
+                ).join('\n')}
+                placeholder="One detail per line; only if you want to share"
+                onChange={(value) => updateIdentityList('raceEthnicity', value)}
+              />
+              <TextAreaField
+                label="Cultural background"
+                value={identityAttributeValues(
+                  draft.identity.culturalBackground,
+                ).join('\n')}
+                placeholder="One detail per line; only if you want to share"
+                onChange={(value) =>
+                  updateIdentityList('culturalBackground', value)
+                }
+              />
+              <TextAreaField
+                label="Nationality or heritage"
+                value={identityAttributeValues(draft.identity.nationality).join(
+                  '\n',
+                )}
+                placeholder="One detail per line; only if you want to share"
+                onChange={(value) => updateIdentityList('nationality', value)}
+              />
+              <TextAreaField
+                label="Personal background"
+                value={identityAttributeValues(
+                  draft.identity.personalBackground,
+                ).join('\n')}
+                placeholder="One detail per line; only if you want to share"
+                onChange={(value) =>
+                  updateIdentityList('personalBackground', value)
+                }
+              />
+            </div>
           </EditorSection>
 
           <EditorSection eyebrow="Voice" title="How you want to sound">

@@ -7,8 +7,15 @@ import {
   professionStructures,
   professionStructurePatternIds,
 } from './profession-structures.js';
+import {
+  cognitiveEngineerStructure,
+  professionExpansionStructures,
+  professionExpansionPatternIds,
+} from './profession-expansion.js';
 
 export { professionStructures } from './profession-structures.js';
+export { professionExpansionStructures } from './profession-expansion.js';
+export { cognitiveEngineerStructure } from './profession-expansion.js';
 
 const pattern = (
   id: string,
@@ -2075,6 +2082,8 @@ const legacyProfessionCatalog: ProfessionProfile[] = [
 const mergedProfessionCatalog = [
   ...legacyProfessionCatalog,
   ...professionStructures,
+  cognitiveEngineerStructure,
+  ...professionExpansionStructures,
 ];
 
 export const professionCatalog: ProfessionProfile[] = [
@@ -2093,6 +2102,11 @@ const allPatternIds = new Set(
     .map((item) => item.id),
 );
 for (const patternId of professionStructurePatternIds) {
+  if (!allPatternIds.has(patternId)) {
+    throw new Error(`Profession pattern ${patternId} is not resolvable`);
+  }
+}
+for (const patternId of professionExpansionPatternIds) {
   if (!allPatternIds.has(patternId)) {
     throw new Error(`Profession pattern ${patternId} is not resolvable`);
   }

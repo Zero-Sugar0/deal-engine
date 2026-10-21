@@ -81,6 +81,10 @@ export function compileHumanContextPacket(
       identityMarkers: [],
       affiliations: [],
       accessibilityNeeds: [],
+      raceEthnicity: [],
+      culturalBackground: [],
+      nationality: [],
+      personalBackground: [],
     },
     persona: {
       ...input.persona,
@@ -218,6 +222,7 @@ export function compileHumanContextPacket(
       .sort((left, right) => right.priority - left.priority)
       .slice(0, 5)
       .map((item) => `Value: ${item.value}`),
+    "Use only the person's explicitly provided identity context when it is relevant and authorized.",
   ].filter((item): item is string => Boolean(item));
   const responseGuidance: ResponseGuidance = ResponseGuidanceSchema.parse({
     style: [

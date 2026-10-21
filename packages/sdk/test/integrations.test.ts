@@ -118,6 +118,17 @@ function packet(): HumanContextPacket {
         identityMarkers: [],
         affiliations: [],
         accessibilityNeeds: [],
+        raceEthnicity: [],
+        culturalBackground: [],
+        nationality: [],
+        personalBackground: [],
+        genderIdentity: {
+          value: 'self-described identity',
+          confirmation: 'user_confirmed',
+          source: 'self_reported',
+          sensitivity: 'sensitive',
+          visibility: 'authorized_context',
+        },
       },
       persona: {
         preferredPhrases: ['Let us make this useful'],
@@ -288,6 +299,7 @@ describe('agent integrations', () => {
       task: 'Draft a thoughtful reply',
     });
     expect(prepared.systemInstruction).toContain('PERSONA AND COMMUNICATION');
+    expect(prepared.systemInstruction).toContain('self-described identity');
     expect(prepared.systemInstruction).toContain(
       'TASK COGNITION AND SITUATION',
     );

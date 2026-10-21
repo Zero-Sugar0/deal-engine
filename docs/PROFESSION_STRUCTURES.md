@@ -10,6 +10,12 @@ task. The person’s declared identity remains in `packet.professional`.
 
 ## Included structures
 
+The original reviewed pack contains 20 structures. The expansion pack adds 50
+more, for 70 reviewed profession structures in total. DEAL also includes the
+product-defining `cognitive_engineer_v1` role. The expansion is defined in
+`apps/api/src/profession-expansion.ts` and exported through the same
+`GET /v1/professions` catalog.
+
 | ID                               | Category    |
 | -------------------------------- | ----------- |
 | `health_education_assistant_v1`  | healthcare  |
@@ -38,6 +44,26 @@ operating/communication/decision patterns, failure modes, required context,
 escalation triggers, safety boundaries, sensitive data classes, regulation and
 licensing metadata, restricted actions, and approval actions.
 
+The expansion covers:
+
+- care and public health: midwife, paramedic, veterinarian, dentist,
+  physiotherapist, occupational therapist, dietitian, medical laboratory
+  scientist, social worker, childcare worker, elder care aide, disability
+  support worker, and community health worker;
+- education, research, language, and culture: funeral director, early
+  childhood educator, special education teacher, librarian, academic
+  researcher, sign language interpreter, translator, and museum curator;
+- technology, engineering, safety, and trades: data engineer, mechanical
+  engineer, industrial safety inspector, network administrator, UX researcher,
+  embedded systems engineer, plumber, carpenter, welder, automotive mechanic,
+  tailor, and HVAC technician;
+- agriculture, hospitality, transport, public safety, business, finance, and
+  creative work: agronomist, environmental scientist, fisheries officer, chef,
+  hotel manager, commercial pilot, truck driver, air traffic controller, police
+  officer, firefighter, emergency dispatcher, administrative assistant,
+  procurement officer, insurance underwriter, graphic designer, photographer,
+  and composer/musician.
+
 Routing is deterministic and inspectable. Specific profiles can outrank broad
 profiles using `routingPriority`; this is important for cases such as a
 medication interaction routing to a pharmacist rather than a general health
@@ -47,3 +73,19 @@ changing the host agent SDK.
 The host agent must still use its own tools and current sources. Profession
 structures provide bounded reasoning guidance, not factual authority or a
 substitute for a licensed professional.
+
+## Human identity context
+
+`HumanModel.identity` supports a person’s explicit self-description, including
+gender identity, race or ethnicity, cultural background, nationality, personal
+background, religion or belief, and sexual orientation. These fields are
+optional and are never inferred from a name, language, location, profession,
+appearance, or conversation.
+
+Each protected identity attribute carries confirmation, source, sensitivity,
+visibility, and validity metadata. By default it is private. A delegated agent
+receives it only when the delegation includes `sensitive_context_read`; values
+marked `never_share` remain redacted even then. This keeps identity context
+available for a person’s own voice and relevant accessibility or cultural
+needs without turning protected attributes into a guess, stereotype, or hidden
+decision signal.

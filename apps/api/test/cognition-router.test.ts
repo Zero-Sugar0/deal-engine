@@ -1,6 +1,12 @@
+import { IdentityProfileSchema } from '@deal/core';
 import { describe, expect, it } from 'vitest';
 import { routeTaskCognition } from '../src/cognition-router.js';
-import { professionCatalog, professionStructures } from '../src/professions.js';
+import {
+  cognitiveEngineerStructure,
+  professionCatalog,
+  professionExpansionStructures,
+  professionStructures,
+} from '../src/professions.js';
 
 describe('task cognition routing', () => {
   it('loads the twenty reviewed profession structures with unique IDs', () => {
@@ -19,6 +25,41 @@ describe('task cognition routing', () => {
         (profile) => profile.id === 'health_education_assistant_v1',
       )?.title,
     ).toBe('Health Education Guide');
+  });
+
+  it('loads the fifty expansion structures with complete scope contracts', () => {
+    expect(professionExpansionStructures).toHaveLength(50);
+    expect(
+      new Set(professionExpansionStructures.map((profile) => profile.id)).size,
+    ).toBe(50);
+    const originalIds = new Set(
+      professionStructures.map((profile) => profile.id),
+    );
+    expect(
+      professionExpansionStructures.every(
+        (profile) => !originalIds.has(profile.id),
+      ),
+    ).toBe(true);
+    expect(
+      professionExpansionStructures.every((profile) => /_v1$/.test(profile.id)),
+    ).toBe(true);
+    expect(
+      professionExpansionStructures.every(
+        (profile) =>
+          profile.summary.length > 0 &&
+          profile.objective.length > 0 &&
+          profile.requiredContext.length > 0 &&
+          profile.safetyBoundaries.length > 0,
+      ),
+    ).toBe(true);
+    expect(professionCatalog).toHaveLength(
+      professionCatalog.filter(
+        (profile, index, profiles) =>
+          profiles.findIndex((candidate) => candidate.id === profile.id) ===
+          index,
+      ).length,
+    );
+    expect(cognitiveEngineerStructure.routingPriority).toBeGreaterThan(0);
   });
 
   it.each([
@@ -52,6 +93,36 @@ describe('task cognition routing', () => {
       'journalist_editor_v1',
       'media',
     ],
+    [
+      'Help me prepare a birth plan and know what contractions require urgent care.',
+      'midwife_v1',
+      'healthcare',
+    ],
+    [
+      'Design an ETL pipeline with dbt and data quality checks.',
+      'data_engineer_v1',
+      'technology',
+    ],
+    [
+      'Create a prep list and allergen matrix for tonight’s menu.',
+      'chef_v1',
+      'hospitality',
+    ],
+    [
+      'How do I report a theft and preserve the evidence?',
+      'police_officer_v1',
+      'public_safety',
+    ],
+    [
+      'Help me arrange the chord progression and melody for an original song.',
+      'composer_musician_v1',
+      'creative',
+    ],
+    [
+      'Design a human context and behavior contract for my AI agent.',
+      'cognitive_engineer_v1',
+      'technology',
+    ],
   ])('routes %s to %s', (task, profileId, category) => {
     const route = routeTaskCognition({
       task,
@@ -84,5 +155,21 @@ describe('task cognition routing', () => {
     expect(route.licenseRequiredFor).toContain('diagnosis');
     expect(route.approvalActions).toContain('sensitive_health_record_write');
     expect(route.restrictedActions).toContain('prescribe');
+  });
+
+  it('accepts self-described identity without allowing inferred protected traits', () => {
+    const identity = IdentityProfileSchema.parse({
+      preferredName: 'Sam',
+      pronouns: 'they/them',
+      genderIdentity: { value: 'non-binary' },
+      raceEthnicity: [{ value: 'A self-described identity' }],
+      culturalBackground: [{ value: 'Caribbean' }],
+      personalBackground: [{ value: 'First-generation founder' }],
+    });
+
+    expect(identity.genderIdentity?.confirmation).toBe('user_confirmed');
+    expect(identity.raceEthnicity[0]?.source).toBe('self_reported');
+    expect(identity.culturalBackground[0]?.visibility).toBe('private');
+    expect(identity.personalBackground[0]?.confirmation).not.toBe('inferred');
   });
 });

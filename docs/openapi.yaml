@@ -791,6 +791,22 @@ components:
         source: { type: string }
         sensitivity: { type: string, enum: [normal, personal, sensitive] }
         tags: { type: array, items: { type: string } }
+    IdentityAttribute:
+      type: object
+      required: [value]
+      description: Explicitly self-described identity. DEAL never infers these fields.
+      properties:
+        value: { type: string }
+        confirmation:
+          { type: string, enum: [user_confirmed, authorized_import] }
+        source: { type: string, enum: [self_reported, authorized_import] }
+        sensitivity:
+          { type: string, enum: [personal, sensitive, highly_sensitive] }
+        visibility:
+          { type: string, enum: [private, authorized_context, never_share] }
+        validFrom: { type: string, format: date-time }
+        validUntil: { type: string, format: date-time }
+        notes: { type: string, maxLength: 500 }
     ProfileUpdate:
       type: object
       properties:
@@ -803,6 +819,30 @@ components:
             pronouns: { type: string }
             mission: { type: string }
             selfDescription: { type: string }
+            genderIdentity: { $ref: '#/components/schemas/IdentityAttribute' }
+            raceEthnicity:
+              {
+                type: array,
+                items: { $ref: '#/components/schemas/IdentityAttribute' },
+              }
+            culturalBackground:
+              {
+                type: array,
+                items: { $ref: '#/components/schemas/IdentityAttribute' },
+              }
+            nationality:
+              {
+                type: array,
+                items: { $ref: '#/components/schemas/IdentityAttribute' },
+              }
+            personalBackground:
+              {
+                type: array,
+                items: { $ref: '#/components/schemas/IdentityAttribute' },
+              }
+            religionOrBelief: { $ref: '#/components/schemas/IdentityAttribute' }
+            sexualOrientation:
+              { $ref: '#/components/schemas/IdentityAttribute' }
             languages:
               {
                 type: array,

@@ -425,11 +425,31 @@ function scopeHumanModel(
   model: HumanModel,
   includeSensitiveContext: boolean,
 ): { model: HumanModel; redactions: string[] } {
-  if (includeSensitiveContext) return { model, redactions: [] };
   const redactions: string[] = [];
   const scoped = (path: string, facts: ProfileFact[]): ProfileFact[] => {
-    const visible = visibleFacts(facts, false);
+    const visible = visibleFacts(facts, includeSensitiveContext);
     if (visible.length !== facts.length) redactions.push(path);
+    return visible;
+  };
+  const scopedIdentity = <T extends { visibility: string }>(
+    path: string,
+    attribute: T | undefined,
+  ): T | undefined => {
+    if (!attribute) return undefined;
+    if (!includeSensitiveContext || attribute.visibility === 'never_share') {
+      redactions.push(path);
+      return undefined;
+    }
+    return attribute;
+  };
+  const scopedIdentityList = <T extends { visibility: string }>(
+    path: string,
+    attributes: T[],
+  ): T[] => {
+    const visible = includeSensitiveContext
+      ? attributes.filter((attribute) => attribute.visibility !== 'never_share')
+      : [];
+    if (visible.length !== attributes.length) redactions.push(path);
     return visible;
   };
   const identity = {
@@ -449,6 +469,34 @@ function scopeHumanModel(
     accessibilityNeeds: scoped(
       'humanModel.identity.accessibilityNeeds',
       model.identity.accessibilityNeeds,
+    ),
+    genderIdentity: scopedIdentity(
+      'humanModel.identity.genderIdentity',
+      model.identity.genderIdentity,
+    ),
+    raceEthnicity: scopedIdentityList(
+      'humanModel.identity.raceEthnicity',
+      model.identity.raceEthnicity,
+    ),
+    culturalBackground: scopedIdentityList(
+      'humanModel.identity.culturalBackground',
+      model.identity.culturalBackground,
+    ),
+    nationality: scopedIdentityList(
+      'humanModel.identity.nationality',
+      model.identity.nationality,
+    ),
+    personalBackground: scopedIdentityList(
+      'humanModel.identity.personalBackground',
+      model.identity.personalBackground,
+    ),
+    religionOrBelief: scopedIdentity(
+      'humanModel.identity.religionOrBelief',
+      model.identity.religionOrBelief,
+    ),
+    sexualOrientation: scopedIdentity(
+      'humanModel.identity.sexualOrientation',
+      model.identity.sexualOrientation,
     ),
     legalName: undefined,
   };
@@ -526,7 +574,8 @@ function scopeHumanModel(
     ),
   };
   const relationships = model.relationships.filter((relationship) => {
-    if (relationship.sensitivity !== 'sensitive') return true;
+    if (includeSensitiveContext || relationship.sensitivity !== 'sensitive')
+      return true;
     redactions.push(`humanModel.relationships.${relationship.id}`);
     return false;
   });
