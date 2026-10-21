@@ -3199,6 +3199,21 @@ a:focus-visible {
   color: #81778c;
   font-size: 10px;
 }
+.onboarding-skip {
+  margin-left: auto;
+  margin-right: 20px;
+  border: 0;
+  background: transparent;
+  color: #4c4256;
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.onboarding-skip:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
 .onboarding-main {
   width: min(620px, calc(100% - 32px));
   margin: 7vh auto 0;
@@ -3297,6 +3312,49 @@ a:focus-visible {
   margin-top: 30px;
   padding-top: 19px;
   border-top: 1px solid #1e192d0e;
+}
+.onboarding-fields {
+  display: grid;
+  gap: 20px;
+  margin: 28px 0 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.onboarding-fields label {
+  display: grid;
+  gap: 9px;
+  color: #38313f;
+  font-size: 14px;
+}
+.onboarding-fields label small {
+  color: #81778c;
+  font-size: 12px;
+}
+.onboarding-fields input,
+.onboarding-fields textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #d9d3e2;
+  border-radius: 9px;
+  background: #fbfafc;
+  color: #17131b;
+  font: inherit;
+  font-size: 16px;
+}
+.onboarding-fields textarea {
+  resize: vertical;
+}
+.onboarding-fields input:focus-visible,
+.onboarding-fields textarea:focus-visible {
+  outline: 2px solid #9f8fca;
+  outline-offset: 2px;
+}
+.onboarding-save-note {
+  color: #81778c;
+  font-size: 13px;
+  line-height: 1.6;
 }
 .referral-grid {
   display: flex;

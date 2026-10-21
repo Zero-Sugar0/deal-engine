@@ -1,10 +1,16 @@
 import {
   CognitionRouteSchema,
+  type ContextEntry,
   type CognitionRisk,
   type CognitionRoute,
   type ProfessionProfile,
 } from '@deal/core';
-import { getProfessionProfile, professionCatalog } from './professions.js';
+import {
+  contextEntryCatalog,
+  getContextEntry,
+  getProfessionProfile,
+  professionCatalog,
+} from './professions.js';
 
 export interface CognitionRoutingInput {
   task: string;
@@ -15,6 +21,7 @@ export interface CognitionRoutingInput {
 
 type CandidateScore = {
   profile: ProfessionProfile;
+  entry: ContextEntry;
   score: number;
   signals: string[];
 };
@@ -73,7 +80,12 @@ function scoreProfile(
   humanRole?: string,
   domain: string[] = [],
 ): CandidateScore {
-  const routingMatches = matchTerms(task, profile.routingTerms);
+  const entry = getContextEntry(profile.id);
+  const routingMatches = matchTerms(
+    task,
+    entry?.routing.terms.map((term) => term.term) ?? profile.routingTerms,
+  );
+  const negativeMatches = matchTerms(task, entry?.routing.negativeTerms ?? []);
   const aliasMatches = matchTerms(task, [profile.title, ...profile.aliases]);
   const knowledgeMatches = matchTerms(task, [
     ...profile.knowledgeAreas,
@@ -91,7 +103,18 @@ function scoreProfile(
       )
       .map((term) => `knowledge:${term}`),
   ];
-  let score = routingMatches.length * 5;
+  let score = entry
+    ? entry.routing.terms
+        .filter((term) => routingMatches.includes(term.term))
+        .reduce(
+          (total, term) => total + term.weight * (term.ambiguous ? 3 : 8),
+          0,
+        )
+    : routingMatches.length * 5;
+  if (negativeMatches.length) {
+    score -= negativeMatches.length * 20;
+    signals.push(...negativeMatches.map((term) => `negative:${term}`));
+  }
   score += aliasMatches.length * 4;
   score += knowledgeMatches.length * 1.5;
 
@@ -123,7 +146,12 @@ function scoreProfile(
     signals.push('domain:declared');
   }
 
-  return { profile, score, signals: [...new Set(signals)].slice(0, 12) };
+  return {
+    profile,
+    entry: entry ?? contextEntryCatalog[0]!,
+    score,
+    signals: [...new Set(signals)].slice(0, 12),
+  };
 }
 
 function riskFor(profile: ProfessionProfile, task: string): CognitionRisk {
@@ -166,12 +194,28 @@ export function routeTaskCognition(
         input.humanRole,
         input.domain,
       ),
-    )
-    .sort(
-      (left, right) =>
-        right.score - left.score ||
-        right.profile.routingPriority - left.profile.routingPriority,
     );
+  const identityContextRequest =
+    /\b(my|your|their|the user's)\s+(race|gender|background|identity|religion|sexuality|nationality|persona|profile|pronouns)\b/.test(
+      task,
+    ) ||
+    /\b(what do you know about me|human context|context engineering|identity model|persona design)\b/.test(
+      task,
+    );
+  if (identityContextRequest) {
+    const cognitive = candidates.find(
+      (candidate) => candidate.profile.id === 'cognitive_engineer_v1',
+    );
+    if (cognitive) {
+      cognitive.score += 20;
+      cognitive.signals.push('context:identity-management');
+    }
+  }
+  candidates.sort(
+    (left, right) =>
+      right.score - left.score ||
+      right.profile.routingPriority - left.profile.routingPriority,
+  );
   const generalist =
     getProfessionProfile('generalist_assistant_v1') ?? professionCatalog[0];
   const selected =
@@ -179,6 +223,7 @@ export function routeTaskCognition(
       ? candidates[0]
       : {
           profile: generalist,
+          entry: getContextEntry(generalist.id) ?? contextEntryCatalog[0]!,
           score: 0,
           signals: ['route:generalist'],
         };
@@ -209,6 +254,7 @@ export function routeTaskCognition(
     failureModes: routeProfile.failureModes,
     requiredContext: routeProfile.requiredContext,
     escalationTriggers: routeProfile.escalationTriggers,
+    escalation: selected.entry.escalation,
     safetyBoundaries: routeProfile.safetyBoundaries,
     sensitiveDataClasses: routeProfile.sensitiveDataClasses,
     regulated: routeProfile.regulated,
@@ -232,6 +278,8 @@ export function routeTaskCognition(
       escalateWhen: routeProfile.escalationTriggers.slice(0, 8),
     },
     source: routeProfile.source,
+    routeVersion: '1',
+    routeReason: selected.entry.summary,
   };
   return CognitionRouteSchema.parse(route);
 }

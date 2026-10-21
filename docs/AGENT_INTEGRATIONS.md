@@ -83,9 +83,38 @@ DEAL still decides whether the current person has supplied enough context, what
 data may be shown, whether the agent must ask, and whether an action needs
 approval. A skill cannot make an agent licensed, human, or authorized.
 
-The runtime caches a packet only until its signed expiry. Call
-`runtime.clearCache()` when the host application receives a human correction or
-changes the active task.
+The runtime caches a packet only until its signed expiry. It also reads the
+server's context revision before each preparation, so profile edits, memory
+corrections, and forget operations automatically bypass stale cached packets.
+`runtime.clearCache()` remains available for an immediate local reset.
+
+For a task that needs explicit composition, pass context controls and the
+tools the host intends to expose:
+
+```ts
+const prepared = await runtime.prepare({
+  task: 'Draft a concise update in my work persona',
+  audience: 'my team',
+  context: {
+    include: ['persona:work'],
+    exclude: ['relationship:family'],
+    usePersonalContext: true,
+  },
+  tools: [
+    {
+      name: 'mail_sender',
+      action: 'external_commitment',
+      effect: 'external',
+    },
+  ],
+});
+```
+
+The returned signed packet exposes the selected and excluded contexts,
+provenance-labelled facts, distilled context policy, and declared tool
+manifest. Context reads do not require approval; consequential tool actions
+must still pass policy evaluation and, when required, approval-token
+verification at the host boundary.
 
 ## What happens during a chat turn
 

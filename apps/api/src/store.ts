@@ -46,8 +46,11 @@ export interface Human {
 }
 
 export interface OnboardingProfile {
+  skippedAt?: string;
   role?: string;
   focus?: string;
+  country?: string;
+  age?: number;
   referralSource?: string;
   completedAt?: string;
 }
@@ -110,6 +113,7 @@ export interface Approval {
   agentId: string;
   contextPacketId: string;
   action: string;
+  toolName?: string;
   summary: string;
   payload: unknown;
   payloadHash: string;
@@ -377,6 +381,18 @@ export class DealStore {
         (!delegation.authority.expiresAt ||
           new Date(delegation.authority.expiresAt) > new Date()),
     );
+  }
+
+  /** Bump the signed-context revision after any human-context mutation. */
+  touchHumanContext(humanId: string): string {
+    const human = this.humans.get(humanId);
+    if (!human) throw new Error('Human not found');
+    human.modelVersion = (human.modelVersion ?? 1) + 1;
+    return this.contextRevision(humanId);
+  }
+
+  contextRevision(humanId: string): string {
+    return String(this.humans.get(humanId)?.modelVersion ?? 1);
   }
 
   async seedDemo(agentToken: string, humanToken: string): Promise<void> {

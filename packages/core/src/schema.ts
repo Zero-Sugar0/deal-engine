@@ -200,6 +200,8 @@ export const IdentityProfileSchema = z.object({
   pronouns: z.string().optional(),
   mission: z.string().optional(),
   organization: z.string().optional(),
+  country: z.string().min(2).max(100).optional(),
+  age: z.number().int().min(0).max(130).optional(),
   locale: z.string().default('en'),
   timezone: z.string().optional(),
   legalName: z.string().optional(),
@@ -449,6 +451,32 @@ export const CognitionRouteSchema = z.object({
   failureModes: z.array(z.string()).default([]),
   requiredContext: z.array(z.string()).default([]),
   escalationTriggers: z.array(z.string()).default([]),
+  escalation: z
+    .object({
+      triggers: z.array(
+        z.object({
+          condition: z.string(),
+          severity: z.enum(['info', 'elevated', 'urgent', 'emergency']),
+          action: z.enum([
+            'note',
+            'clarify',
+            'soften',
+            'refuse_part',
+            'refer',
+            'stop_and_route',
+          ]),
+        }),
+      ),
+      routes: z.record(
+        z.object({
+          emergency: z.string().optional(),
+          crisis: z.string().optional(),
+          specialist: z.string().optional(),
+          verifiedAt: z.string().date().optional(),
+        }),
+      ),
+    })
+    .default({ triggers: [], routes: {} }),
   safetyBoundaries: z.array(z.string()).default([]),
   sensitiveDataClasses: z.array(z.string()).default([]),
   regulated: z.boolean().default(false),
@@ -471,6 +499,8 @@ export const CognitionRouteSchema = z.object({
     avoid: z.array(z.string()).default([]),
     escalateWhen: z.array(z.string()).default([]),
   }),
+  routeVersion: z.string().default('1'),
+  routeReason: z.string().default(''),
   source: z.enum(['system', 'organization', 'human']).default('system'),
 });
 export type CognitionRoute = z.infer<typeof CognitionRouteSchema>;
@@ -587,6 +617,493 @@ export const ProfessionProfileSchema = z.object({
   source: z.enum(['system', 'organization', 'human']).default('system'),
 });
 export type ProfessionProfile = z.infer<typeof ProfessionProfileSchema>;
+
+/**
+ * Canonical v1 context entry. ProfessionProfile remains as a compatibility
+ * shape for existing callers, but runtime registries should expose this
+ * richer contract so routing, authority, provenance, and evaluation metadata
+ * are available in one place.
+ */
+export const ContextEntryKindSchema = z.enum([
+  'profession',
+  'life_context',
+  'relationship',
+  'business',
+  'consumer',
+  'understanding',
+  'thought',
+  'non_human_life',
+  'system_role',
+]);
+export type ContextEntryKind = z.infer<typeof ContextEntryKindSchema>;
+
+export const ContextRoutingTermSchema = z.object({
+  term: z.string().min(1),
+  weight: z.number().min(0).max(1),
+  ambiguous: z.boolean().default(false),
+});
+export type ContextRoutingTerm = z.infer<typeof ContextRoutingTermSchema>;
+
+export const ContextFailureModeSchema = z.object({
+  name: z.string().min(1),
+  detection: z.string().min(1),
+  mitigation: z.string().min(1),
+});
+
+export const ContextRequiredContextSchema = z.object({
+  name: z.string().min(1),
+  necessity: z.enum(['required', 'helpful', 'optional']),
+  sensitivity: z
+    .enum(['none', 'personal', 'sensitive', 'special_category'])
+    .default('none'),
+  source: z
+    .enum([
+      'user_stated',
+      'user_confirmed',
+      'inferred',
+      'third_party',
+      'system',
+    ])
+    .default('system'),
+});
+export type ContextRequiredContext = z.infer<
+  typeof ContextRequiredContextSchema
+>;
+
+export const ContextEscalationTriggerSchema = z.object({
+  condition: z.string().min(1),
+  severity: z.enum(['info', 'elevated', 'urgent', 'emergency']),
+  action: z.enum([
+    'note',
+    'clarify',
+    'soften',
+    'refuse_part',
+    'refer',
+    'stop_and_route',
+  ]),
+});
+
+export const ContextEntrySchema = z.object({
+  id: z.string().regex(/^[a-z][a-z0-9_]*_v[0-9]+$/),
+  version: z.string().regex(/^[0-9]+\.[0-9]+\.[0-9]+$/),
+  kind: ContextEntryKindSchema,
+  title: z.string().min(1),
+  category: z.string().min(1),
+  aliases: z.array(z.string()).default([]),
+  routing: z.object({
+    terms: z.array(ContextRoutingTermSchema),
+    negativeTerms: z.array(z.string()).default([]),
+  }),
+  summary: z.string().min(1),
+  objective: z.string().min(1),
+  scope: z.object({
+    inScope: z.array(z.string()).min(1),
+    outOfScope: z.array(z.string()).min(1),
+  }),
+  responsibilities: z.array(z.string()).min(1),
+  knowledgeAreas: z.array(z.string()).default([]),
+  behaviorContract: z.object({
+    tone: z.array(z.string()).min(1),
+    defaults: z.array(z.string()).default([]),
+    must: z.array(z.string()).default([]),
+    mustNot: z.array(z.string()).default([]),
+  }),
+  operatingPatterns: z.array(z.string().regex(/^[a-z][a-z0-9_]*$/)).min(1),
+  communicationPatterns: z
+    .array(z.string().regex(/^[a-z][a-z0-9_]*$/))
+    .default([]),
+  decisionPatterns: z.array(z.string().regex(/^[a-z][a-z0-9_]*$/)).default([]),
+  failureModes: z.array(ContextFailureModeSchema).min(1),
+  requiredContext: z.array(ContextRequiredContextSchema).min(1),
+  escalation: z.object({
+    triggers: z.array(ContextEscalationTriggerSchema).min(1),
+    routes: z.record(
+      z.object({
+        emergency: z.string().optional(),
+        crisis: z.string().optional(),
+        specialist: z.string().optional(),
+        verifiedAt: z.string().date().optional(),
+      }),
+    ),
+  }),
+  safetyBoundaries: z.array(z.string()).min(1),
+  dataHandling: z.object({
+    sensitiveClasses: z.array(z.string()),
+    consentRequired: z.boolean(),
+    retention: z.enum([
+      'session_only',
+      'until_user_deletes',
+      'policy_defined',
+      'never_store',
+    ]),
+    minimization: z.string().min(1),
+  }),
+  authority: z.object({
+    mayDecide: z.array(z.string()),
+    mayNotDecide: z.array(z.string()).min(1),
+    humanOwnerRequired: z.boolean(),
+  }),
+  regulation: z.object({
+    regulated: z.boolean(),
+    licenseRequiredFor: z.array(z.string()),
+    jurisdictions: z.array(z.string()).min(1),
+    language: z.array(z.string()).min(1),
+    lastVerified: z.string().date(),
+    sources: z.array(z.string().url()).default([]),
+  }),
+  toolBindings: z.object({
+    restricted: z.record(z.array(z.string())).default({}),
+    requiresApproval: z.record(z.array(z.string())).default({}),
+  }),
+  examples: z
+    .object({
+      good: z
+        .array(
+          z.object({
+            input: z.string(),
+            response: z.string(),
+            why: z.string(),
+          }),
+        )
+        .default([]),
+      bad: z
+        .array(
+          z.object({
+            input: z.string(),
+            response: z.string(),
+            why: z.string(),
+          }),
+        )
+        .default([]),
+    })
+    .default({}),
+  evaluation: z
+    .object({
+      testCases: z
+        .array(
+          z.object({
+            input: z.string(),
+            expectedRoute: z.string(),
+            expectedBehavior: z.string(),
+            expectedEscalation: z
+              .enum([
+                'none',
+                'note',
+                'clarify',
+                'soften',
+                'refuse_part',
+                'refer',
+                'stop_and_route',
+              ])
+              .optional(),
+          }),
+        )
+        .default([]),
+      metrics: z.array(z.string()).default([]),
+    })
+    .default({}),
+  lifecycle: z.object({
+    status: z.enum(['draft', 'review', 'active', 'deprecated', 'retired']),
+    owner: z.string(),
+    supersedes: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]*_v[0-9]+$/)
+      .optional(),
+    deprecatedBy: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]*_v[0-9]+$/)
+      .optional(),
+    changelog: z.array(
+      z.object({
+        version: z.string(),
+        date: z.string().date(),
+        change: z.string(),
+      }),
+    ),
+  }),
+  source: z.enum(['system', 'organization', 'human']).default('system'),
+});
+export type ContextEntry = z.infer<typeof ContextEntrySchema>;
+
+/** Executable controls distilled from every context selected for a packet. */
+export const ContextRuntimePolicySchema = z.object({
+  entryIds: z.array(z.string()).default([]),
+  retention: z.enum([
+    'session_only',
+    'until_user_deletes',
+    'policy_defined',
+    'never_store',
+  ]),
+  consentRequired: z.boolean(),
+  sensitiveClasses: z.array(z.string()).default([]),
+  restrictedActions: z.array(z.string()).default([]),
+  approvalActions: z.array(z.string()).default([]),
+  humanOwnerRequired: z.boolean(),
+});
+export type ContextRuntimePolicy = z.infer<typeof ContextRuntimePolicySchema>;
+
+const contextKindForSubject = (
+  subjectType: ProfessionSubjectType,
+  id: string,
+): ContextEntryKind => {
+  if (id === 'cognitive_engineer_v1') return 'system_role';
+  switch (subjectType) {
+    case 'profession':
+      return 'profession';
+    case 'human_relationship':
+      return 'relationship';
+    case 'business':
+      return 'business';
+    case 'consumer':
+      return 'consumer';
+    case 'human_understanding':
+      return 'understanding';
+    case 'human_thought':
+      return 'thought';
+    case 'life_context':
+      return 'life_context';
+    default:
+      return 'non_human_life';
+  }
+};
+
+const contextSensitivityFor = (
+  name: string,
+): ContextRequiredContext['sensitivity'] => {
+  const normalized = name.toLowerCase();
+  if (
+    /(health|medical|diagnos|medication|pregnan|symptom|allerg|mental|abuse|minor|child|identity|financial|legal|relig|race|gender|sexual)/.test(
+      normalized,
+    )
+  )
+    return 'special_category';
+  if (
+    /(person|user|customer|client|audience|relationship|location|profile)/.test(
+      normalized,
+    )
+  )
+    return 'personal';
+  return 'none';
+};
+
+const contextSeverityFor = (
+  trigger: string,
+): 'info' | 'elevated' | 'urgent' | 'emergency' => {
+  const normalized = trigger.toLowerCase();
+  if (
+    /(emergency|unresponsive|not breathing|active fire|anaphylaxis|suicid|immediate danger|overdose)/.test(
+      normalized,
+    )
+  )
+    return 'emergency';
+  if (
+    /(urgent|severe|threat|violence|bleeding|poison|critical|danger)/.test(
+      normalized,
+    )
+  )
+    return 'urgent';
+  if (/(uncertain|missing|conflict|dispute|risk|deadline)/.test(normalized))
+    return 'elevated';
+  return 'info';
+};
+
+/** Convert the compatibility profile into the executable v1 contract. */
+export function contextEntryFromProfession(
+  profile: ProfessionProfile,
+): ContextEntry {
+  const routingTerms = [
+    ...profile.routingTerms.map((term) => ({ term, weight: 1 })),
+    ...profile.aliases.map((term) => ({ term, weight: 0.85 })),
+    { term: profile.title, weight: 0.75 },
+    { term: profile.category, weight: 0.55 },
+    ...profile.knowledgeAreas.map((term) => ({ term, weight: 0.35 })),
+    ...profile.responsibilities.map((term) => ({ term, weight: 0.3 })),
+  ];
+  const seen = new Set<string>();
+  const terms = routingTerms
+    .filter(({ term }) => {
+      const key = term.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map(({ term, weight }) => ({
+      term,
+      weight,
+      ambiguous: [
+        'pain',
+        'order',
+        'case',
+        'support',
+        'care',
+        'change',
+        'identity',
+        'memory',
+        'behavior',
+        'decision',
+      ].includes(term.toLowerCase()),
+    }));
+  const failureModes = profile.failureModes.length
+    ? profile.failureModes.map((name) => ({
+        name,
+        detection: `Check for the failure condition '${name}' before relying on this context.`,
+        mitigation:
+          'State uncertainty, apply the safety boundary, and ask or hand off when needed.',
+      }))
+    : [
+        {
+          name: 'unsupported certainty',
+          detection: 'A claim is stronger than the available evidence.',
+          mitigation:
+            'Calibrate confidence and identify what must be verified.',
+        },
+      ];
+  const requiredContext = (
+    profile.requiredContext.length ? profile.requiredContext : ['task']
+  ).map((name) => ({
+    name,
+    necessity: 'helpful' as const,
+    sensitivity: contextSensitivityFor(name),
+    source: 'user_stated' as const,
+  }));
+  const escalationTriggers = (
+    profile.escalationTriggers.length
+      ? profile.escalationTriggers
+      : ['missing critical context']
+  ).map((condition) => ({
+    condition,
+    severity: contextSeverityFor(condition),
+    action:
+      contextSeverityFor(condition) === 'emergency'
+        ? ('stop_and_route' as const)
+        : ('clarify' as const),
+  }));
+  const restricted = Object.fromEntries(
+    profile.restrictedActions.map((action) => [action, [action]]),
+  );
+  const requiresApproval = Object.fromEntries(
+    profile.approvalActions.map((action) => [action, [action]]),
+  );
+  return ContextEntrySchema.parse({
+    id: profile.id,
+    version: profile.version,
+    kind: contextKindForSubject(profile.subjectType, profile.id),
+    title: profile.title,
+    category: profile.category,
+    aliases: profile.aliases,
+    routing: { terms, negativeTerms: [] },
+    summary: profile.summary,
+    objective: profile.objective,
+    scope: {
+      inScope: [...profile.responsibilities, ...profile.knowledgeAreas].length
+        ? [...profile.responsibilities, ...profile.knowledgeAreas]
+        : ['task support'],
+      outOfScope: [...profile.safetyBoundaries, ...profile.restrictedActions]
+        .length
+        ? [...profile.safetyBoundaries, ...profile.restrictedActions]
+        : ['final consequential decisions'],
+    },
+    responsibilities: profile.responsibilities.length
+      ? profile.responsibilities
+      : ['task support'],
+    knowledgeAreas: profile.knowledgeAreas,
+    behaviorContract: {
+      tone: ['clear', 'truthful', 'scope-aware'],
+      defaults: [
+        'Use only relevant context.',
+        'State uncertainty when material.',
+      ],
+      must: profile.safetyBoundaries,
+      mustNot: profile.restrictedActions,
+    },
+    operatingPatterns: profile.operatingPatterns.map((item) => item.id),
+    communicationPatterns: profile.communicationPatterns.map((item) => item.id),
+    decisionPatterns: profile.decisionPatterns.map((item) => item.id),
+    failureModes,
+    requiredContext,
+    escalation: { triggers: escalationTriggers, routes: { default: {} } },
+    safetyBoundaries: profile.safetyBoundaries.length
+      ? profile.safetyBoundaries
+      : ['Do not claim authority or expertise not provided.'],
+    dataHandling: {
+      sensitiveClasses: profile.sensitiveDataClasses,
+      consentRequired: profile.sensitiveDataClasses.length > 0,
+      retention: 'session_only',
+      minimization: 'Use only the context needed for the current task.',
+    },
+    authority: {
+      mayDecide: profile.responsibilities,
+      mayNotDecide: [
+        ...profile.restrictedActions,
+        ...profile.licenseRequiredFor.map((action) => `licensed:${action}`),
+      ].length
+        ? [
+            ...profile.restrictedActions,
+            ...profile.licenseRequiredFor.map((action) => `licensed:${action}`),
+          ]
+        : ['final consequential decisions'],
+      humanOwnerRequired:
+        profile.regulated || profile.approvalActions.length > 0,
+    },
+    regulation: {
+      regulated: profile.regulated,
+      licenseRequiredFor: profile.licenseRequiredFor,
+      jurisdictions: ['GLOBAL'],
+      language: ['en'],
+      lastVerified: '2026-10-21',
+      sources: [],
+    },
+    toolBindings: { restricted, requiresApproval },
+    lifecycle: {
+      status: 'active',
+      owner: profile.source,
+      changelog: [
+        {
+          version: profile.version,
+          date: '2026-10-21',
+          change: 'Canonical runtime v1 adapter.',
+        },
+      ],
+    },
+    source: profile.source,
+  });
+}
+
+export const ContextSelectionSchema = z.object({
+  id: z.string(),
+  kind: ContextEntryKindSchema,
+  title: z.string(),
+  score: z.number(),
+  confidence: z.number().min(0).max(1),
+  signals: z.array(z.string()).default([]),
+  reason: z.string(),
+});
+export type ContextSelection = z.infer<typeof ContextSelectionSchema>;
+
+export const ContextCompositionSchema = z.object({
+  resolverVersion: z.literal('1'),
+  selected: z.array(ContextSelectionSchema),
+  excluded: z
+    .array(z.object({ id: z.string(), reason: z.string() }))
+    .default([]),
+  conflicts: z
+    .array(
+      z.object({
+        field: z.string(),
+        values: z.array(z.string()),
+        resolution: z.string(),
+      }),
+    )
+    .default([]),
+  applied: z.object({
+    personalContext: z.boolean(),
+    identityFields: z.array(z.string()).default([]),
+    personaMode: z.string().optional(),
+    relationshipId: z.string().optional(),
+    memoryIds: z.array(z.string()).default([]),
+  }),
+});
+export type ContextComposition = z.infer<typeof ContextCompositionSchema>;
 
 /** The selected profession plus person-specific, attributable overrides. */
 export const ProfessionalContextSchema = z.object({
@@ -809,6 +1326,38 @@ export const GroundingSchema = z.object({
 });
 export type Grounding = z.infer<typeof GroundingSchema>;
 
+export const ContextFactSchema = z.object({
+  path: z.string().min(1),
+  value: z.unknown(),
+  source: z.enum([
+    'user_stated',
+    'user_confirmed',
+    'inferred',
+    'third_party',
+    'system',
+  ]),
+  confirmation: z.enum(['user_confirmed', 'agent_observed', 'inferred']),
+  confidence: z.number().min(0).max(1),
+  sensitivity: z.enum(['none', 'personal', 'sensitive', 'special_category']),
+  visibility: z.enum(['private', 'authorized_context', 'never_share']),
+  capturedAt: z.string().datetime().optional(),
+  validFrom: z.string().datetime().optional(),
+  validUntil: z.string().datetime().optional(),
+  scope: z
+    .enum(['global', 'task', 'relationship', 'audience'])
+    .default('global'),
+});
+export type ContextFact = z.infer<typeof ContextFactSchema>;
+
+export const ToolManifestSchema = z.object({
+  name: z.string().min(1).max(128),
+  action: z.string().regex(/^[a-z][a-z0-9_.:-]*$/),
+  effect: z.enum(['read', 'draft', 'write', 'external', 'irreversible']),
+  description: z.string().max(1000).optional(),
+  resourcePattern: z.string().max(500).optional(),
+});
+export type ToolManifest = z.infer<typeof ToolManifestSchema>;
+
 export const AuthoritySchema = z.object({
   mayRead: z.array(z.string()).default([]),
   mayWrite: z.array(z.string()).default([]),
@@ -876,6 +1425,24 @@ export const HumanContextPacketSchema = z.object({
   }),
   interaction: InteractionContextSchema.default({}),
   grounding: GroundingSchema.default({}),
+  composition: ContextCompositionSchema.default({
+    resolverVersion: '1',
+    selected: [],
+    excluded: [],
+    conflicts: [],
+    applied: { personalContext: true, identityFields: [], memoryIds: [] },
+  }),
+  contextPolicy: ContextRuntimePolicySchema.default({
+    entryIds: [],
+    retention: 'session_only',
+    consentRequired: false,
+    sensitiveClasses: [],
+    restrictedActions: [],
+    approvalActions: [],
+    humanOwnerRequired: false,
+  }),
+  contextFacts: z.array(ContextFactSchema).default([]),
+  toolManifest: z.array(ToolManifestSchema).default([]),
 });
 export type HumanContextPacket = z.infer<typeof HumanContextPacketSchema>;
 

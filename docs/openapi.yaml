@@ -70,6 +70,37 @@ paths:
           }
       responses:
         '200': { description: Context packet and signature }
+  /v1/context/{packetId}/inspect:
+    get:
+      summary: Human-owned transparency view of a context packet
+      responses:
+        '200': { description: Composition, provenance, policy, and redactions }
+  /v1/context/revision:
+    get:
+      summary: Read the current context revision for SDK cache invalidation
+      responses:
+        '200': { description: Current model version and context revision }
+  /v1/profile/context:
+    get:
+      summary: Inspect the authenticated person's attributed context facts
+      responses:
+        '200':
+          { description: Facts, boundaries, persona modes, and relationships }
+  /v1/context-entries:
+    get:
+      summary: List canonical v1 context entries
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: kind, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Canonical context entry registry }
+  /v1/context-entries/{entryId}:
+    get:
+      summary: Fetch one canonical v1 context entry
+      parameters:
+        - { name: entryId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Canonical context entry }
   /v1/experiments/compare:
     post:
       summary: Compare a plain model answer with an answer guided by the human model
@@ -574,6 +605,30 @@ components:
         audience: { type: string }
         activeTopic: { type: string }
         userIntent: { type: string }
+        context:
+          type: object
+          properties:
+            include: { type: array, items: { type: string } }
+            exclude: { type: array, items: { type: string } }
+            relationshipId: { type: string }
+            personaModeId: { type: string }
+            usePersonalContext: { type: boolean, default: true }
+        tools:
+          type: array
+          maxItems: 64
+          items:
+            type: object
+            required: [name, action, effect]
+            properties:
+              name: { type: string }
+              action: { type: string }
+              effect:
+                {
+                  type: string,
+                  enum: [read, draft, write, external, irreversible],
+                }
+              description: { type: string }
+              resourcePattern: { type: string }
         skills:
           type: array
           maxItems: 16
@@ -793,6 +848,7 @@ components:
       properties:
         contextPacketId: { type: string, format: uuid }
         action: { type: string }
+        toolName: { type: string }
         recipientCount: { type: integer, minimum: 0 }
         spendUsd: { type: number, minimum: 0 }
         irreversible: { type: boolean }
@@ -803,6 +859,7 @@ components:
       properties:
         executionToken: { type: string }
         action: { type: string }
+        toolName: { type: string }
         payload: {}
     ApprovalRequest:
       type: object
@@ -810,6 +867,7 @@ components:
       properties:
         contextPacketId: { type: string }
         action: { type: string }
+        toolName: { type: string }
         summary: { type: string }
         payload: {}
         resource: { type: string }

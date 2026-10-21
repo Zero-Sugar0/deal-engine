@@ -7,10 +7,12 @@ export type ContextEnvelope = {
   packetId: string;
   packet: HumanContextPacket;
   signature: string;
+  contextRevision?: string;
 };
 
 export interface DealClientPort {
   getContext(input: ContextRequest): Promise<ContextEnvelope>;
+  getContextRevision?(): Promise<{ revision: string; modelVersion: number }>;
   reportOutcome(input: {
     contextPacketId: string;
     outcome: Record<string, unknown>;
@@ -168,6 +170,8 @@ export function renderDealContext(packet: HumanContextPacket): string {
       pronouns: identity.pronouns,
       mission: identity.mission,
       organization: identity.organization,
+      country: identity.country,
+      age: identity.age,
       locale: identity.locale,
       timezone: identity.timezone,
       selfDescription: identity.selfDescription,
@@ -179,6 +183,7 @@ export function renderDealContext(packet: HumanContextPacket): string {
       religionOrBelief: identity.religionOrBelief,
       sexualOrientation: identity.sexualOrientation,
     }),
+    `CONTEXT FACT PROVENANCE:\n${recordLines(packet.contextFacts)}`,
     '',
     'PERSONA AND COMMUNICATION',
     valueText({
@@ -191,6 +196,7 @@ export function renderDealContext(packet: HumanContextPacket): string {
       structure: persona.structure,
       humor: persona.humor,
       communicationStyle: persona.communicationStyle,
+      language: persona.language,
       sentenceRhythm: persona.sentenceRhythm,
       useContractions: persona.useContractions,
       punctuation: persona.punctuation,
@@ -320,6 +326,7 @@ export function renderDealContext(packet: HumanContextPacket): string {
           knowledgeAreas: cognition.knowledgeAreas,
           regulated: cognition.regulated,
           requiredContext: cognition.requiredContext,
+          escalation: cognition.escalation,
           licenseRequiredFor: cognition.licenseRequiredFor,
           restrictedActions: cognition.restrictedActions,
           approvalActions: cognition.approvalActions,
@@ -355,6 +362,10 @@ export function renderDealContext(packet: HumanContextPacket): string {
     cognition
       ? `Response plan:\n${valueText(cognition.responsePlan)}\nUse this plan internally. Do not announce route IDs, confidence, risk labels, or internal metadata unless the user asks.`
       : 'Answer directly, ask only for information that materially changes the answer, and make uncertainty visible.',
+    '',
+    'COMPOSED CONTEXT RESOLUTION',
+    valueText(packet.composition),
+    'Use only the selected contexts. Treat excluded contexts as unavailable for this task, and surface a clarification when the composition reports a conflict.',
     '',
     'DOMAIN AND INTERACTION CONTEXT',
     valueText({
@@ -512,9 +523,13 @@ export class DealAgentRuntime {
     options: { forceRefresh?: boolean } = {},
   ): Promise<PreparedDealContext> {
     const key = stableValue(input);
+    const revision = this.client.getContextRevision
+      ? (await this.client.getContextRevision()).revision
+      : undefined;
+    const revisionKey = revision ? `${revision}:${key}` : key;
     const cached =
       this.cacheEnabled && !options.forceRefresh
-        ? this.cache.get(key)
+        ? this.cache.get(revisionKey)
         : undefined;
     const now = this.now().getTime();
     if (cached && cached.expiresAt > now) return cached.prepared;
@@ -527,7 +542,7 @@ export class DealAgentRuntime {
       systemInstruction: this.render(packet),
     };
     if (this.cacheEnabled) {
-      this.cache.set(key, {
+      this.cache.set(revisionKey, {
         prepared,
         expiresAt: new Date(packet.expiresAt).getTime(),
       });

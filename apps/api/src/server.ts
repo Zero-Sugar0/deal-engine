@@ -6,6 +6,7 @@ import {
   BiographySchema,
   BoundaryProfileSchema,
   compileHumanContextPacket,
+  ContextFactSchema,
   DecisionStyleSchema,
   DomainContextSchema,
   HumanModelSchema,
@@ -21,8 +22,17 @@ import {
   SkillDescriptorSchema,
   SkillRegistryEntrySchema,
   SkillReviewStatusSchema,
+  ToolManifestSchema,
 } from '@deal/core';
-import type { Grounding, InteractionContext, MemoryContext } from '@deal/core';
+import type {
+  CognitionRoute,
+  ContextComposition,
+  ContextFact,
+  ContextRuntimePolicy,
+  Grounding,
+  InteractionContext,
+  MemoryContext,
+} from '@deal/core';
 import type { HumanModel, ProfileFact, SkillRegistryEntry } from '@deal/core';
 import { evaluatePolicy, type PolicyRule } from '@deal/policy';
 import { jwtVerify, SignJWT } from 'jose';
@@ -53,6 +63,8 @@ import {
   getProfessionProfile,
   humanContextStructures,
   lifeContextStructures,
+  contextEntryCatalog,
+  getContextEntry,
   professionCatalog,
   searchProfessionProfiles,
 } from './professions.js';
@@ -88,11 +100,22 @@ const contextBody = z.object({
   audience: z.string().optional(),
   activeTopic: z.string().optional(),
   userIntent: z.string().optional(),
+  context: z
+    .object({
+      include: z.array(z.string()).default([]),
+      exclude: z.array(z.string()).default([]),
+      relationshipId: z.string().optional(),
+      personaModeId: z.string().optional(),
+      usePersonalContext: z.boolean().default(true),
+    })
+    .default({}),
+  tools: z.array(ToolManifestSchema).max(64).default([]),
   skills: z.array(SkillDescriptorSchema).max(16).default([]),
 });
 
 const policyBody = z.object({
   action: z.string().min(1),
+  toolName: z.string().min(1).optional(),
   resource: z.string().optional(),
   recipientCount: z.number().int().nonnegative().optional(),
   spendUsd: z.number().nonnegative().optional(),
@@ -270,6 +293,45 @@ function professionalPolicyRules(professional: {
       reason: `Action '${action}' requires human approval for the selected professional profile`,
     })),
   ];
+}
+
+function contextRuntimePolicyRules(packet: {
+  contextPolicy?: {
+    restrictedActions?: string[];
+    approvalActions?: string[];
+  };
+}): PolicyRule[] {
+  const policy = packet.contextPolicy ?? {};
+  return [
+    ...(policy.restrictedActions ?? []).map((action) => ({
+      id: `context.restricted.${action}`,
+      action,
+      decision: 'deny' as const,
+      reason: `Action '${action}' is restricted by the selected context`,
+    })),
+    ...(policy.approvalActions ?? []).map((action) => ({
+      id: `context.approval.${action}`,
+      action,
+      decision: 'require_approval' as const,
+      reason: `Action '${action}' requires approval under the selected context`,
+    })),
+  ];
+}
+
+function assertDeclaredTool(
+  packet: { toolManifest: Array<{ name: string; action: string }> },
+  toolName: string | undefined,
+  action: string,
+): void {
+  if (!packet.toolManifest.length) return;
+  if (!toolName)
+    throw error(400, 'toolName is required for this context packet');
+  const tool = packet.toolManifest.find((item) => item.name === toolName);
+  if (
+    !tool ||
+    !(action === tool.action || action.startsWith(`${tool.action}:`))
+  )
+    throw error(403, 'Tool manifest does not authorize this action');
 }
 
 function normalizeArtifactPath(value: string): string {
@@ -597,6 +659,599 @@ function scopeHumanModel(
   };
 }
 
+function normalizedWords(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function textMatchesContext(target: string, value: string | undefined): number {
+  if (!value) return 0;
+  const targetWords = new Set(normalizedWords(target));
+  return normalizedWords(value).filter((word) => targetWords.has(word)).length;
+}
+
+function contextKindForSubject(
+  subjectType: string,
+):
+  | 'profession'
+  | 'life_context'
+  | 'relationship'
+  | 'business'
+  | 'consumer'
+  | 'understanding'
+  | 'thought'
+  | 'non_human_life'
+  | 'system_role' {
+  if (subjectType === 'human_relationship') return 'relationship';
+  if (subjectType === 'business') return 'business';
+  if (subjectType === 'consumer') return 'consumer';
+  if (subjectType === 'human_understanding') return 'understanding';
+  if (subjectType === 'human_thought') return 'thought';
+  if (subjectType === 'life_context') return 'life_context';
+  if (subjectType === 'profession') return 'profession';
+  return 'non_human_life';
+}
+
+function resolveContextComposition(input: {
+  task: string;
+  audience?: string;
+  channel?: string;
+  context: z.infer<typeof contextBody>['context'];
+  cognition: CognitionRoute;
+  selectedProfession?: {
+    id: string;
+    title: string;
+    subjectType: string;
+    source: 'system' | 'organization' | 'human';
+  };
+  humanModel: HumanModel;
+  memoryIds: string[];
+}): {
+  composition: ContextComposition;
+  personaModeId?: string;
+  relationshipId?: string;
+} {
+  const options = input.context;
+  const personalContext =
+    options.usePersonalContext !== false &&
+    !options.exclude.some((id) =>
+      ['personal_context', 'human_context'].includes(id),
+    );
+  const target = [input.task, input.audience, input.channel]
+    .filter(Boolean)
+    .join(' ');
+  const excluded = new Set(options.exclude);
+  const included = new Set(options.include);
+  const cognitionKind =
+    input.cognition.profileId === 'cognitive_engineer_v1'
+      ? 'system_role'
+      : contextKindForSubject(input.cognition.subjectType);
+  const selected = [
+    {
+      id: input.cognition.profileId,
+      kind: cognitionKind,
+      title: input.cognition.title,
+      score: input.cognition.confidence,
+      confidence: input.cognition.confidence,
+      signals: input.cognition.signals,
+      reason: input.cognition.routeReason || 'Matched the current task.',
+    },
+  ];
+  if (
+    input.selectedProfession &&
+    !excluded.has(input.selectedProfession.id) &&
+    input.selectedProfession.id !== input.cognition.profileId
+  ) {
+    selected.push({
+      id: input.selectedProfession.id,
+      kind: contextKindForSubject(input.selectedProfession.subjectType),
+      title: input.selectedProfession.title,
+      score: 1,
+      confidence: 1,
+      signals: ['delegation:profile'],
+      reason: 'Applied because the active delegation selected this profile.',
+    });
+  }
+
+  const relationshipCandidates = (
+    personalContext ? input.humanModel.relationships : []
+  )
+    .filter((relationship) => !excluded.has(`relationship:${relationship.id}`))
+    .map((relationship) => ({
+      relationship,
+      score:
+        (options.relationshipId === relationship.id ||
+        included.has(`relationship:${relationship.id}`)
+          ? 100
+          : 0) +
+        textMatchesContext(target, relationship.label) * 3 +
+        textMatchesContext(target, relationship.role) * 2 +
+        relationship.aliases.reduce(
+          (total, alias) => total + textMatchesContext(target, alias) * 2,
+          0,
+        ) +
+        textMatchesContext(target, relationship.audience) * 3,
+    }))
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score);
+  const relationship = relationshipCandidates[0]?.relationship;
+  if (relationship) {
+    selected.push({
+      id: `relationship:${relationship.id}`,
+      kind: 'relationship',
+      title: relationship.label,
+      score: relationshipCandidates[0]!.score,
+      confidence:
+        relationship.confirmation === 'user_confirmed'
+          ? 1
+          : relationship.confidence,
+      signals: ['audience_or_task:relationship_match'],
+      reason:
+        'Applied because the task or audience matched this relationship context.',
+    });
+  }
+
+  const personaMode = (
+    personalContext ? input.humanModel.persona.modes : []
+  ).find(
+    (mode) =>
+      !excluded.has(`persona:${mode.id}`) &&
+      (options.personaModeId === mode.id ||
+        included.has(`persona:${mode.id}`) ||
+        textMatchesContext(target, mode.audience) > 0),
+  );
+  if (personaMode) {
+    selected.push({
+      id: `persona:${personaMode.id}`,
+      kind: 'system_role',
+      title: `Persona mode: ${personaMode.audience}`,
+      score: options.personaModeId === personaMode.id ? 100 : 3,
+      confidence: options.personaModeId === personaMode.id ? 1 : 0.85,
+      signals: ['audience:persona_mode'],
+      reason:
+        'Applied because the requested or detected audience matched this persona mode.',
+    });
+  }
+
+  const identityFields = personalContext
+    ? Object.entries(input.humanModel.identity)
+        .filter(([, value]) => value !== undefined && value !== null)
+        .map(([key]) => `identity.${key}`)
+    : [];
+  const excludedEntries = [
+    ...options.exclude.map((id) => ({
+      id,
+      reason: 'Explicitly excluded for this task.',
+    })),
+    ...(!personalContext
+      ? [
+          {
+            id: 'human_identity',
+            reason: 'Personal context was disabled for this task.',
+          },
+          {
+            id: 'human_persona',
+            reason: 'Personal context was disabled for this task.',
+          },
+          {
+            id: 'human_relationships',
+            reason: 'Personal context was disabled for this task.',
+          },
+        ]
+      : []),
+  ];
+  const conflicts = [] as ContextComposition['conflicts'];
+  if (options.personaModeId && !personaMode)
+    conflicts.push({
+      field: 'personaModeId',
+      values: [options.personaModeId],
+      resolution: 'Requested persona mode was not found and was not applied.',
+    });
+  if (options.relationshipId && !relationship)
+    conflicts.push({
+      field: 'relationshipId',
+      values: [options.relationshipId],
+      resolution: 'Requested relationship was not found or was excluded.',
+    });
+
+  return {
+    composition: {
+      resolverVersion: '1',
+      selected,
+      excluded: excludedEntries,
+      conflicts,
+      applied: {
+        personalContext,
+        identityFields,
+        personaMode: personaMode?.id,
+        relationshipId: relationship?.id,
+        memoryIds: input.memoryIds,
+      },
+    },
+    personaModeId: personaMode?.id,
+    relationshipId: relationship?.id,
+  };
+}
+
+function contextPolicyForComposition(
+  composition: ContextComposition,
+): ContextRuntimePolicy {
+  const entries = composition.selected
+    .map((selection) => getContextEntry(selection.id))
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  const retentionRank = {
+    session_only: 0,
+    policy_defined: 1,
+    until_user_deletes: 2,
+    never_store: 3,
+  } as const;
+  const retention = entries.reduce<ContextRuntimePolicy['retention']>(
+    (current, entry) =>
+      retentionRank[entry.dataHandling.retention] > retentionRank[current]
+        ? entry.dataHandling.retention
+        : current,
+    'session_only',
+  );
+  return {
+    entryIds: entries.map((entry) => entry.id),
+    retention,
+    consentRequired: entries.some(
+      (entry) => entry.dataHandling.consentRequired,
+    ),
+    sensitiveClasses: [
+      ...new Set(
+        entries.flatMap((entry) => entry.dataHandling.sensitiveClasses),
+      ),
+    ],
+    restrictedActions: [
+      ...new Set(
+        entries.flatMap((entry) => Object.keys(entry.toolBindings.restricted)),
+      ),
+    ],
+    approvalActions: [
+      ...new Set(
+        entries.flatMap((entry) =>
+          Object.keys(entry.toolBindings.requiresApproval),
+        ),
+      ),
+    ],
+    humanOwnerRequired: entries.some(
+      (entry) => entry.authority.humanOwnerRequired,
+    ),
+  };
+}
+
+function withoutPersonalContext(model: HumanModel): HumanModel {
+  return HumanModelSchema.parse({
+    version: model.version,
+    identity: { locale: model.identity.locale },
+    persona: {},
+    selfConcept: {},
+    biography: {},
+    relationships: [],
+    relational: {},
+    boundaries: {},
+    domain: {},
+    decision: {},
+    behavior: {},
+    responseGuidance: {},
+    currentPriorities: [],
+    knownConstraints: [],
+  });
+}
+
+function contextFactsFromHumanModel(model: HumanModel): ContextFact[] {
+  const facts: ContextFact[] = [];
+  const protectedIdentityKeys = new Set([
+    'genderIdentity',
+    'raceEthnicity',
+    'culturalBackground',
+    'nationality',
+    'personalBackground',
+    'religionOrBelief',
+    'sexualOrientation',
+  ]);
+  const sourceFor = (
+    source: unknown,
+    confirmation: unknown,
+  ): ContextFact['source'] => {
+    if (source === 'system') return 'system';
+    if (source === 'third_party' || source === 'authorized_import')
+      return 'third_party';
+    if (source === 'inferred' || confirmation === 'inferred') return 'inferred';
+    if (source === 'user_confirmed') return 'user_confirmed';
+    return 'user_stated';
+  };
+  const sensitivityFor = (
+    sensitivity: unknown,
+    identity = false,
+  ): ContextFact['sensitivity'] => {
+    if (sensitivity === 'highly_sensitive') return 'special_category';
+    if (sensitivity === 'sensitive')
+      return identity ? 'special_category' : 'sensitive';
+    if (sensitivity === 'personal') return 'personal';
+    return identity ? 'special_category' : 'none';
+  };
+  const add = (
+    path: string,
+    value: unknown,
+    input: Partial<ContextFact> = {},
+  ) => {
+    if (value === undefined || value === null || value === '') return;
+    if (Array.isArray(value) && value.length === 0) return;
+    facts.push(
+      ContextFactSchema.parse({
+        path,
+        value,
+        source: input.source ?? 'user_stated',
+        confirmation: input.confirmation ?? 'user_confirmed',
+        confidence: input.confidence ?? 1,
+        sensitivity: input.sensitivity ?? 'personal',
+        visibility: input.visibility ?? 'authorized_context',
+        capturedAt: input.capturedAt,
+        validFrom: input.validFrom,
+        validUntil: input.validUntil,
+        scope: input.scope ?? 'global',
+      }),
+    );
+  };
+  for (const [key, value] of Object.entries(model.identity)) {
+    if (key === 'legalName') continue;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item && typeof item === 'object' && 'value' in item) {
+          const attribute = item as {
+            value: unknown;
+            source?: unknown;
+            confirmation?: unknown;
+            confidence?: number;
+            capturedAt?: string;
+            sensitivity?: unknown;
+            visibility?: 'private' | 'authorized_context' | 'never_share';
+            validFrom?: string;
+            validUntil?: string;
+          };
+          add(`identity.${key}`, attribute.value, {
+            source: sourceFor(attribute.source, attribute.confirmation),
+            confirmation:
+              attribute.confirmation === 'inferred'
+                ? 'inferred'
+                : 'user_confirmed',
+            confidence: attribute.confidence ?? 1,
+            sensitivity: sensitivityFor(
+              attribute.sensitivity,
+              protectedIdentityKeys.has(key),
+            ),
+            visibility: attribute.visibility ?? 'private',
+            capturedAt: attribute.capturedAt,
+            validFrom: attribute.validFrom,
+            validUntil: attribute.validUntil,
+          });
+        } else add(`identity.${key}`, item);
+      }
+    } else if (value && typeof value === 'object' && 'value' in value) {
+      const attribute = value as {
+        value: unknown;
+        source?: unknown;
+        confirmation?: unknown;
+        confidence?: number;
+        capturedAt?: string;
+        sensitivity?: unknown;
+        visibility?: 'private' | 'authorized_context' | 'never_share';
+        validFrom?: string;
+        validUntil?: string;
+      };
+      add(`identity.${key}`, attribute.value, {
+        source: sourceFor(attribute.source, attribute.confirmation),
+        confirmation:
+          attribute.confirmation === 'inferred' ? 'inferred' : 'user_confirmed',
+        confidence: attribute.confidence ?? 1,
+        sensitivity: sensitivityFor(
+          attribute.sensitivity,
+          protectedIdentityKeys.has(key),
+        ),
+        visibility: attribute.visibility ?? 'private',
+        capturedAt: attribute.capturedAt,
+        validFrom: attribute.validFrom,
+        validUntil: attribute.validUntil,
+      });
+    } else add(`identity.${key}`, value);
+  }
+  const addTree = (
+    path: string,
+    value: unknown,
+    defaults: Partial<ContextFact> = {},
+  ) => {
+    if (value === undefined || value === null || value === '') return;
+    if (Array.isArray(value)) {
+      value.forEach((item, index) =>
+        addTree(`${path}[${index}]`, item, defaults),
+      );
+      return;
+    }
+    if (typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      if ('value' in record) {
+        add(path, record.value, {
+          ...defaults,
+          source: sourceFor(record.source, record.confirmation),
+          confirmation:
+            record.confirmation === 'inferred'
+              ? 'inferred'
+              : record.confirmation === 'agent_observed'
+                ? 'agent_observed'
+                : (defaults.confirmation ?? 'user_confirmed'),
+          confidence:
+            typeof record.confidence === 'number'
+              ? record.confidence
+              : defaults.confidence,
+          sensitivity:
+            record.sensitivity !== undefined
+              ? sensitivityFor(record.sensitivity, false)
+              : defaults.sensitivity,
+          visibility:
+            record.visibility === 'private' ||
+            record.visibility === 'authorized_context' ||
+            record.visibility === 'never_share'
+              ? record.visibility
+              : defaults.visibility,
+          capturedAt:
+            typeof record.capturedAt === 'string'
+              ? record.capturedAt
+              : defaults.capturedAt,
+          validFrom:
+            typeof record.validFrom === 'string'
+              ? record.validFrom
+              : defaults.validFrom,
+          validUntil:
+            typeof record.validUntil === 'string'
+              ? record.validUntil
+              : defaults.validUntil,
+        });
+        return;
+      }
+      for (const [key, nested] of Object.entries(record)) {
+        if (
+          [
+            'id',
+            'source',
+            'confirmation',
+            'confidence',
+            'sensitivity',
+            'visibility',
+            'capturedAt',
+            'validFrom',
+            'validUntil',
+            'tags',
+          ].includes(key)
+        )
+          continue;
+        addTree(`${path}.${key}`, nested, defaults);
+      }
+      return;
+    }
+    add(path, value, defaults);
+  };
+  addTree('persona', model.persona, { sensitivity: 'personal' });
+  addTree('selfConcept', model.selfConcept, { sensitivity: 'personal' });
+  addTree('biography', model.biography, { sensitivity: 'personal' });
+  addTree('relationships', model.relationships, {
+    sensitivity: 'sensitive',
+    scope: 'relationship',
+  });
+  addTree('relational', model.relational, { sensitivity: 'sensitive' });
+  addTree('boundaries', model.boundaries, { sensitivity: 'sensitive' });
+  addTree('domain', model.domain, { sensitivity: 'personal' });
+  addTree('decision', model.decision, { sensitivity: 'personal' });
+  addTree('behavior', model.behavior, { sensitivity: 'personal' });
+  addTree('currentPriorities', model.currentPriorities, {
+    sensitivity: 'personal',
+  });
+  addTree('knownConstraints', model.knownConstraints, {
+    sensitivity: 'personal',
+  });
+  return facts;
+}
+
+function contextFactsFromMemoryHits(
+  hits: Array<{
+    id: string;
+    kind: string;
+    content: string | Record<string, unknown>;
+    source?: string;
+    confirmation?: 'user_confirmed' | 'agent_observed' | 'inferred';
+    confidence?: number;
+    sensitivity?: 'normal' | 'personal' | 'sensitive';
+    validFrom?: string;
+    validUntil?: string;
+    createdAt: string;
+  }>,
+): ContextFact[] {
+  return hits.map((hit) => {
+    const record =
+      typeof hit.content === 'object' && hit.content !== null
+        ? hit.content
+        : undefined;
+    return ContextFactSchema.parse({
+      path: `memory.${record?.path ?? record?.field ?? hit.id}`,
+      value: hit.content,
+      source:
+        hit.source === 'system'
+          ? 'system'
+          : hit.source === 'third_party'
+            ? 'third_party'
+            : hit.confirmation === 'inferred'
+              ? 'inferred'
+              : hit.confirmation === 'user_confirmed'
+                ? 'user_confirmed'
+                : 'user_stated',
+      confirmation: hit.confirmation ?? 'agent_observed',
+      confidence: hit.confidence ?? 0.5,
+      sensitivity:
+        hit.sensitivity === 'sensitive'
+          ? 'sensitive'
+          : hit.sensitivity === 'personal'
+            ? 'personal'
+            : 'none',
+      visibility: 'authorized_context',
+      capturedAt: hit.createdAt,
+      validFrom: hit.validFrom,
+      validUntil: hit.validUntil,
+      scope: hit.kind === 'relationship' ? 'relationship' : 'global',
+    });
+  });
+}
+
+function memoryConflicts(
+  hits: Array<{
+    id: string;
+    kind: string;
+    content: string | Record<string, unknown>;
+    confirmation?: string;
+    confidence?: number;
+  }>,
+): Array<Record<string, unknown>> {
+  const groups = new Map<string, typeof hits>();
+  for (const hit of hits) {
+    if (
+      !['identity', 'preference', 'boundary', 'correction'].includes(hit.kind)
+    )
+      continue;
+    const record = typeof hit.content === 'object' ? hit.content : undefined;
+    const key = record
+      ? String(
+          record.field ?? record.path ?? record.category ?? record.key ?? '',
+        )
+      : '';
+    if (!key) continue;
+    const group = groups.get(`${hit.kind}:${key}`) ?? [];
+    group.push(hit);
+    groups.set(`${hit.kind}:${key}`, group);
+  }
+  return [...groups.entries()]
+    .filter(([, group]) => {
+      const values = new Set(group.map((item) => JSON.stringify(item.content)));
+      return values.size > 1;
+    })
+    .map(([field, group]) => {
+      const winner = [...group].sort(
+        (left, right) =>
+          Number(right.confirmation === 'user_confirmed') -
+            Number(left.confirmation === 'user_confirmed') ||
+          (right.confidence ?? 0) - (left.confidence ?? 0),
+      )[0]!;
+      return {
+        field,
+        memoryIds: group.map((item) => item.id),
+        values: group.map((item) => item.content),
+        resolution: `Prefer ${winner.id}; ask for confirmation before treating the conflict as settled.`,
+      };
+    });
+}
+
 async function compileDashboardContext(input: {
   store: DealStore;
   human: Human;
@@ -708,6 +1363,7 @@ async function compileDashboardContext(input: {
         right.score - left.score ||
         right.createdAt.localeCompare(left.createdAt),
     )
+    .filter((hit) => includeSensitiveContext || hit.sensitivity !== 'sensitive')
     .slice(0, 32);
   const memory: MemoryContext = {
     preferences: hits
@@ -755,7 +1411,7 @@ async function compileDashboardContext(input: {
       'structured_profile',
       'inferred_memory',
     ],
-    conflicts: [],
+    conflicts: memoryConflicts(hits),
     uncertainties: hits
       .filter(
         (hit) =>
@@ -801,6 +1457,20 @@ async function compileDashboardContext(input: {
     currentPriorities: human.currentPriorities ?? [],
     knownConstraints: human.knownConstraints ?? [],
   };
+  const resolvedComposition = resolveContextComposition({
+    task,
+    audience: human.displayName,
+    channel: 'dashboard',
+    context: {
+      include: [],
+      exclude: [],
+      usePersonalContext: true,
+    },
+    cognition,
+    selectedProfession,
+    humanModel: rawHumanModel,
+    memoryIds: hits.map((hit) => hit.id),
+  });
   const scopedHumanModel = scopeHumanModel(
     HumanModelSchema.parse(rawHumanModel),
     includeSensitiveContext,
@@ -826,6 +1496,10 @@ async function compileDashboardContext(input: {
     professional: professionalContext,
     cognition,
     humanModel: scopedHumanModel.model,
+    contextFacts: [
+      ...contextFactsFromHumanModel(scopedHumanModel.model),
+      ...contextFactsFromMemoryHits(hits),
+    ],
     interaction: {
       taskMetadata: { surface: 'dashboard_compare' },
       channel: 'dashboard',
@@ -834,12 +1508,17 @@ async function compileDashboardContext(input: {
       recentTurns: [],
     },
     grounding,
+    composition: resolvedComposition.composition,
+    contextPolicy: contextPolicyForComposition(resolvedComposition.composition),
+    personaModeId: resolvedComposition.personaModeId,
+    relationshipId: resolvedComposition.relationshipId,
     redactions: scopedHumanModel.redactions,
     policyVersion: delegation.profileId ?? 'default_v1',
     ttlMinutes: contextTtlMinutes,
     memoryReferences: memory.references,
     skills: [],
     skillAttestations: [],
+    toolManifest: [],
   });
   return { packet, memoryCount: hits.length };
 }
@@ -1139,7 +1818,9 @@ export function buildServer(
       );
       return {
         provisioned: false,
-        onboardingCompleted: Boolean(human.onboarding?.completedAt),
+        onboardingCompleted: Boolean(
+          human.onboarding?.completedAt || human.onboarding?.skippedAt,
+        ),
         human: {
           id: human.id,
           email: human.email,
@@ -1822,6 +2503,47 @@ export function buildServer(
     };
   });
 
+  app.get('/v1/profile/context', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const human = store.humans.get(credential.humanId);
+    if (!human) throw error(404, 'Human not found');
+    const model = HumanModelSchema.parse({
+      version: human.modelVersion ?? 1,
+      identity: human.identity,
+      persona: human.persona,
+      selfConcept: human.selfConcept,
+      biography: human.biography,
+      relationships: human.relationships,
+      relational: human.relational,
+      boundaries: human.boundaries,
+      domain: human.domain,
+      decision: human.decision,
+      behavior: human.behavior,
+      currentPriorities: human.currentPriorities,
+      knownConstraints: human.knownConstraints,
+    });
+    return {
+      humanId: human.id,
+      modelVersion: human.modelVersion,
+      revision: store.contextRevision(human.id),
+      facts: contextFactsFromHumanModel(model),
+      boundaries: model.boundaries,
+      availablePersonaModes: model.persona.modes,
+      relationships: model.relationships.map((relationship) => ({
+        id: relationship.id,
+        label: relationship.label,
+        audience: relationship.audience,
+        sensitivity: relationship.sensitivity,
+        confirmation: relationship.confirmation,
+      })),
+    };
+  });
+
   app.post('/v1/experiments/compare', async (request, reply) => {
     const credential = await requireCredential(
       store,
@@ -2026,6 +2748,36 @@ export function buildServer(
   app.get('/v1/profiles', async (request) => {
     await requireCredential(store, request, undefined, options.externalAuth);
     return profileRegistry;
+  });
+
+  app.get('/v1/context-entries', async (request) => {
+    await requireCredential(store, request, undefined, options.externalAuth);
+    const query = request.query as { search?: string; kind?: string };
+    const search = query.search?.trim().toLowerCase();
+    return contextEntryCatalog.filter((entry) => {
+      if (query.kind && entry.kind !== query.kind) return false;
+      if (!search) return true;
+      return [
+        entry.id,
+        entry.title,
+        entry.kind,
+        entry.category,
+        ...entry.aliases,
+        ...entry.routing.terms.map((term) => term.term),
+        ...entry.knowledgeAreas,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(search);
+    });
+  });
+
+  app.get('/v1/context-entries/:entryId', async (request) => {
+    await requireCredential(store, request, undefined, options.externalAuth);
+    const params = request.params as { entryId: string };
+    const entry = getContextEntry(params.entryId);
+    if (!entry) throw error(404, 'Context entry not found');
+    return entry;
   });
 
   app.get('/v1/professions', async (request) => {
@@ -2507,12 +3259,35 @@ export function buildServer(
         ...human.judgment,
         ...body.judgment,
       });
-    human.modelVersion = (human.modelVersion ?? 1) + 1;
+    store.touchHumanContext(human.id);
     store.recordAudit({
       humanId: human.id,
       organizationId: human.organizationId,
       eventType: 'profile.updated',
       payload: { fields: Object.keys(body) },
+    });
+    return human;
+  });
+
+  app.post('/v1/onboarding/skip', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const human = store.humans.get(credential.humanId);
+    if (!human) throw error(404, 'Human not found');
+    human.onboarding = {
+      ...human.onboarding,
+      skippedAt: new Date().toISOString(),
+    };
+    store.touchHumanContext(human.id);
+    store.recordAudit({
+      humanId: human.id,
+      organizationId: human.organizationId,
+      eventType: 'onboarding.skipped',
+      payload: {},
     });
     return human;
   });
@@ -2529,6 +3304,8 @@ export function buildServer(
         displayName: z.string().min(1).optional(),
         role: z.string().optional(),
         focus: z.string().optional(),
+        country: z.string().min(2).max(100).optional(),
+        age: z.number().int().min(0).max(130).optional(),
         referralSource: z.string().optional(),
         business: z.string().optional(),
         icp: z.string().optional(),
@@ -2604,6 +3381,8 @@ export function buildServer(
       ...human.onboarding,
       role: body.role ?? human.onboarding?.role ?? human.role,
       focus: body.focus ?? human.onboarding?.focus,
+      country: body.country ?? human.onboarding?.country,
+      age: body.age ?? human.onboarding?.age,
       referralSource: body.referralSource ?? human.onboarding?.referralSource,
       completedAt: new Date().toISOString(),
     };
@@ -2614,6 +3393,8 @@ export function buildServer(
       pronouns: body.pronouns ?? human.identity.pronouns,
       mission: body.mission ?? human.identity.mission,
       organization: body.organization ?? human.identity.organization,
+      country: body.country ?? body.identity?.country ?? human.identity.country,
+      age: body.age ?? body.identity?.age ?? human.identity.age,
       locale: body.locale ?? human.identity.locale,
       timezone: body.timezone ?? human.identity.timezone,
     });
@@ -2623,7 +3404,9 @@ export function buildServer(
       displayName: body.displayName ?? human.persona.displayName,
       role: body.role ?? human.persona.role,
       communicationStyle:
-        body.communicationStyle ?? human.persona.communicationStyle,
+        body.communicationStyle ??
+        body.persona?.communicationStyle ??
+        human.persona.communicationStyle,
       values: body.values ?? human.persona.values,
       riskTolerance: body.riskTolerance ?? human.persona.riskTolerance,
       tone: body.tone ?? human.persona.tone,
@@ -2697,7 +3480,7 @@ export function buildServer(
     });
     human.currentPriorities = body.currentPriorities ?? human.currentPriorities;
     human.knownConstraints = body.knownConstraints ?? human.knownConstraints;
-    human.modelVersion = (human.modelVersion ?? 1) + 1;
+    store.touchHumanContext(human.id);
     store.recordAudit({
       humanId: human.id,
       organizationId: human.organizationId,
@@ -2886,6 +3669,7 @@ export function buildServer(
         sensitivity: 'normal',
       });
       memoryId = correction.id;
+      store.touchHumanContext(human.id);
     }
     store.recordAudit({
       humanId: human.id,
@@ -3204,16 +3988,30 @@ export function buildServer(
     const decision = DecisionStyleSchema.parse(human.decision ?? {});
     const behavior = BehavioralContractSchema.parse(human.behavior ?? {});
     const judgment = JudgmentRulesSchema.parse(human.judgment ?? {});
+    const contextOptions = {
+      include: body.context?.include ?? [],
+      exclude: body.context?.exclude ?? [],
+      relationshipId: body.context?.relationshipId,
+      personaModeId: body.context?.personaModeId,
+      usePersonalContext: body.context?.usePersonalContext ?? true,
+    };
+    const usePersonalContext = contextOptions.usePersonalContext;
     const cognition = routeTaskCognition({
       task: body.task,
-      humanRole: human.role,
-      declaredProfession: domain.profession ?? delegation.profileId,
-      domain: [domain.industry, domain.specialization, ...domain.goals].filter(
-        (value): value is string => Boolean(value),
-      ),
+      humanRole: usePersonalContext ? human.role : undefined,
+      declaredProfession: usePersonalContext
+        ? (domain.profession ?? delegation.profileId)
+        : delegation.profileId,
+      domain: usePersonalContext
+        ? [domain.industry, domain.specialization, ...domain.goals].filter(
+            (value): value is string => Boolean(value),
+          )
+        : [],
     });
     const selectedProfessionId =
-      delegation.profileId ?? domain.profession ?? 'generalist_assistant_v1';
+      delegation.profileId ??
+      (usePersonalContext ? domain.profession : undefined) ??
+      'generalist_assistant_v1';
     const selectedProfession =
       getProfessionProfile(selectedProfessionId) ??
       getProfessionProfile('generalist_assistant_v1');
@@ -3224,11 +4022,15 @@ export function buildServer(
           title: selectedProfession.title,
           subjectType: selectedProfession.subjectType,
           category: selectedProfession.category,
-          role: human.role || selectedProfession.title,
-          industry: domain.industry,
-          specialization: domain.specialization,
-          seniority: domain.seniority,
-          jurisdictions: domain.jurisdictions,
+          role: usePersonalContext
+            ? human.role || selectedProfession.title
+            : selectedProfession.title,
+          industry: usePersonalContext ? domain.industry : undefined,
+          specialization: usePersonalContext
+            ? domain.specialization
+            : undefined,
+          seniority: usePersonalContext ? domain.seniority : undefined,
+          jurisdictions: usePersonalContext ? domain.jurisdictions : [],
           objective: selectedProfession.objective,
           responsibilities: selectedProfession.responsibilities,
           knowledgeAreas: selectedProfession.knowledgeAreas,
@@ -3248,15 +4050,17 @@ export function buildServer(
           missingContext: missingProfessionalContext(
             selectedProfession.requiredContext,
             {
-              ...domain,
-              role: human.role,
-              communicationStyle: persona.communicationStyle,
+              ...(usePersonalContext ? domain : {}),
+              role: usePersonalContext ? human.role : undefined,
+              communicationStyle: usePersonalContext
+                ? persona.communicationStyle
+                : undefined,
               goal: body.task,
-              constraints: human.knownConstraints,
+              constraints: usePersonalContext ? human.knownConstraints : [],
             },
           ),
           humanFacts: visibleFacts(
-            biography.domainExpertise,
+            usePersonalContext ? biography.domainExpertise : [],
             includeSensitiveContext,
           ),
           source: selectedProfession.source,
@@ -3332,6 +4136,9 @@ export function buildServer(
           right.score - left.score ||
           right.createdAt.localeCompare(left.createdAt),
       )
+      .filter(
+        (hit) => includeSensitiveContext || hit.sensitivity !== 'sensitive',
+      )
       .slice(0, 32);
     const memory: MemoryContext = {
       preferences: hits
@@ -3381,7 +4188,7 @@ export function buildServer(
         'structured_profile',
         'inferred_memory',
       ],
-      conflicts: [],
+      conflicts: memoryConflicts(hits),
       uncertainties: hits
         .filter(
           (hit) =>
@@ -3427,6 +4234,28 @@ export function buildServer(
       currentPriorities: human.currentPriorities ?? [],
       knownConstraints: human.knownConstraints ?? [],
     };
+    const resolvedComposition = resolveContextComposition({
+      task: body.task,
+      audience: body.audience,
+      channel: body.channel,
+      context: contextOptions,
+      cognition,
+      selectedProfession,
+      humanModel: rawHumanModel,
+      memoryIds:
+        contextOptions.usePersonalContext === false ||
+        contextOptions.exclude.some((id) =>
+          ['personal_context', 'human_context'].includes(id),
+        )
+          ? []
+          : hits.map((hit) => hit.id),
+    });
+    const effectiveProfessionalContext = contextOptions.exclude.includes(
+      selectedProfession?.id ?? '',
+    )
+      ? undefined
+      : professionalContext;
+    grounding.conflicts.push(...resolvedComposition.composition.conflicts);
     const scopedHumanModel = scopeHumanModel(
       HumanModelSchema.parse(rawHumanModel),
       includeSensitiveContext,
@@ -3436,30 +4265,85 @@ export function buildServer(
         'Sensitive profile facts were withheld because this delegation does not include sensitive_context_read',
       );
     }
+    const effectiveHumanModel = resolvedComposition.composition.applied
+      .personalContext
+      ? scopedHumanModel.model
+      : withoutPersonalContext(scopedHumanModel.model);
+    const effectiveMemory: MemoryContext = resolvedComposition.composition
+      .applied.personalContext
+      ? memory
+      : {
+          preferences: [],
+          corrections: [],
+          episodes: [],
+          outcomes: [],
+          references: [],
+          items: [],
+        };
+    const effectiveGrounding: Grounding = resolvedComposition.composition
+      .applied.personalContext
+      ? grounding
+      : {
+          ...grounding,
+          conflicts: [],
+          uncertainties: [],
+          instructions: [
+            'Personal context and memory were disabled for this task.',
+          ],
+        };
+    const effectivePersona = resolvedComposition.composition.applied
+      .personalContext
+      ? persona
+      : PersonaSchema.parse({});
+    const effectiveDomain = resolvedComposition.composition.applied
+      .personalContext
+      ? domain
+      : DomainContextSchema.parse({});
+    const packetHuman = resolvedComposition.composition.applied.personalContext
+      ? human
+      : {
+          ...human,
+          displayName: '',
+          role: '',
+          identity: {},
+        };
     const packet = compileHumanContextPacket({
-      human,
+      human: packetHuman,
       agent: {
         id: agent.id,
         runtime: agent.runtime,
         delegationId: delegation.id,
       },
       task: body.task,
-      persona,
-      domain,
-      memory,
+      persona: effectivePersona,
+      domain: effectiveDomain,
+      memory: effectiveMemory,
       authority: delegation.authority,
       judgment,
-      professional: professionalContext,
+      professional: effectiveProfessionalContext,
       cognition,
-      humanModel: scopedHumanModel.model,
+      humanModel: effectiveHumanModel,
+      contextFacts: [
+        ...contextFactsFromHumanModel(effectiveHumanModel),
+        ...(resolvedComposition.composition.applied.personalContext
+          ? contextFactsFromMemoryHits(hits)
+          : []),
+      ],
       interaction,
-      grounding,
+      grounding: effectiveGrounding,
+      composition: resolvedComposition.composition,
+      contextPolicy: contextPolicyForComposition(
+        resolvedComposition.composition,
+      ),
+      personaModeId: resolvedComposition.personaModeId,
+      relationshipId: resolvedComposition.relationshipId,
       redactions: scopedHumanModel.redactions,
       policyVersion: delegation.profileId ?? 'default_v1',
       ttlMinutes: contextTtlMinutes,
-      memoryReferences: memory.references,
+      memoryReferences: effectiveMemory.references,
       skills: resolvedSkills,
       skillAttestations: attestedSkills,
+      toolManifest: body.tools,
     });
     const signature = await new SignJWT(
       packet as unknown as Record<string, unknown>,
@@ -3502,7 +4386,65 @@ export function buildServer(
         })),
       },
     });
-    return { packetId: packet.packetId, packet, signature };
+    return {
+      packetId: packet.packetId,
+      packet,
+      signature,
+      contextRevision: store.contextRevision(human.id),
+    };
+  });
+
+  app.get('/v1/context/revision', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'agent',
+      options.externalAuth,
+    );
+    const human = store.humans.get(credential.humanId);
+    const delegation = credential.agentId
+      ? store.getDelegationForAgent(credential.agentId, credential.humanId)
+      : undefined;
+    if (!human || !delegation) throw error(403, 'Active delegation required');
+    return {
+      revision: store.contextRevision(human.id),
+      modelVersion: human.modelVersion,
+    };
+  });
+
+  app.get('/v1/context/:packetId/inspect', async (request) => {
+    const credential = await requireCredential(
+      store,
+      request,
+      'human',
+      options.externalAuth,
+    );
+    const params = request.params as { packetId: string };
+    const context = store.contexts.get(params.packetId);
+    if (!context || context.humanId !== credential.humanId)
+      throw error(404, 'Context packet not found');
+    return {
+      packetId: context.packet.packetId,
+      issuedAt: context.packet.issuedAt,
+      expiresAt: context.packet.expiresAt,
+      task: context.packet.task,
+      composition: context.packet.composition,
+      contextPolicy: context.packet.contextPolicy,
+      cognition: context.packet.cognition
+        ? {
+            profileId: context.packet.cognition.profileId,
+            title: context.packet.cognition.title,
+            confidence: context.packet.cognition.confidence,
+            risk: context.packet.cognition.risk,
+            signals: context.packet.cognition.signals,
+          }
+        : undefined,
+      contextFacts: context.packet.contextFacts,
+      memoryReferences: context.packet.memory.references,
+      redactions: context.packet.redactions,
+      authority: context.packet.authority,
+      policyVersion: context.packet.policyVersion,
+    };
   });
 
   app.get('/v1/context/:packetId', async (request) => {
@@ -3551,6 +4493,7 @@ export function buildServer(
       throw error(404, 'Context packet not found');
     if (new Date(context.packet.expiresAt) <= new Date())
       throw error(410, 'Context packet expired');
+    assertDeclaredTool(context.packet, body.toolName, body.action);
     const delegation = credential.agentId
       ? store.getDelegationForAgent(credential.agentId, credential.humanId)
       : undefined;
@@ -3558,6 +4501,7 @@ export function buildServer(
     if (!delegation || !human) throw error(403, 'Active delegation required');
     const result = evaluatePolicy(delegation.authority, human.judgment, body, [
       ...professionalPolicyRules(context.packet.professional ?? {}),
+      ...contextRuntimePolicyRules(context.packet),
       ...delegation.policyRules,
     ]);
     store.recordAudit({
@@ -3585,6 +4529,7 @@ export function buildServer(
       z.object({
         contextPacketId: z.string(),
         action: z.string(),
+        toolName: z.string().min(1).optional(),
         summary: z.string().min(1),
         payload: z.unknown(),
         resource: z.string().optional(),
@@ -3605,6 +4550,7 @@ export function buildServer(
       throw error(404, 'Context packet not found');
     if (new Date(context.packet.expiresAt) <= new Date())
       throw error(410, 'Context packet expired');
+    assertDeclaredTool(context.packet, body.toolName, body.action);
     const delegation = store.getDelegationForAgent(
       credential.agentId!,
       credential.humanId,
@@ -3625,6 +4571,7 @@ export function buildServer(
       },
       [
         ...professionalPolicyRules(context.packet.professional ?? {}),
+        ...contextRuntimePolicyRules(context.packet),
         ...delegation.policyRules,
       ],
     );
@@ -3642,6 +4589,7 @@ export function buildServer(
       agentId: credential.agentId!,
       contextPacketId: body.contextPacketId,
       action: body.action,
+      toolName: body.toolName,
       summary: body.summary,
       payload: body.payload,
       payloadHash: hashPayload(body.payload),
@@ -3730,6 +4678,7 @@ export function buildServer(
     const executionToken = await new SignJWT({
       approvalId: approval.id,
       action: approval.action,
+      toolName: approval.toolName,
       payloadHash: approval.payloadHash,
     })
       .setProtectedHeader({ alg: 'HS256', typ: 'DEAL-ACTION' })
@@ -3769,6 +4718,7 @@ export function buildServer(
       z.object({
         executionToken: z.string().min(1),
         action: z.string().min(1),
+        toolName: z.string().min(1).optional(),
         payload: z.unknown(),
       }),
       request.body,
@@ -3776,6 +4726,7 @@ export function buildServer(
     let claims: {
       approvalId?: unknown;
       action?: unknown;
+      toolName?: unknown;
       payloadHash?: unknown;
     };
     try {
@@ -3790,6 +4741,10 @@ export function buildServer(
     }
     const approvalId = String(claims.approvalId ?? '');
     const approval = store.approvals.get(approvalId);
+    const context = approval
+      ? store.contexts.get(approval.contextPacketId)
+      : undefined;
+    if (context) assertDeclaredTool(context.packet, body.toolName, body.action);
     if (
       !approval ||
       approval.agentId !== credential.agentId ||
@@ -3797,7 +4752,10 @@ export function buildServer(
       approval.status !== 'approved' ||
       !approval.consumedAt ||
       approval.action !== body.action ||
+      (approval.toolName ?? undefined) !==
+        (body.toolName ?? (claims.toolName as string | undefined)) ||
       claims.action !== body.action ||
+      (claims.toolName ?? undefined) !== (approval.toolName ?? undefined) ||
       claims.payloadHash !== hashPayload(body.payload) ||
       approval.payloadHash !== hashPayload(body.payload)
     )
@@ -3866,6 +4824,7 @@ export function buildServer(
       priority: body.priority,
       sensitivity: body.sensitivity ?? 'normal',
     });
+    store.touchHumanContext(human.id);
     store.recordAudit({
       humanId: human.id,
       organizationId: human.organizationId,
@@ -3934,6 +4893,7 @@ export function buildServer(
       content: body.outcome,
       source: `context:${body.contextPacketId}`,
     });
+    store.touchHumanContext(human.id);
     store.recordAudit({
       humanId: human.id,
       organizationId: human.organizationId,
@@ -3969,6 +4929,7 @@ export function buildServer(
       body.replacement,
     );
     const human = store.humans.get(credential.humanId)!;
+    store.touchHumanContext(human.id);
     store.recordAudit({
       humanId: human.id,
       organizationId: human.organizationId,
@@ -4019,6 +4980,7 @@ export function buildServer(
       store.forgottenMemoryIds.add(memoryId);
     }
     const human = store.humans.get(credential.humanId)!;
+    store.touchHumanContext(human.id);
     store.recordAudit({
       humanId: human.id,
       organizationId: human.organizationId,

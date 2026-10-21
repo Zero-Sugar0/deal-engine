@@ -8,6 +8,14 @@ import {
 } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import OpenAI from '@lobehub/icons/es/OpenAI/components/Mono.js';
+import Claude from '@lobehub/icons/es/Claude/components/Mono.js';
+import Google from '@lobehub/icons/es/Google/components/Mono.js';
+import DeepSeek from '@lobehub/icons/es/DeepSeek/components/Mono.js';
+import Meta from '@lobehub/icons/es/Meta/components/Mono.js';
+import Mistral from '@lobehub/icons/es/Mistral/components/Mono.js';
+import Qwen from '@lobehub/icons/es/Qwen/components/Mono.js';
+import Grok from '@lobehub/icons/es/Grok/components/Mono.js';
 import { authClient, dealApiUrl, getDealSessionToken } from './auth-client';
 
 type CodeToken = { content: string; color?: string };
@@ -268,71 +276,158 @@ function AccountLogo({ onNavigate }: { onNavigate: Navigate }) {
   );
 }
 
-const roleOptions = [
-  ['developer', 'Developer', 'Building products, systems, or agents'],
-  ['founder', 'Founder', 'Making decisions and moving a company forward'],
-  ['designer', 'Designer', 'Shaping ideas, experiences, and direction'],
-  ['operator', 'Operator', 'Keeping important work clear and moving'],
-  ['researcher', 'Researcher', 'Working with evidence, questions, and insight'],
-  ['other', 'Something else', 'A different kind of work, done your way'],
-];
-
-const focusOptions = [
-  ['voice', 'Sound like me', 'Keep my tone and way of thinking close'],
-  [
-    'decisions',
-    'Make better decisions',
-    'Give agents the judgment behind my choices',
-  ],
-  [
-    'continuity',
-    'Keep the thread',
-    'Carry context between conversations and tools',
-  ],
-  [
-    'boundaries',
-    'Protect what matters',
-    'Make limits and human checkpoints visible',
-  ],
-];
-
-const referralOptions = [
-  'LinkedIn',
-  'X',
-  'Reddit',
-  'Google search',
-  'YouTube',
-  'A friend',
-  'Other',
-];
+type OnboardingDraft = {
+  step: number;
+  preferredName: string;
+  country: string;
+  age: string;
+  language: string;
+  lifeContext: string;
+  priorities: string;
+  communicationStyle: string;
+  boundaries: string;
+};
 
 export function OnboardingPage({ onNavigate }: { onNavigate: Navigate }) {
   const { data: session, isPending } = authClient.useSession();
-  const [step, setStep] = useState(0);
-  const [role, setRole] = useState('');
-  const [focus, setFocus] = useState('');
-  const [referralSource, setReferralSource] = useState('');
+  const [draft, setDraft] = useState<OnboardingDraft>({
+    step: 0,
+    preferredName: '',
+    country: '',
+    age: '',
+    language: '',
+    lifeContext: '',
+    priorities: '',
+    communicationStyle: '',
+    boundaries: '',
+  });
+  const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [draftKey, setDraftKey] = useState<string>();
 
   useEffect(() => {
     if (!isPending && !session && !getDealSessionToken())
       onNavigate('/sign-in');
   }, [isPending, onNavigate, session]);
 
-  async function finish(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setErrorMessage('');
-    setBusy(true);
-    try {
-      await request('/v1/onboarding', {
-        method: 'POST',
-        body: JSON.stringify({ role, focus, referralSource }),
+  useEffect(() => {
+    if (isPending || (!session && !getDealSessionToken())) return;
+    let active = true;
+    setReady(false);
+    request<ProfileResponse>('/v1/profile')
+      .then(({ human }) => {
+        if (!active) return;
+        const key = `deal:onboarding:v1:${session?.user.id ?? human.id}`;
+        setDraftKey(key);
+        let saved: Partial<OnboardingDraft> = {};
+        try {
+          saved = JSON.parse(sessionStorage.getItem(key) ?? '{}');
+        } catch {
+          /* Ignore an invalid local draft. */
+        }
+        const identity = human.identity ?? {};
+        setDraft({
+          preferredName: String(
+            identity.preferredName ?? human.displayName ?? '',
+          ),
+          country: String(identity.country ?? ''),
+          age: identity.age === undefined ? '' : String(identity.age),
+          language: String(human.persona?.language ?? ''),
+          lifeContext: String(human.biography?.currentChapter ?? ''),
+          priorities: (human.currentPriorities ?? []).join('\n'),
+          communicationStyle: String(human.persona?.communicationStyle ?? ''),
+          boundaries: (
+            (human.boundaries?.consentRules as string[] | undefined) ?? []
+          ).join('\n'),
+          ...saved,
+          step:
+            Number.isInteger(saved.step) && saved.step! >= 0 && saved.step! <= 2
+              ? saved.step!
+              : 0,
+        });
+        setReady(true);
+      })
+      .catch((error) => {
+        if (active) {
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : 'Could not load your profile.',
+          );
+          setReady(true);
+        }
       });
+    return () => {
+      active = false;
+    };
+  }, [isPending, session?.user.id]);
+
+  useEffect(() => {
+    if (ready && draftKey)
+      sessionStorage.setItem(draftKey, JSON.stringify(draft));
+  }, [draft, draftKey, ready]);
+
+  function update(field: keyof OnboardingDraft, value: string) {
+    setDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  async function skipOnboarding() {
+    setBusy(true);
+    setErrorMessage('');
+    try {
+      await request('/v1/onboarding/skip', { method: 'POST' });
       onNavigate('/app');
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : 'Could not save your answers.',
+        error instanceof Error
+          ? error.message
+          : 'Could not skip setup. Please try again.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveStep(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage('');
+    const list = (value: string) =>
+      value
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    try {
+      await request(draft.step === 2 ? '/v1/onboarding' : '/v1/profile', {
+        method: draft.step === 2 ? 'POST' : 'PATCH',
+        body: JSON.stringify({
+          identity: {
+            preferredName: draft.preferredName.trim(),
+            country: draft.country.trim() || undefined,
+            age: draft.age === '' ? undefined : Number(draft.age),
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          },
+          persona: {
+            language: draft.language.trim() || undefined,
+            communicationStyle: draft.communicationStyle.trim() || undefined,
+          },
+          biography: { currentChapter: draft.lifeContext.trim() || undefined },
+          currentPriorities: list(draft.priorities),
+          boundaries: { consentRules: list(draft.boundaries) },
+        }),
+      });
+      if (draft.step === 2) {
+        if (draftKey) sessionStorage.removeItem(draftKey);
+        onNavigate('/app');
+      } else {
+        setDraft((current) => ({ ...current, step: current.step + 1 }));
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Could not save your answers. Your draft is still here.',
       );
     } finally {
       setBusy(false);
@@ -340,106 +435,185 @@ export function OnboardingPage({ onNavigate }: { onNavigate: Navigate }) {
   }
 
   if (isPending || (!session && !getDealSessionToken())) return null;
-
-  const steps = [
-    {
-      eyebrow: 'First, a little about you',
-      title: 'What kind of work is yours?',
-      body: 'This helps deal choose a useful starting point. You can change it later.',
-      options: roleOptions,
-      value: role,
-      setValue: setRole,
-    },
-    {
-      eyebrow: 'What should feel better?',
-      title: 'Where should your agent understand you first?',
-      body: 'Choose the part of working with AI you care about most right now.',
-      options: focusOptions,
-      value: focus,
-      setValue: setFocus,
-    },
+  const titles = [
+    'Let’s get to know you.',
+    'What does life look like for you?',
+    'How should your agent talk with you?',
   ];
-  const current = steps[step];
-
+  const descriptions = [
+    'A few basics help your agent understand your world. Share only what you’re comfortable with.',
+    'Give your agent a little context about your everyday life and what matters right now.',
+    'Your preferences travel with your deal API key, so connected agents can pick up where you left off.',
+  ];
   return (
     <div className="onboarding-page">
       <header className="onboarding-header">
         <AccountLogo onNavigate={onNavigate} />
-        <span>Step {step + 1} of 3</span>
+        <button
+          className="onboarding-skip"
+          type="button"
+          disabled={busy}
+          onClick={skipOnboarding}
+        >
+          Skip for now
+        </button>
+        <span>Step {draft.step + 1} of 3</span>
       </header>
       <main className="onboarding-main">
-        <div className="onboarding-progress">
-          <i style={{ width: `${((step + 1) / 3) * 100}%` }} />
+        <div
+          className="onboarding-progress"
+          role="progressbar"
+          aria-label="Onboarding progress"
+          aria-valuemin={0}
+          aria-valuemax={3}
+          aria-valuenow={draft.step + 1}
+        >
+          <i style={{ width: `${((draft.step + 1) / 3) * 100}%` }} />
         </div>
-        {step < 2 && current ? (
-          <section className="onboarding-card">
-            <span className="eyebrow">{current.eyebrow}</span>
-            <h1>{current.title}</h1>
-            <p>{current.body}</p>
-            <div className="choice-grid">
-              {current.options.map(([value, title, description]) => (
-                <button
-                  className={`choice-card ${current.value === value ? 'choice-card-selected' : ''}`}
-                  key={value}
-                  onClick={() => current.setValue(value)}
-                  type="button"
-                >
-                  <span className="choice-mark">
-                    {current.value === value ? '✓' : ''}
-                  </span>
-                  <strong>{title}</strong>
-                  <small>{description}</small>
-                </button>
-              ))}
-            </div>
-            <div className="onboarding-actions">
-              <SmallButton
-                secondary
-                onClick={() => (step === 0 ? onNavigate('/app') : setStep(0))}
-              >
-                Back
-              </SmallButton>
-              <SmallButton
-                disabled={!current.value}
-                onClick={() => setStep(step + 1)}
-              >
-                Continue ↗
-              </SmallButton>
-            </div>
-          </section>
-        ) : (
-          <form className="onboarding-card" onSubmit={finish}>
-            <span className="eyebrow">One last question</span>
-            <h1>How did you find deal?</h1>
-            <p>
-              It helps us understand how people discover a more human way to
-              work with AI.
-            </p>
-            <div className="referral-grid">
-              {referralOptions.map((option) => (
-                <button
-                  className={`referral-option ${referralSource === option ? 'referral-option-selected' : ''}`}
-                  key={option}
-                  onClick={() => setReferralSource(option)}
-                  type="button"
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-            {errorMessage && (
-              <div className="account-error">{errorMessage}</div>
+        <form className="onboarding-card" onSubmit={saveStep}>
+          <span className="eyebrow">
+            {['Your world', 'Your everyday life', 'Your way'][draft.step]}
+          </span>
+          <h1>{titles[draft.step]}</h1>
+          <p>
+            {descriptions[draft.step]} Setup is optional. Your agent already has
+            deal’s conversational defaults; these details help it understand you
+            better.
+          </p>
+          <fieldset className="onboarding-fields" disabled={busy || !ready}>
+            {draft.step === 0 && (
+              <>
+                <label>
+                  What should we call you?
+                  <input
+                    autoComplete="given-name"
+                    required
+                    maxLength={100}
+                    value={draft.preferredName}
+                    onChange={(event) =>
+                      update('preferredName', event.target.value)
+                    }
+                  />
+                </label>
+                <label>
+                  Country <small>Optional</small>
+                  <input
+                    autoComplete="country-name"
+                    maxLength={100}
+                    minLength={2}
+                    placeholder="Where you live"
+                    value={draft.country}
+                    onChange={(event) => update('country', event.target.value)}
+                  />
+                </label>
+                <label>
+                  Age <small>Optional</small>
+                  <input
+                    type="number"
+                    min={0}
+                    max={130}
+                    step={1}
+                    inputMode="numeric"
+                    value={draft.age}
+                    onChange={(event) => update('age', event.target.value)}
+                  />
+                </label>
+                <label>
+                  Preferred language <small>Optional</small>
+                  <input
+                    maxLength={100}
+                    placeholder="English, Yoruba, Spanish…"
+                    value={draft.language}
+                    onChange={(event) => update('language', event.target.value)}
+                  />
+                </label>
+              </>
             )}
-            <div className="onboarding-actions">
-              <SmallButton secondary onClick={() => setStep(1)}>
-                Back
-              </SmallButton>
-              <SmallButton disabled={!referralSource || busy} type="submit">
-                {busy ? 'Saving…' : 'Enter deal ↗'}
-              </SmallButton>
+            {draft.step === 1 && (
+              <>
+                <label>
+                  A little about your life <small>Optional</small>
+                  <textarea
+                    maxLength={2000}
+                    rows={3}
+                    placeholder="Studying, raising a family, building something, exploring a new chapter…"
+                    value={draft.lifeContext}
+                    onChange={(event) =>
+                      update('lifeContext', event.target.value)
+                    }
+                  />
+                </label>
+                <label>
+                  What matters to you right now? <small>Optional</small>
+                  <textarea
+                    maxLength={2000}
+                    rows={3}
+                    placeholder="Your goals, interests, responsibilities, or things you want support with. One per line."
+                    value={draft.priorities}
+                    onChange={(event) =>
+                      update('priorities', event.target.value)
+                    }
+                  />
+                </label>
+              </>
+            )}
+            {draft.step === 2 && (
+              <>
+                <label>
+                  How do you like to communicate? <small>Optional</small>
+                  <textarea
+                    maxLength={2000}
+                    rows={3}
+                    placeholder="Keep it short, be warm, use everyday examples, challenge me when needed…"
+                    value={draft.communicationStyle}
+                    onChange={(event) =>
+                      update('communicationStyle', event.target.value)
+                    }
+                  />
+                </label>
+                <label>
+                  Anything your agent should respect? <small>Optional</small>
+                  <textarea
+                    maxLength={2000}
+                    rows={3}
+                    placeholder="Things to avoid or boundaries that matter to you. One per line."
+                    value={draft.boundaries}
+                    onChange={(event) =>
+                      update('boundaries', event.target.value)
+                    }
+                  />
+                </label>
+                <p className="onboarding-save-note">
+                  Saved to your account. You can review and change your human
+                  context anytime.
+                </p>
+              </>
+            )}
+          </fieldset>
+          {errorMessage && (
+            <div className="account-error" role="alert">
+              {errorMessage}
             </div>
-          </form>
-        )}
+          )}
+          <div className="onboarding-actions">
+            <SmallButton
+              secondary
+              disabled={busy || draft.step === 0}
+              onClick={() =>
+                setDraft((current) => ({ ...current, step: current.step - 1 }))
+              }
+            >
+              Back
+            </SmallButton>
+            <SmallButton disabled={busy || !ready} type="submit">
+              {busy
+                ? 'Saving…'
+                : draft.step === 2
+                  ? 'Save and enter deal ↗'
+                  : 'Save and continue ↗'}
+            </SmallButton>
+          </div>
+        </form>
       </main>
     </div>
   );
@@ -1378,6 +1552,30 @@ function EmptyState({
   );
 }
 
+function ProviderLogo({ provider }: { provider: string }) {
+  const name = provider.toLowerCase();
+  const Icon = name.includes('openai')
+    ? OpenAI
+    : name.includes('anthropic') || name.includes('claude')
+      ? Claude
+      : name.includes('google') || name.includes('gemini')
+        ? Google
+        : name.includes('deepseek')
+          ? DeepSeek
+          : name.includes('meta')
+            ? Meta
+            : name.includes('mistral')
+              ? Mistral
+              : name.includes('qwen') || name.includes('alibaba')
+                ? Qwen
+                : name.includes('xai') ||
+                    name.includes('x-ai') ||
+                    name.includes('grok')
+                  ? Grok
+                  : undefined;
+  return Icon ? <Icon size={22} /> : <span aria-label={provider}>◇</span>;
+}
+
 function GatewayModelPicker({
   models,
   loading,
@@ -1455,7 +1653,7 @@ function GatewayModelPicker({
                 type="button"
               >
                 <span className="gateway-model-provider">
-                  {model.provider.slice(0, 2).toUpperCase()}
+                  <ProviderLogo provider={model.provider} />
                 </span>
                 <span className="gateway-model-option-copy">
                   <strong>{model.name}</strong>

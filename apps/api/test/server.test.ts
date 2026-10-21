@@ -389,6 +389,60 @@ describe('DEAL control plane', () => {
     expect(packet.professional.contextAccess).toBe('automatic');
   });
 
+  it('composes explicit context controls and enforces declared tools at the policy boundary', async () => {
+    const contextResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/context',
+      headers: { authorization: `Bearer ${agentToken}` },
+      payload: {
+        task: 'Send the approved campaign',
+        context: { usePersonalContext: false },
+        tools: [
+          {
+            name: 'campaign_sender',
+            action: 'external_commitment',
+            effect: 'external',
+          },
+        ],
+      },
+    });
+    expect(contextResponse.statusCode).toBe(200);
+    const context = contextResponse.json();
+    expect(context.packet.composition.applied.personalContext).toBe(false);
+    expect(context.packet.principal.displayName).toBe('');
+    expect(context.packet.memory.items).toHaveLength(0);
+    expect(context.packet.composition.excluded).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'human_identity' }),
+        expect.objectContaining({ id: 'human_persona' }),
+      ]),
+    );
+
+    const missingToolName = await app.inject({
+      method: 'POST',
+      url: '/v1/policy/evaluate',
+      headers: { authorization: `Bearer ${agentToken}` },
+      payload: {
+        contextPacketId: context.packetId,
+        action: 'external_commitment',
+      },
+    });
+    expect(missingToolName.statusCode).toBe(400);
+
+    const policy = await app.inject({
+      method: 'POST',
+      url: '/v1/policy/evaluate',
+      headers: { authorization: `Bearer ${agentToken}` },
+      payload: {
+        contextPacketId: context.packetId,
+        toolName: 'campaign_sender',
+        action: 'external_commitment',
+      },
+    });
+    expect(policy.statusCode).toBe(200);
+    expect(policy.json().decision).toBe('require_approval');
+  });
+
   it('registers, attests, pins, distributes, and revokes organization skills', async () => {
     const registeredResponse = await app.inject({
       method: 'POST',
@@ -1008,6 +1062,100 @@ describe('DEAL control plane', () => {
     );
   });
 
+  it('allows skipping setup and supplies conversational defaults without personal context', async () => {
+    const before = await app.inject({
+      method: 'GET',
+      url: '/v1/profile',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    const forbidden = await app.inject({
+      method: 'POST',
+      url: '/v1/onboarding/skip',
+      headers: { authorization: `Bearer ${agentToken}` },
+    });
+    expect(forbidden.statusCode).toBe(403);
+    const skipped = await app.inject({
+      method: 'POST',
+      url: '/v1/onboarding/skip',
+      headers: { authorization: `Bearer ${humanToken}` },
+    });
+    expect(skipped.statusCode).toBe(200);
+    expect(skipped.json().onboarding.skippedAt).toBeTruthy();
+    expect(skipped.json().identity).toEqual(before.json().human.identity);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/context',
+      headers: { authorization: `Bearer ${agentToken}` },
+      payload: {
+        task: 'Help me think through my day',
+        context: { usePersonalContext: false },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const packet = response.json().packet;
+    expect(packet.responseGuidance.style).toContain(
+      'Use natural, conversational language and respond to the actual situation.',
+    );
+    expect(packet.humanModel.identity.country).toBeUndefined();
+    expect(packet.composition.applied.personalContext).toBe(false);
+  });
+
+  it('carries all three onboarding steps into API-key context', async () => {
+    const first = await app.inject({
+      method: 'PATCH',
+      url: '/v1/profile',
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: {
+        identity: { preferredName: 'Alex', country: 'Ghana', age: 29 },
+      },
+    });
+    expect(first.statusCode).toBe(200);
+    const second = await app.inject({
+      method: 'PATCH',
+      url: '/v1/profile',
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: {
+        biography: { currentChapter: 'Studying and caring for family' },
+        currentPriorities: ['Finish university'],
+      },
+    });
+    expect(second.statusCode).toBe(200);
+    const third = await app.inject({
+      method: 'POST',
+      url: '/v1/onboarding',
+      headers: { authorization: `Bearer ${humanToken}` },
+      payload: {
+        identity: { country: 'Nigeria', age: 30 },
+        persona: {
+          language: 'English',
+          communicationStyle: 'Warm and concise',
+        },
+        boundaries: { consentRules: ['Ask before sharing personal details'] },
+      },
+    });
+    expect(third.statusCode).toBe(200);
+    expect(third.json().onboarding.completedAt).toBeTruthy();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/context',
+      headers: { authorization: `Bearer ${agentToken}` },
+      payload: { task: 'Help me plan my week' },
+    });
+    expect(response.statusCode).toBe(200);
+    const model = response.json().packet.humanModel;
+    expect(model.identity.country).toBe('Nigeria');
+    expect(model.identity.age).toBe(30);
+    expect(model.biography.currentChapter).toBe(
+      'Studying and caring for family',
+    );
+    expect(model.currentPriorities).toContain('Finish university');
+    expect(model.persona.language).toBe('English');
+    expect(model.persona.communicationStyle).toBe('Warm and concise');
+    expect(model.boundaries.consentRules).toContain(
+      'Ask before sharing personal details',
+    );
+  });
+
   it('compiles a human model and explicit response guidance', async () => {
     const onboarding = await app.inject({
       method: 'POST',
@@ -1015,6 +1163,8 @@ describe('DEAL control plane', () => {
       headers: { authorization: `Bearer ${humanToken}` },
       payload: {
         preferredName: 'Alex',
+        country: 'Barbados',
+        age: 34,
         mission: 'Build a calm, durable company',
         identity: {
           selfDescription: 'A patient builder who prefers honest progress.',
@@ -1134,6 +1284,8 @@ describe('DEAL control plane', () => {
     expect(packet.schemaVersion).toBe('6');
     expect(packet.humanModel.version).toBe(onboarding.json().modelVersion);
     expect(packet.humanModel.identity.preferredName).toBe('Alex');
+    expect(packet.humanModel.identity.country).toBe('Barbados');
+    expect(packet.humanModel.identity.age).toBe(34);
     expect(packet.humanModel.identity.selfDescription).toContain(
       'patient builder',
     );
@@ -1257,6 +1409,7 @@ describe('DEAL control plane', () => {
       payload: { task: 'Draft a response to a partner' },
     });
     const packet = context.json();
+    const initialRevision = packet.contextRevision;
     const feedback = await app.inject({
       method: 'POST',
       url: '/v1/context/feedback',
@@ -1288,5 +1441,6 @@ describe('DEAL control plane', () => {
         }),
       ]),
     );
+    expect(next.json().contextRevision).not.toBe(initialRevision);
   });
 });

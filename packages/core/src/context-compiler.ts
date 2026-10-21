@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import {
   BehavioralContractSchema,
+  ContextCompositionSchema,
+  ContextRuntimePolicySchema,
   GroundingSchema,
   HumanModelSchema,
   InteractionContextSchema,
@@ -12,6 +14,9 @@ import {
 import type {
   Authority,
   CognitionRoute,
+  ContextComposition,
+  ContextFact,
+  ContextRuntimePolicy,
   DomainContext,
   HumanContextPacket,
   HumanModel,
@@ -25,6 +30,7 @@ import type {
   ResponseGuidance,
   SkillAttestation,
   SkillDescriptorInput,
+  ToolManifest,
 } from './schema.js';
 
 export interface CompileContextInput {
@@ -57,6 +63,12 @@ export interface CompileContextInput {
   cognition?: CognitionRoute;
   skills?: SkillDescriptorInput[];
   skillAttestations?: SkillAttestation[];
+  composition?: ContextComposition;
+  contextPolicy?: ContextRuntimePolicy;
+  personaModeId?: string;
+  relationshipId?: string;
+  contextFacts?: ContextFact[];
+  toolManifest?: ToolManifest[];
 }
 
 export function hashTask(task: string): string {
@@ -186,11 +198,14 @@ export function compileHumanContextPacket(
     ''
   ).toLowerCase();
   const audienceMode = normalizedHumanModel.persona.modes.find((mode) => {
+    if (input.personaModeId && mode.id === input.personaModeId) return true;
     const audience = mode.audience.toLowerCase();
     return audienceTarget === audience || audienceTarget.includes(audience);
   });
   const relationshipContext = normalizedHumanModel.relationships.find(
     (relationship) => {
+      if (input.relationshipId && relationship.id === input.relationshipId)
+        return true;
       const candidates = [
         relationship.audience,
         relationship.label,
@@ -226,6 +241,13 @@ export function compileHumanContextPacket(
   ].filter((item): item is string => Boolean(item));
   const responseGuidance: ResponseGuidance = ResponseGuidanceSchema.parse({
     style: [
+      'Use natural, conversational language and respond to the actual situation.',
+      'Lead with something useful; keep simple answers short and give detail when it helps.',
+      'Notice emotion expressed in the conversation and respond with proportionate warmth, practical care, and sound judgment.',
+      'Use familiar words, varied sentence rhythm, and concrete examples; avoid canned empathy and unnecessary formality.',
+      'Ask only when a missing detail materially changes the answer; do not require a profile or repeat onboarding questions.',
+      'Apply the person’s stated preferences and relevant life context when available, without inventing a biography or feelings.',
+      'These conversational defaults apply with an empty profile; explicit communication preferences can refine them.',
       (audienceMode?.tone ?? normalizedHumanModel.persona.tone)
         ? `Use a ${audienceMode?.tone ?? normalizedHumanModel.persona.tone} tone`
         : undefined,
@@ -438,5 +460,9 @@ export function compileHumanContextPacket(
     responseGuidance,
     interaction: normalizedInteraction,
     grounding: GroundingSchema.parse(input.grounding ?? {}),
+    composition: ContextCompositionSchema.parse(input.composition ?? {}),
+    contextPolicy: ContextRuntimePolicySchema.parse(input.contextPolicy ?? {}),
+    contextFacts: input.contextFacts ?? [],
+    toolManifest: input.toolManifest ?? [],
   };
 }

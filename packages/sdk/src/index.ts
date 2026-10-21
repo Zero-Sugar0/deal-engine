@@ -1,11 +1,13 @@
 import type {
   HumanContextPacket,
   HumanModel,
+  ContextEntry,
   ProfessionProfile,
   SkillArtifactFile,
   SkillRegistryEntry,
   SkillReviewStatus,
   SkillDescriptorInput,
+  ToolManifest,
 } from '@deal/core';
 
 export type {
@@ -47,6 +49,8 @@ export type HumanProfile = {
 export type HumanProfileUpdate = {
   displayName?: string;
   role?: string;
+  country?: string;
+  age?: number;
   identity?: Partial<HumanModel['identity']>;
   persona?: Partial<HumanModel['persona']>;
   selfConcept?: Partial<HumanModel['selfConcept']>;
@@ -81,6 +85,14 @@ export interface ContextRequest {
   audience?: string;
   activeTopic?: string;
   userIntent?: string;
+  context?: {
+    include?: string[];
+    exclude?: string[];
+    relationshipId?: string;
+    personaModeId?: string;
+    usePersonalContext?: boolean;
+  };
+  tools?: ToolManifest[];
   /** Active host-agent skills; descriptors never grant authority. */
   skills?: SkillDescriptorInput[];
 }
@@ -126,6 +138,7 @@ export interface ConversationTurn {
 export interface PolicyRequest {
   contextPacketId: string;
   action: string;
+  toolName?: string;
   resource?: string;
   recipientCount?: number;
   spendUsd?: number;
@@ -202,6 +215,7 @@ export class deal {
     packetId: string;
     packet: HumanContextPacket;
     signature: string;
+    contextRevision?: string;
   }> {
     return this.request('/v1/context', {
       method: 'POST',
@@ -209,11 +223,22 @@ export class deal {
     });
   }
 
+  async getContextRevision(): Promise<{
+    revision: string;
+    modelVersion: number;
+  }> {
+    return this.request('/v1/context/revision', { method: 'GET' });
+  }
+
   async getProfile(): Promise<{
     human: HumanProfile;
     delegations: Array<Record<string, unknown>>;
   }> {
     return this.request('/v1/profile', { method: 'GET' });
+  }
+
+  async inspectProfileContext(): Promise<Record<string, unknown>> {
+    return this.request('/v1/profile/context', { method: 'GET' });
   }
 
   async listProfessions(
@@ -235,6 +260,20 @@ export class deal {
     return this.request(`/v1/professions/${encodeURIComponent(professionId)}`, {
       method: 'GET',
     });
+  }
+
+  async listContextEntries(
+    input: { search?: string; kind?: string } = {},
+  ): Promise<ContextEntry[]> {
+    const params = new URLSearchParams();
+    if (input.search) params.set('search', input.search);
+    if (input.kind) params.set('kind', input.kind);
+    const query = params.toString();
+    return this.request(`/v1/context-entries${query ? `?${query}` : ''}`);
+  }
+
+  async getContextEntry(entryId: string): Promise<ContextEntry> {
+    return this.request(`/v1/context-entries/${encodeURIComponent(entryId)}`);
   }
 
   async listSkills(
@@ -308,6 +347,10 @@ export class deal {
     });
   }
 
+  async skipOnboarding(): Promise<HumanProfile> {
+    return this.request('/v1/onboarding/skip', { method: 'POST' });
+  }
+
   async getContextPacket(packetId: string): Promise<{
     packetId: string;
     packet: HumanContextPacket;
@@ -315,6 +358,10 @@ export class deal {
     expired: boolean;
   }> {
     return this.request(`/v1/context/${packetId}`);
+  }
+
+  async inspectContext(packetId: string): Promise<Record<string, unknown>> {
+    return this.request(`/v1/context/${encodeURIComponent(packetId)}/inspect`);
   }
 
   async startConversation(input: {
@@ -399,6 +446,7 @@ export class deal {
   async requestApproval(input: {
     contextPacketId: string;
     action: string;
+    toolName?: string;
     summary: string;
     payload: unknown;
     resource?: string;
@@ -432,6 +480,7 @@ export class deal {
   async verifyExecution(input: {
     executionToken: string;
     action: string;
+    toolName?: string;
     payload: unknown;
   }): Promise<{
     authorized: boolean;

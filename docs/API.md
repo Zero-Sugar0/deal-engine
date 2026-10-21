@@ -46,6 +46,18 @@ Content-Type: application/json
   "audience": "the founder",
   "activeTopic": "positioning",
   "userIntent": "pressure-test the new message",
+  "context": {
+    "include": ["persona:work"],
+    "exclude": ["relationship:family"],
+    "usePersonalContext": true
+  },
+  "tools": [
+    {
+      "name": "mail_sender",
+      "action": "external_commitment",
+      "effect": "external"
+    }
+  ],
   "skills": [
     {
       "name": "customer-replies",
@@ -57,6 +69,32 @@ Content-Type: application/json
   ]
 }
 ```
+
+The packet's `composition` explains which task, professional, persona, and
+relationship contexts were selected or excluded. `contextFacts` carries
+source, confirmation, confidence, visibility, validity, and scope for each
+fact; `contextPolicy` carries the selected entries' retention, sensitivity,
+restricted-action, and approval controls. Reading confirmed context is
+automatic after delegation checks. External or irreversible actions still
+require policy evaluation and, where returned, a human-approved execution
+token.
+
+### Context transparency and controls
+
+Humans can inspect and correct the active model without exposing it to an
+agent:
+
+```http
+GET /v1/profile/context
+GET /v1/context/{packet_id}/inspect
+GET /v1/context/revision
+GET /v1/context-entries
+GET /v1/context-entries/{entry_id}
+```
+
+Use the existing memory correction and forget endpoints to change or remove a
+fact. The revision endpoint invalidates SDK packet caches automatically after
+those changes.
 
 ### Response
 
@@ -185,6 +223,23 @@ resolves it to the organization's approved registry entry and adds a signed
 requests even though their historical signatures remain available for audit.
 
 ## Professional profiles
+
+Onboarding is optional. `POST /v1/onboarding/skip` records the human's choice
+without changing saved profile details; subsequent sign-ins open the app directly.
+The dashboard exposes “Skip for now” on every onboarding step. Setup can be
+completed later or context edited in Human Model. The context compiler always
+includes natural conversational defaults, including when personal context is
+disabled or empty. Onboarding and profile details refine these defaults in both
+API-key context requests and the dashboard's DEAL-active Try it response.
+
+The dashboard onboarding flow has three steps: identity basics (preferred name,
+country, optional age and language), everyday life and priorities, then
+communication preferences and boundaries. Each intermediate step saves through
+`PATCH /v1/profile`; the final step saves through `POST /v1/onboarding` and marks
+onboarding complete. Refreshing the page restores an account-scoped session draft.
+Agents authenticated with that human's API key receive the saved context through
+`POST /v1/context` and SDK context preparation, together with relevant catalog
+knowledge. The key authenticates access; it does not itself embed the profile.
 
 Use the professional catalog to select an operating model for a delegation and
 to discover its safety boundaries:

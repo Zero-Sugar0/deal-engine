@@ -119,6 +119,7 @@ export class PostgresDealStore extends DealStore {
           '003_better_auth.sql',
           '004_account_onboarding_and_credentials.sql',
           '005_ai_gateway_credentials.sql',
+          '006_tool_manifest_approvals.sql',
         ].map((file) => path.join(defaultMigrationDirectory, file));
     for (const migrationPath of migrationPaths) {
       let migration: string;
@@ -186,7 +187,7 @@ export class PostgresDealStore extends DealStore {
         'SELECT id, human_id, agent_id, packet, signature, created_at FROM context_packets',
       ),
       this.pool.query(
-        'SELECT id, human_id, agent_id, context_packet_id, action, summary, payload, payload_hash, status, created_at, decided_at, decided_by, consumed_at, policy_result FROM approvals',
+        'SELECT id, human_id, agent_id, context_packet_id, action, tool_name, summary, payload, payload_hash, status, created_at, decided_at, decided_by, consumed_at, policy_result FROM approvals',
       ),
       this.pool.query(
         'SELECT id, human_id, organization_id, agent_id, event_type, payload, occurred_at FROM audit_events ORDER BY occurred_at ASC',
@@ -305,6 +306,7 @@ export class PostgresDealStore extends DealStore {
         agentId: row.agent_id,
         contextPacketId: row.context_packet_id,
         action: row.action,
+        toolName: row.tool_name ?? undefined,
         summary: row.summary,
         payload: row.payload,
         payloadHash: row.payload_hash,
@@ -723,7 +725,7 @@ export class PostgresDealStore extends DealStore {
         if (!changed(snapshot, 'approvals', approval.id, approval)) continue;
         const human = this.humans.get(approval.humanId)!;
         const approvalWrite = await client.query(
-          `INSERT INTO approvals(id, organization_id, human_id, agent_id, context_packet_id, action, summary, payload, payload_hash, status, decided_by, decided_at, consumed_at, policy_result) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14::jsonb) ON CONFLICT(id) DO UPDATE SET status=EXCLUDED.status, decided_by=EXCLUDED.decided_by, decided_at=EXCLUDED.decided_at, consumed_at=EXCLUDED.consumed_at, policy_result=EXCLUDED.policy_result WHERE approvals.consumed_at IS NULL OR EXCLUDED.consumed_at IS NULL`,
+          `INSERT INTO approvals(id, organization_id, human_id, agent_id, context_packet_id, action, tool_name, summary, payload, payload_hash, status, decided_by, decided_at, consumed_at, policy_result) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14,$15::jsonb) ON CONFLICT(id) DO UPDATE SET status=EXCLUDED.status, decided_by=EXCLUDED.decided_by, decided_at=EXCLUDED.decided_at, consumed_at=EXCLUDED.consumed_at, policy_result=EXCLUDED.policy_result WHERE approvals.consumed_at IS NULL OR EXCLUDED.consumed_at IS NULL`,
           [
             approval.id,
             human.organizationId,
@@ -731,6 +733,7 @@ export class PostgresDealStore extends DealStore {
             approval.agentId,
             approval.contextPacketId,
             approval.action,
+            approval.toolName ?? null,
             approval.summary,
             json(approval.payload),
             approval.payloadHash,

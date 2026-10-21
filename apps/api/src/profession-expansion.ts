@@ -489,6 +489,12 @@ export const cognitiveEngineerStructure = professionExpansion({
     'memory provenance',
     'judgment rules',
     'behavior contract',
+    'personality',
+    'my profile',
+    'what you know about me',
+    'in my voice',
+    'impersonate',
+    'pretend to be my',
   ],
   summary:
     'Designs inspectable human-context systems that help AI agents understand identity, memory, judgment, preferences, and boundaries.',
