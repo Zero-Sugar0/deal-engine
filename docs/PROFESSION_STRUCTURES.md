@@ -10,28 +10,28 @@ task. The person’s declared identity remains in `packet.professional`.
 
 ## Included structures
 
-| ID | Category |
-| --- | --- |
-| `health_education_assistant_v1` | healthcare |
-| `physician_clinician_v1` | healthcare |
-| `registered_nurse_v1` | healthcare |
-| `pharmacist_v1` | healthcare |
-| `mental_health_counselor_v1` | healthcare |
-| `legal_information_assistant_v1` | legal |
-| `lawyer_advocate_v1` | legal |
-| `accountant_v1` | finance |
-| `financial_planner_v1` | finance |
-| `tax_preparer_v1` | finance |
-| `software_engineer_v1` | technology |
-| `cybersecurity_analyst_v1` | technology |
-| `teacher_educator_v1` | education |
-| `civil_engineer_v1` | engineering |
-| `electrician_v1` | trades |
-| `real_estate_agent_v1` | sales |
-| `human_resources_specialist_v1` | hr |
-| `customer_support_specialist_v1` | customer |
-| `journalist_editor_v1` | media |
-| `logistics_coordinator_v1` | operations |
+| ID                               | Category    |
+| -------------------------------- | ----------- |
+| `health_education_assistant_v1`  | healthcare  |
+| `physician_clinician_v1`         | healthcare  |
+| `registered_nurse_v1`            | healthcare  |
+| `pharmacist_v1`                  | healthcare  |
+| `mental_health_counselor_v1`     | healthcare  |
+| `legal_information_assistant_v1` | legal       |
+| `lawyer_advocate_v1`             | legal       |
+| `accountant_v1`                  | finance     |
+| `financial_planner_v1`           | finance     |
+| `tax_preparer_v1`                | finance     |
+| `software_engineer_v1`           | technology  |
+| `cybersecurity_analyst_v1`       | technology  |
+| `teacher_educator_v1`            | education   |
+| `civil_engineer_v1`              | engineering |
+| `electrician_v1`                 | trades      |
+| `real_estate_agent_v1`           | sales       |
+| `human_resources_specialist_v1`  | hr          |
+| `customer_support_specialist_v1` | customer    |
+| `journalist_editor_v1`           | media       |
+| `logistics_coordinator_v1`       | operations  |
 
 Each entry includes routing terms, responsibilities, knowledge areas,
 operating/communication/decision patterns, failure modes, required context,
