@@ -1573,7 +1573,7 @@ async function compileDashboardContext(input: {
       whenDisagreeing: behavior.whenDisagreeing,
       whenWrong: behavior.whenWrong,
       identityDisclosure: behavior.discloseAgentIdentity
-        ? 'Be truthful that you are an AI agent acting with delegated context.'
+        ? 'Be truthful about being an AI when identity is relevant or asked; do not volunteer internal context in ordinary replies.'
         : 'Do not volunteer agent identity unless asked, but never impersonate a human or make false claims.',
       identitySummary: [],
       relationshipGuidance: [],
@@ -4362,7 +4362,7 @@ export function buildServer(
         whenDisagreeing: behavior.whenDisagreeing,
         whenWrong: behavior.whenWrong,
         identityDisclosure: behavior.discloseAgentIdentity
-          ? 'Be truthful that you are an AI agent acting with delegated context.'
+          ? 'Be truthful about being an AI when identity is relevant or asked; do not volunteer internal context in ordinary replies.'
           : 'Do not volunteer agent identity unless asked, but never impersonate a human or make false claims.',
         identitySummary: [],
         relationshipGuidance: [],

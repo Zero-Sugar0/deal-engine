@@ -333,21 +333,14 @@ describe('agent integrations', () => {
       ),
     ) as Record<string, unknown>;
 
-    expect(data.conversationUnderstanding).toMatchObject({
-      cue: 'small_talk_or_greeting',
-      move: 'social',
-      replyShape: 'brief',
-      responseMove: 'acknowledge',
-      usesRecentContext: false,
+    expect(data.cognition).toMatchObject({
+      intent: expect.stringContaining('whole conversation'),
+      evidence: expect.stringContaining('unknowns distinct'),
+      judgment: expect.stringContaining('one focused question'),
+      expression: expect.stringContaining('boilerplate disclaimers'),
     });
-    expect(data.conversationUnderstanding.approach).toContain(
-      'Reply in a brief, warm, ordinary way and leave space for the person to continue.',
-    );
-    expect(data.responseGuidance).toMatchObject({
-      style: ['Lead with the point'],
-      whenUncertain: 'ask',
-      whenWrong: 'admit_and_correct',
-    });
+    expect(data).not.toHaveProperty('responseGuidance');
+    expect(data).not.toHaveProperty('conversationUnderstanding');
     expect(data.person).toBeUndefined();
     expect(data.communication).toBeUndefined();
     expect(rendered).not.toContain('responsePosture');
@@ -361,6 +354,8 @@ describe('agent integrations', () => {
       task: 'The second one.',
       interaction: {
         taskMetadata: {},
+        summary: 'Choosing between two apartments.',
+        activeTopic: 'apartments',
         openLoops: [],
         recentTurns: [
           {
@@ -385,16 +380,11 @@ describe('agent integrations', () => {
         /^<human_context_data>\n|\n<\/human_context_data>$/g,
         '',
       ),
-    ) as { conversationUnderstanding: Record<string, unknown> };
+    ) as { conversation?: Record<string, unknown> };
 
-    expect(data.conversationUnderstanding).toMatchObject({
-      cue: 'contextual_follow_up',
-      usesRecentContext: true,
-      replyShape: 'brief',
-      responseMove: 'continue',
-      approach: expect.arrayContaining([
-        'Continue from the prior conversation instead of restarting the topic.',
-      ]),
+    expect(data.conversation).toMatchObject({
+      summary: expect.any(String),
+      activeTopic: expect.any(String),
     });
   });
 

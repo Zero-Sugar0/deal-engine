@@ -1103,12 +1103,21 @@ describe('DEAL control plane', () => {
       usesRecentContext: false,
     });
     const renderedContext = renderDealContext(packet);
-    expect(renderedContext).toContain(
-      'Use natural, conversational language and respond to the actual situation.',
-    );
-    expect(renderedContext).toContain(
-      'Be truthful if asked about your identity; do not foreground it when irrelevant.',
-    );
+    const renderedData = JSON.parse(
+      renderedContext.replace(
+        /^<human_context_data>\n|\n<\/human_context_data>$/g,
+        '',
+      ),
+    ) as Record<string, unknown>;
+    expect(renderedData.cognition).toMatchObject({
+      intent: expect.stringContaining('whole conversation'),
+      evidence: expect.stringContaining('unknowns distinct'),
+      judgment: expect.stringContaining('ask one focused question and wait'),
+      expression: expect.stringContaining('boilerplate disclaimers'),
+    });
+    expect(renderedData).not.toHaveProperty('responseGuidance');
+    expect(renderedContext).not.toContain('delegated context');
+    expect(renderedContext).not.toContain('identityDisclosure');
     expect(packet.humanModel.identity.country).toBeUndefined();
     expect(packet.composition.applied.personalContext).toBe(false);
   });

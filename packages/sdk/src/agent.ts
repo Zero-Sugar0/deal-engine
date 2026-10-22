@@ -1,4 +1,4 @@
-import { HumanContextPacketSchema, understandConversation } from '@deal/core';
+import { HumanContextPacketSchema } from '@deal/core';
 import type { HumanContextPacket } from '@deal/core';
 import { deal } from './index.js';
 import type { ContextRequest, DealOptions } from './index.js';
@@ -497,10 +497,6 @@ function contextData(packet: HumanContextPacket): Record<string, unknown> {
       })
     : undefined;
 
-  const conversationUnderstanding =
-    packet.conversationUnderstanding ??
-    understandConversation(packet.task, packet.interaction.recentTurns);
-
   const taskUnderstanding =
     route && route.profileId !== 'generalist_assistant_v1'
       ? definedValues({
@@ -523,29 +519,63 @@ function contextData(packet: HumanContextPacket): Record<string, unknown> {
       : undefined;
 
   return definedValues({
-    conversationUnderstanding: {
-      cue: conversationUnderstanding.patternId,
-      move: conversationUnderstanding.category,
-      replyShape: conversationUnderstanding.replyShape,
-      responseMove: conversationUnderstanding.responseMove,
-      helpRequested: conversationUnderstanding.helpRequested,
-      intent: conversationUnderstanding.read,
-      approach: conversationUnderstanding.responsePosture,
-      avoid: conversationUnderstanding.avoid,
-      usesRecentContext: conversationUnderstanding.usesRecentContext,
-      safetyPriority: conversationUnderstanding.safetyPriority,
-      certainty: conversationUnderstanding.certainty,
+    // This is a general cognitive frame, not a response template. Keep it
+    // compact so the host model can reason over the actual conversation
+    // instead of being buried under repeated style directives.
+    cognition: {
+      intent:
+        'Read the whole conversation and respond to what the person is doing: asking, sharing, deciding, correcting, or closing. Do not force a template.',
+      evidence:
+        'Keep explicit statements, contextual implications, and unknowns distinct. Never turn an implication into a fact.',
+      judgment:
+        'When a missing fact could change the answer or its math, ask one focused question and wait; do not calculate or recommend from guessed inputs.',
+      expression:
+        'Be natural and proportionate. Use structure when it helps; avoid generic introductions, boilerplate disclaimers that do not improve safety or accuracy, unnecessary advice, and internal-system narration.',
     },
-    responseGuidance: definedValues({
-      style: packet.responseGuidance.style.slice(0, 7),
-      whenUncertain: packet.responseGuidance.whenUncertain,
-      whenDisagreeing: packet.responseGuidance.whenDisagreeing,
-      whenWrong: packet.responseGuidance.whenWrong,
-      identityDisclosure: packet.responseGuidance.identityDisclosure,
-    }),
     person: Object.keys(user).length ? user : undefined,
     communication: Object.keys(communication).length
       ? communication
+      : undefined,
+    behavior: personalContextEnabled
+      ? definedValues({
+          relationship:
+            model.behavior.relationship !== 'assistant'
+              ? model.behavior.relationship
+              : undefined,
+          speakAs:
+            model.behavior.speakAs !== 'agent'
+              ? model.behavior.speakAs
+              : undefined,
+          whenUncertain:
+            model.behavior.whenUncertain !== 'ask'
+              ? model.behavior.whenUncertain
+              : undefined,
+          whenDisagreeing:
+            model.behavior.whenDisagreeing !== 'challenge_respectfully'
+              ? model.behavior.whenDisagreeing
+              : undefined,
+          whenWrong:
+            model.behavior.whenWrong !== 'admit_and_correct'
+              ? model.behavior.whenWrong
+              : undefined,
+          responsePrinciples: model.behavior.responsePrinciples.slice(0, 6),
+          neverClaim: model.behavior.neverClaim.slice(0, 5),
+          neverDo: model.behavior.neverDo.slice(0, 5),
+          preserveHumanVoice: model.behavior.preserveHumanVoice
+            ? undefined
+            : false,
+        })
+      : undefined,
+    boundaries: personalContextEnabled
+      ? definedValues({
+          neverAssume: model.boundaries.neverAssume.slice(0, 5),
+          mustAsk: model.boundaries.mustAsk.slice(0, 5),
+          neverMention: model.boundaries.neverMention.slice(0, 5),
+          neverInfer: model.boundaries.neverInfer.slice(0, 5),
+          sensitiveTopics: model.boundaries.sensitiveTopics.slice(0, 5),
+          consentRules: model.boundaries.consentRules.slice(0, 5),
+          privacyPreferences: model.boundaries.privacyPreferences.slice(0, 5),
+        })
       : undefined,
     audienceMode,
     relevantLifeContext: Object.keys(lifeContext).length
@@ -555,17 +585,9 @@ function contextData(packet: HumanContextPacket): Record<string, unknown> {
     taskUnderstanding,
     conversation: personalContextEnabled
       ? definedValues({
-          summary:
-            overlapsTask(taskWords, packet.interaction.summary) ||
-            /\b(it|that|those|them|same|continue|earlier|above)\b/.test(task)
-              ? packet.interaction.summary
-              : undefined,
-          activeTopic: overlapsTask(taskWords, packet.interaction.activeTopic)
-            ? packet.interaction.activeTopic
-            : undefined,
-          openLoops: packet.interaction.openLoops
-            .filter((item) => overlapsTask(taskWords, item))
-            .slice(0, 5),
+          summary: packet.interaction.summary,
+          activeTopic: packet.interaction.activeTopic,
+          openLoops: packet.interaction.openLoops.slice(0, 5),
         })
       : undefined,
   });

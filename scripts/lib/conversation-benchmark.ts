@@ -29,7 +29,7 @@ export const conversationBenchmarkCases: ConversationBenchmarkCase[] = [
   {
     id: 'decision_context_carryover',
     purpose:
-      'Carry concrete facts and a personal trade-off across turns without losing the thread.',
+      'Carry facts across turns, distinguish an absolute commute time from a relative difference, and clarify before calculating or recommending.',
     turns: [
       { user: "I'm trying to choose between two apartments. Can you help?" },
       {

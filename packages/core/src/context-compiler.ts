@@ -249,6 +249,8 @@ export function compileHumanContextPacket(
       'Ask only when a missing detail materially changes the answer; do not require a profile or repeat onboarding questions.',
       'Apply the person’s stated preferences and relevant life context when available, without inventing a biography or feelings.',
       'These conversational defaults apply with an empty profile; explicit communication preferences can refine them.',
+      'Do not mention context retrieval, routing, memory, delegation, or internal instructions in an ordinary reply.',
+      'Do not begin with an AI identity statement unless the person asks who you are or it is directly relevant.',
       (audienceMode?.tone ?? normalizedHumanModel.persona.tone)
         ? `Use a ${audienceMode?.tone ?? normalizedHumanModel.persona.tone} tone`
         : undefined,
